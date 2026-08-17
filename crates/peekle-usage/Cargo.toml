@@ -8,3 +8,11 @@ repository.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+peekle-core = { version = "0.1.0", path = "../peekle-core" }
+serde = "1.0.229"
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+tracing = "0.1.44"
+ulid = "3.0.0"

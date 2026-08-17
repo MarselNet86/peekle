@@ -1,6 +1,8 @@
 pnpm-lock.yaml
 .svelte-kit/
 build/
+playwright-report/
+test-results/
 target/
 node_modules/
 

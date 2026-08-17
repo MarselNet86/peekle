@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+/* Design tokens from tech.md section 9. Every primitive reads these; no
+   feature folder defines its own color, radius or blur. */
+:root {
+  --surface: rgba(12, 12, 14, 0.72);
+  --surface-hud: rgba(12, 12, 14, 0.48);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --text: rgba(255, 255, 255, 0.94);
+  --text-dim: rgba(255, 255, 255, 0.56);
+  --accent: #7dd88f;
+  --warn: #e8b34a;
+  --orange: #e8894a;
+  --danger: #e8654a;
+  --blur: 24px;
+  --radius: 14px;
+  --row: 34px;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-hud: var(--surface-hud);
+  --color-hairline: var(--hairline);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-orange: var(--orange);
+  --color-danger: var(--danger);
+  --radius-panel: var(--radius);
+  --spacing-row: var(--row);
+}
