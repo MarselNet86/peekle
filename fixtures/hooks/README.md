@@ -11,13 +11,21 @@ the contract matters.
 Format is one JSON object per line, `<endpoint>.jsonl`, exactly as it arrived
 on the wire.
 
-## What to capture before the framework is done
+## Captured
 
-- `stop.jsonl` — a turn finishing
+- `stop.jsonl` — a turn finishing, carrying `last_assistant_message`
+- `tasks.jsonl` — `PostToolUse` for `TodoWrite`, with `tool_input.todos`
+- `session.jsonl` — `SessionEnd`
+
+## Still missing
+
 - `permission.jsonl` — a tool asking for permission, ideally `Bash`
 - `notification.jsonl` — an idle or input prompt
-- `tasks.jsonl` — `PostToolUse` for `TodoWrite`
-- `session.jsonl` — `SessionStart` and `SessionEnd`
+
+Neither fires in a headless `claude -p` run: the permission prompt has no one
+to answer it, so the tool is refused before the hook is reached. Both need an
+interactive session. Start the capture, run `claude` in another terminal, and
+approve or deny a tool by hand.
 
 ## When a capture disagrees with tech.md
 
