@@ -9,7 +9,9 @@ repository.workspace = true
 
 [lib]
 name = "peekle_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# staticlib is for iOS and cdylib for Android. Section 2 ships macOS only, and
+# the two of them cost half a gigabyte of build output for nothing.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

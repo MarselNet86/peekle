@@ -13,6 +13,11 @@ repository = "https://github.com/nurikd/peekle"
 # CLAUDE.md forbids unwrap outside tests. clippy.toml exempts test code.
 unwrap_used = "deny"
 
+[profile.dev]
+# Full DWARF for the whole Tauri graph costs several gigabytes on disk.
+# Line tables keep backtraces readable, which is what debugging actually needs.
+debug = "line-tables-only"
+
 [profile.release]
 lto = true
 codegen-units = 1
