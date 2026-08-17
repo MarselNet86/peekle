@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+.svelte-kit/
+build/
+target/
+node_modules/
+
+# ts-rs owns this tree. Reformatting it makes the CI drift check fail.
+src/lib/types/generated/
+
+# Governance files. Reformatting the source of truth buries real contract diffs in noise.
+tech.md
+CLAUDE.md
