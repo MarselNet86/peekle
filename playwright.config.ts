@@ -13,13 +13,15 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'list' : 'html',
   use: {
-    baseURL: 'http://127.0.0.1:1420',
+    baseURL: 'http://localhost:1420',
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'pnpm dev',
-    url: 'http://127.0.0.1:1420/island/',
+    // Matches the devUrl in tauri.conf.json. Polling 127.0.0.1 while vite
+    // binds localhost misses it whenever localhost resolves to ::1 first.
+    url: 'http://localhost:1420/island/',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
