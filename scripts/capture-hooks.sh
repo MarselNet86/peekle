@@ -69,13 +69,23 @@ node /tmp/peekle-capture.mjs "$PORT" "$OUT" &
 SERVER_PID=$!
 sleep 1
 
-handler() { jq -n --arg url "http://127.0.0.1:$PORT/$1" '[{hooks: [{type: "http", url: $url, timeout: 10}]}]'; }
+# Mirrors the matcher column of tech.md 6.1. Without them the capture records
+# every tool call rather than what the endpoint actually receives.
+handler() {
+  if [ -n "${2:-}" ]; then
+    jq -n --arg url "http://127.0.0.1:$PORT/$1" --arg matcher "$2" \
+      '[{matcher: $matcher, hooks: [{type: "http", url: $url, timeout: 10}]}]'
+  else
+    jq -n --arg url "http://127.0.0.1:$PORT/$1" \
+      '[{hooks: [{type: "http", url: $url, timeout: 10}]}]'
+  fi
+}
 
 jq \
   --argjson stop "$(handler stop)" \
-  --argjson permission "$(handler permission)" \
-  --argjson notification "$(handler notification)" \
-  --argjson tasks "$(handler tasks)" \
+  --argjson permission "$(handler permission '*')" \
+  --argjson notification "$(handler notification 'permission_prompt|idle_prompt|agent_needs_input|agent_completed')" \
+  --argjson tasks "$(handler tasks 'TodoWrite')" \
   --argjson session "$(handler session)" \
   '.hooks.Stop = $stop
    | .hooks.PermissionRequest = $permission
