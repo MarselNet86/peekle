@@ -10,6 +10,7 @@
   --text-dim: rgba(255, 255, 255, 0.56);
   --accent: #7dd88f;
   --warn: #e8b34a;
+  --orange: #e8894a;
   --danger: #e8654a;
   --blur: 24px;
   --radius: 14px;
@@ -24,6 +25,7 @@
   --color-text-dim: var(--text-dim);
   --color-accent: var(--accent);
   --color-warn: var(--warn);
+  --color-orange: var(--orange);
   --color-danger: var(--danger);
   --radius-panel: var(--radius);
   --spacing-row: var(--row);
