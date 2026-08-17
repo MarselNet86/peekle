@@ -113,6 +113,7 @@ pub fn show(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     } else {
         panel.order_front_regardless();
     }
+    tracing::debug!(label, visible = panel.is_visible(), "panel shown");
     Ok(())
 }
 
@@ -121,6 +122,7 @@ pub fn hide(app: &AppHandle, label: &str) -> Result<(), PanelError> {
         .get_webview_panel(label)
         .map_err(|_| PanelError::MissingPanel(label.to_string()))?;
     panel.hide();
+    tracing::debug!(label, visible = panel.is_visible(), "panel hidden");
     Ok(())
 }
 

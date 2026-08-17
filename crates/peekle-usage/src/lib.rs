@@ -4,8 +4,10 @@
 //! with the reason spelled out and the panel keeps working. Usage never sits
 //! on the critical path of answering a hook.
 
+pub mod credentials;
 pub mod fake;
 
+pub use credentials::{CredentialError, CredentialStore, FakeCredentialStore, SecurityToolStore};
 pub use fake::FakeUsage;
 
 use peekle_core::types::UsageSnapshot;
