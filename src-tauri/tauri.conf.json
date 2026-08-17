@@ -40,8 +40,8 @@
       {
         "label": "island",
         "url": "/island/",
-        "width": 340,
-        "height": 72,
+        "width": 420,
+        "height": 76,
         "visible": false,
         "decorations": false,
         "transparent": true,
@@ -51,7 +51,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
     }
   },
   "bundle": {

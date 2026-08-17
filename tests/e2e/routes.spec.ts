@@ -24,8 +24,8 @@ test.describe('overlay routes', () => {
     page.on('pageerror', (error) => errors.push(error.message));
 
     await page.goto('/island/');
-    // No toast has arrived, so the pill is absent rather than empty.
-    await expect(page.locator('.toast')).toHaveCount(0);
+    // No toast has arrived, so the shape is absent rather than empty black.
+    await expect(page.locator('.notch')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

@@ -106,6 +106,7 @@ pub fn set_usage_enabled(state: State<'_, Arc<AppState>>, enabled: bool) {
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
 #[tauri::command]
 pub fn window_ready(state: State<'_, Arc<AppState>>, label: String) {
+    tracing::debug!(label, "webview reported ready");
     state.ready_gate(&label).notify_waiters();
 }
 

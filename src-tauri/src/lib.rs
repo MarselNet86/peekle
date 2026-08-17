@@ -20,6 +20,14 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_nspanel::init())
+        .on_page_load(|window, payload| {
+            tracing::debug!(
+                label = window.label(),
+                url = %payload.url(),
+                event = ?payload.event(),
+                "webview page load"
+            );
+        })
         .invoke_handler(build_handler())
         .setup(|app| {
             // Accessory keeps Peekle out of the dock and out of the menu bar.
@@ -35,7 +43,31 @@ pub fn run() {
             let state = Arc::new(state::AppState::new(config, provider));
             app.manage(Arc::clone(&state));
 
+            for label in ["prompt", "hud", "island"] {
+                match app.get_webview_window(label) {
+                    Some(window) => tracing::debug!(
+                        label,
+                        url = %window.url().map(|u| u.to_string()).unwrap_or_default(),
+                        "window created"
+                    ),
+                    None => tracing::error!(label, "window missing"),
+                }
+            }
+
             panel::convert_all(app.handle())?;
+
+            // A borderless webview gets no safe area of its own, so Rust hands
+            // the measured notch height to the route. tech.md 6.7.
+            if let (Some(window), Some(notch)) =
+                (app.get_webview_window(panel::ISLAND), panel::notch_height())
+            {
+                let url = format!("/island/?notch={notch}");
+                if let Err(err) = window.eval(format!(
+                    "if (location.search.indexOf('notch=') === -1) location.replace('{url}')"
+                )) {
+                    tracing::warn!(error = %err, "could not hand the notch height over");
+                }
+            }
 
             let sink = Arc::new(hooks::AppSink::new(app.handle().clone(), state));
             serve(port, token, sink);

@@ -2,7 +2,7 @@
 //! flag below is spelled out there, including the traps that produce no error
 //! when you get them wrong.
 
-use tauri::{AppHandle, LogicalPosition, Manager, WebviewWindow};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 use tauri_nspanel::{
     tauri_panel, CollectionBehavior, ManagerExt, Panel, PanelLevel, StyleMask, WebviewWindowExt,
 };
@@ -14,6 +14,10 @@ pub const ISLAND: &str = "island";
 /// Top of the prompt panel, as a share of screen height.
 const PROMPT_TOP_RATIO: f64 = 0.22;
 const HUD_INSET: (f64, f64) = (24.0, 52.0);
+/// The island covers the notch and grows it by this much. tech.md 6.7.
+const ISLAND_WIDTH: f64 = 420.0;
+const ISLAND_BAND: f64 = 43.0;
+/// Fallback offset on a display with no notch, where there is nothing to grow.
 const ISLAND_TOP_INSET: f64 = 8.0;
 
 // PromptPanel takes keystrokes without activating the app, so the user answers
@@ -57,6 +61,23 @@ pub fn convert_all(app: &AppHandle) -> Result<(), PanelError> {
     // The island is pure output; clicks pass through to whatever is underneath.
     window(app, ISLAND)?.set_ignore_cursor_events(true)?;
     Ok(())
+}
+
+/// Height of the notch on the main display, or None when there is none.
+///
+/// Measured rather than guessed: the value differs per model, and a hardcoded
+/// one puts the island either inside the bezel or floating below it.
+/// tech.md 6.7.
+pub fn notch_height() -> Option<f64> {
+    use objc2_app_kit::NSScreen;
+
+    let mtm = objc2_foundation::MainThreadMarker::new()?;
+    let screen = NSScreen::mainScreen(mtm)?;
+
+    // A display without a notch reports a zero top inset. One with a notch
+    // reports its height, which is what the island has to cover.
+    let top = screen.safeAreaInsets().top;
+    (top > 0.0).then_some(top)
 }
 
 fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, PanelError> {
@@ -103,6 +124,9 @@ fn convert_passive(window: &WebviewWindow, level: PanelLevel) -> Result<(), Pane
 /// Places a panel per the geometry of section 6.7 and shows it. Position is
 /// recomputed on every show because the user can move between displays.
 pub fn show(app: &AppHandle, label: &str) -> Result<(), PanelError> {
+    if label == ISLAND {
+        size_island(app)?;
+    }
     position(app, label)?;
     let panel = app
         .get_webview_panel(label)
@@ -126,6 +150,13 @@ pub fn hide(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     Ok(())
 }
 
+/// The island is as tall as the notch plus the band that carries the content.
+fn size_island(app: &AppHandle) -> Result<(), PanelError> {
+    let notch = notch_height().unwrap_or(0.0);
+    window(app, ISLAND)?.set_size(LogicalSize::new(ISLAND_WIDTH, notch + ISLAND_BAND))?;
+    Ok(())
+}
+
 fn position(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     let window = window(app, label)?;
 
@@ -144,11 +175,32 @@ fn position(app: &AppHandle, label: &str) -> Result<(), PanelError> {
             screen.height * PROMPT_TOP_RATIO,
         ),
         HUD => HUD_INSET,
-        ISLAND => ((screen.width - size.width) / 2.0, ISLAND_TOP_INSET),
+        // Flush with the top edge so the black fill continues the notch. With
+        // no notch there is nothing to continue, so it floats instead.
+        ISLAND => (
+            (screen.width - size.width) / 2.0,
+            if notch_height().is_some() {
+                0.0
+            } else {
+                ISLAND_TOP_INSET
+            },
+        ),
         _ => return Ok(()),
     };
 
     let origin = monitor.position().to_logical::<f64>(scale);
     window.set_position(LogicalPosition::new(origin.x + x, origin.y + y))?;
+
+    tracing::debug!(
+        label,
+        scale,
+        screen_w = screen.width,
+        screen_h = screen.height,
+        win_w = size.width,
+        win_h = size.height,
+        placed_x = origin.x + x,
+        placed_y = origin.y + y,
+        "panel placed"
+    );
     Ok(())
 }
