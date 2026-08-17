@@ -46,6 +46,11 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
+      - name: ts-rs drift
+        run: |
+          cargo test -p peekle-core export_bindings
+          git diff --exit-code -- src/lib/types/generated
+
       - name: pnpm lint
         run: pnpm lint
 
