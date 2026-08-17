@@ -2335,6 +2335,13 @@ dependencies = [
 [[package]]
 name = "peekle-cli"
 version = "0.1.0"
+dependencies = [
+ "directories",
+ "peekle-core",
+ "serde_json",
+ "thiserror 2.0.20",
+ "ulid",
+]
 
 [[package]]
 name = "peekle-core"
@@ -2355,6 +2362,9 @@ dependencies = [
 [[package]]
 name = "peekle-hotkey"
 version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+]
 
 [[package]]
 name = "peekle-server"
@@ -2378,8 +2388,10 @@ version = "0.1.0"
 dependencies = [
  "peekle-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tracing",
+ "ulid",
 ]
 
 [[package]]
