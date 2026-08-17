@@ -18,7 +18,7 @@ use crate::map;
 use crate::sink::HookSink;
 
 /// Reported by `/v1/health`. Tracks the core version in the tech.md header.
-pub const CORE_VERSION: &str = "v3";
+pub const CORE_VERSION: &str = "v4";
 
 #[derive(Clone)]
 pub struct ServerState {
