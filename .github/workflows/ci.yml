@@ -48,3 +48,9 @@ jobs:
 
       - name: pnpm lint
         run: pnpm lint
+
+      - name: svelte-check
+        run: pnpm check
+
+      - name: tauri build
+        run: pnpm tauri build --debug
