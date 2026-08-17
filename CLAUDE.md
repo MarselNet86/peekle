@@ -48,7 +48,7 @@ Peekle: оверлей поверх Claude Code для macOS. Перед тем 
 
 ## Среда
 
-macOS 13+, Node 20+, pnpm, Rust из `rust-toolchain.toml`. Запуск в dev: `pnpm tauri dev`. Всё внешнее в dev по умолчанию за фейками (`[usage] provider = "fake"` и фейки секции 7), поэтому сессия не ждёт ни реальных данных, ни реальных разрешений, ни залогиненного Claude Code.
+macOS 13+, Node 22.13+, pnpm, Rust из `rust-toolchain.toml`. Запуск в dev: `pnpm tauri dev`. Всё внешнее в dev по умолчанию за фейками (`[usage] provider = "fake"` и фейки секции 7), поэтому сессия не ждёт ни реальных данных, ни реальных разрешений, ни залогиненного Claude Code.
 
 ## Дисциплина письма
 
