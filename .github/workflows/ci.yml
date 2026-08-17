@@ -57,5 +57,14 @@ jobs:
       - name: svelte-check
         run: pnpm check
 
+      - name: vitest
+        run: pnpm test
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: playwright
+        run: pnpm test:e2e
+
       - name: tauri build
         run: pnpm tauri build --debug
