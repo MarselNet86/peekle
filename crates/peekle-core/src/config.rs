@@ -1,0 +1,283 @@
+//! Config file handling. tech.md section 6.8 is the source of truth for every
+//! key and default. Unknown keys are kept out of the way and warned about, not
+//! rejected: a newer Peekle must not brick an older config and the reverse.
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::io;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use ulid::Ulid;
+
+/// `~/Library/Application Support/peekle/config.toml`
+pub const CONFIG_FILE: &str = "config.toml";
+/// Port is duplicated here so `doctor` and `status` can find the server
+/// without parsing the config.
+pub const PORT_FILE: &str = ".peekle/port";
+
+const OWNER_ONLY: u32 = 0o600;
+const MAX_HUD_VISIBLE_TASKS: u8 = 6;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("config io failed: {0}")]
+    Io(#[from] io::Error),
+    #[error("config is not valid toml: {0}")]
+    Parse(#[from] toml::de::Error),
+    #[error("config could not be serialized: {0}")]
+    Serialize(#[from] toml::ser::Error),
+    #[error("no home directory for this user")]
+    NoHome,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(default)]
+    pub server: ServerConfig,
+    #[serde(default)]
+    pub hotkey: HotkeyConfig,
+    #[serde(default)]
+    pub ui: UiConfig,
+    #[serde(default)]
+    pub usage: UsageConfig,
+    #[serde(default)]
+    pub behavior: BehaviorConfig,
+
+    /// Sections this build does not know. Kept so a round trip does not delete
+    /// a newer Peekle's settings.
+    #[serde(flatten, default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServerConfig {
+    pub port: u16,
+    /// 32 hex characters, minted once. Never logged, never sent anywhere.
+    pub token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotkeyConfig {
+    pub toggle: String,
+    /// Empty means do not register.
+    pub recall: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiConfig {
+    pub prompt_opacity: f32,
+    pub hud_opacity: f32,
+    pub blur: bool,
+    pub hud_visible_tasks: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UsageConfig {
+    pub enabled: bool,
+    pub provider: UsageProviderKind,
+    /// Set by the app when the user denies Keychain access. Cleared by hand.
+    pub keychain_denied: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UsageProviderKind {
+    Account,
+    Fake,
+    Off,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BehaviorConfig {
+    pub enabled: bool,
+    /// Held below the hook timeout of 900s so Peekle always answers first.
+    pub prompt_timeout_secs: u32,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            port: 47821,
+            token: generate_token(),
+        }
+    }
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            toggle: "Alt+Shift+KeyQ".to_string(),
+            recall: String::new(),
+        }
+    }
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            prompt_opacity: 0.92,
+            hud_opacity: 0.55,
+            blur: true,
+            hud_visible_tasks: MAX_HUD_VISIBLE_TASKS,
+        }
+    }
+}
+
+impl Default for UsageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            provider: UsageProviderKind::Account,
+            keychain_denied: false,
+        }
+    }
+}
+
+impl Default for BehaviorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            prompt_timeout_secs: 600,
+        }
+    }
+}
+
+impl Config {
+    /// Parses a config, applying defaults for anything missing. Unknown keys
+    /// survive the round trip; the caller decides how loudly to warn.
+    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
+        let mut config: Config = toml::from_str(text)?;
+        config.normalize();
+        Ok(config)
+    }
+
+    /// Reads the config, or returns defaults with a fresh token when the file
+    /// is missing.
+    pub fn load(path: &Path) -> Result<Self, ConfigError> {
+        match fs::read_to_string(path) {
+            Ok(text) => Self::from_toml(&text),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(err) => Err(ConfigError::Io(err)),
+        }
+    }
+
+    /// Writes the config with owner-only permissions. The token lives here, so
+    /// the mode is part of the contract, not hygiene.
+    pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let text = toml::to_string_pretty(self)?;
+        fs::write(path, text)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(OWNER_ONLY))?;
+        Ok(())
+    }
+
+    /// Names of sections this build does not understand.
+    pub fn unknown_keys(&self) -> Vec<&str> {
+        self.unknown.keys().map(String::as_str).collect()
+    }
+
+    fn normalize(&mut self) {
+        if self.ui.hud_visible_tasks > MAX_HUD_VISIBLE_TASKS {
+            self.ui.hud_visible_tasks = MAX_HUD_VISIBLE_TASKS;
+        }
+        if self.server.token.is_empty() {
+            self.server.token = generate_token();
+        }
+    }
+}
+
+/// 32 hex characters of randomness for the loopback token.
+///
+/// Built from the random halves of two ULIDs rather than pulling in an RNG
+/// crate outside the frozen stack. A ULID's low 80 bits are random, so two of
+/// them give 128 bits with no timestamp in the result.
+pub fn generate_token() -> String {
+    let a = Ulid::generate().0 as u64;
+    let b = Ulid::generate().0 as u64;
+    format!("{a:016x}{b:016x}")
+}
+
+/// `~/Library/Application Support/peekle/config.toml`
+pub fn config_path() -> Result<PathBuf, ConfigError> {
+    let dirs = directories::ProjectDirs::from("", "", "peekle").ok_or(ConfigError::NoHome)?;
+    Ok(dirs.config_dir().join(CONFIG_FILE))
+}
+
+/// `~/.peekle/port`
+pub fn port_file_path() -> Result<PathBuf, ConfigError> {
+    let home = directories::BaseDirs::new().ok_or(ConfigError::NoHome)?;
+    Ok(home.home_dir().join(PORT_FILE))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_file_yields_defaults() {
+        let dir = std::env::temp_dir().join(format!("peekle-cfg-{}", Ulid::generate()));
+        let config = Config::load(&dir.join("config.toml")).unwrap();
+        assert_eq!(config.server.port, 47821);
+        assert_eq!(config.server.token.len(), 32);
+        assert_eq!(config.hotkey.toggle, "Alt+Shift+KeyQ");
+        assert_eq!(config.behavior.prompt_timeout_secs, 600);
+    }
+
+    #[test]
+    fn partial_file_fills_in_defaults() {
+        let config = Config::from_toml("[server]\nport = 5000\ntoken = \"abc\"\n").unwrap();
+        assert_eq!(config.server.port, 5000);
+        assert_eq!(config.ui.hud_visible_tasks, 6);
+        assert!(config.usage.enabled);
+    }
+
+    #[test]
+    fn partial_section_keeps_the_other_keys_of_that_section() {
+        let config = Config::from_toml("[server]\nport = 5000\n").unwrap();
+        assert_eq!(config.server.port, 5000);
+        assert_eq!(config.server.token.len(), 32);
+
+        let config = Config::from_toml("[behavior]\nenabled = false\n").unwrap();
+        assert!(!config.behavior.enabled);
+        assert_eq!(config.behavior.prompt_timeout_secs, 600);
+    }
+
+    #[test]
+    fn hud_visible_tasks_clamps_to_six() {
+        let config = Config::from_toml("[ui]\nhud_visible_tasks = 40\n").unwrap();
+        assert_eq!(config.ui.hud_visible_tasks, 6);
+    }
+
+    #[test]
+    fn unknown_sections_survive_and_are_reportable() {
+        let config = Config::from_toml("[future]\nshiny = true\n").unwrap();
+        assert_eq!(config.unknown_keys(), vec!["future"]);
+    }
+
+    #[test]
+    fn token_is_thirty_two_hex_characters() {
+        let token = generate_token();
+        assert_eq!(token.len(), 32);
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(token, generate_token());
+    }
+
+    #[test]
+    fn saved_config_is_owner_only() {
+        let dir = std::env::temp_dir().join(format!("peekle-cfg-{}", Ulid::generate()));
+        let path = dir.join("config.toml");
+        Config::default().save(&path).unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, OWNER_ONLY);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+}
