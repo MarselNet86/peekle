@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Drives the panels by hand, the way Claude Code would.
-# Dev aid only: `peekle init` (S7) is what wires a real session.
+# Drives the island by hand, the way Claude Code would.
+# Dev aid only: `peekle init` (S9) is what wires a real session.
 #
 #   scripts/demo.sh island   one toast, hides itself after 2.6s
-#   scripts/demo.sh hud      three tasks, hud stays up
+#   scripts/demo.sh tasks    three tasks into the registry
 #   scripts/demo.sh clear    empties the task list
-#   scripts/demo.sh prompt   opens the prompt panel and blocks like a real hook
+#   scripts/demo.sh stop     blocks like a real Stop hook
 
 set -euo pipefail
 
@@ -19,9 +19,9 @@ case "${1:-island}" in
   island)
     post notification '{"hook_event_name":"Notification","message":"Claude needs your input"}'
     ;;
-  hud)
+  tasks)
     post tasks '{"session_id":"demo","tool_input":{"todos":[
-      {"content":"Fix the crash in the hud","status":"in_progress"},
+      {"content":"Fix the crash in the feed","status":"in_progress"},
       {"content":"Write release notes for v1","status":"pending"},
       {"content":"Investigate slow startup","status":"pending"}
     ]}}'
@@ -29,15 +29,15 @@ case "${1:-island}" in
   clear)
     post tasks '{"session_id":"demo","tool_input":{"todos":[]}}'
     ;;
-  prompt)
-    echo "blocking until you answer or the timeout lapses"
+  stop)
+    echo "blocks until the timeout lapses: the island has no prompt UI before S3"
     post stop '{"hook_event_name":"Stop","session_id":"demo","cwd":"'"$PWD"'","last_assistant_message":"I finished the refactor and all tests pass. Want me to open a PR?"}'
     ;;
   health)
     curl -sS "http://127.0.0.1:$PORT/v1/health"; echo
     ;;
   *)
-    echo "usage: $0 [island|hud|clear|prompt|health]" >&2
+    echo "usage: $0 [island|tasks|clear|stop|health]" >&2
     exit 2
     ;;
 esac

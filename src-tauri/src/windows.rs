@@ -46,23 +46,24 @@ fn hide(app: &AppHandle, label: &'static str) {
 /// Emits the request, waits for the webview, then shows the panel. The wait is
 /// a courtesy, not a gate: if it lapses the panel is shown anyway, because a
 /// late frame is better than a hook that never gets an answer.
+///
+/// The island has no prompt UI until S3, so the request is announced and the
+/// pending hook is left to its timeout. Showing an empty black shape for ten
+/// minutes would be worse than showing nothing.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
-    let gate = app.state::<Arc<AppState>>().ready_gate(panel::PROMPT);
+    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
 
-    if let Err(err) = app.emit_to(panel::PROMPT, events::PROMPT_OPEN, request) {
+    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_OPEN, request) {
         tracing::warn!(error = %err, "failed to emit prompt-open");
     }
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
-    show(app, panel::PROMPT);
 }
 
-/// Hides the panel and tells the webview which outcome settled it.
+/// Tells the webview which outcome settled the request.
 pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
-    hide(app, panel::PROMPT);
-
     let payload = serde_json::json!({ "prompt_id": prompt_id, "outcome": outcome });
-    if let Err(err) = app.emit_to(panel::PROMPT, events::PROMPT_CLOSE, payload) {
+    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_CLOSE, payload) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
 }
@@ -83,13 +84,4 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
         tokio::time::sleep(ttl).await;
         hide(&handle, panel::ISLAND);
     });
-}
-
-/// The HUD is hidden entirely when there is nothing to show. tech.md S5.
-pub fn sync_hud(app: &AppHandle, task_count: usize) {
-    if task_count == 0 {
-        hide(app, panel::HUD);
-    } else {
-        show(app, panel::HUD);
-    }
 }

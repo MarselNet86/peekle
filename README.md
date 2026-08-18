@@ -3,25 +3,29 @@
 An overlay on top of Claude Code for macOS.
 
 Start an agent and walk away. When it finishes a turn or asks for permission,
-Peekle raises a panel over everything, shows what the agent said, takes your
-answer, and disappears. The answer goes straight back into the turn, so you
-never focus the terminal.
+the notch of the MacBook grows, shows what the agent said, takes your answer,
+and collapses again. The answer goes straight back into the turn, so you never
+focus the terminal.
+
+There is one surface and it is the island. No second window, no HUD, no
+separate prompt panel.
 
 Contracts, types and the roadmap live in `tech.md`. It is the source of truth;
 this file only explains how to run what exists today.
 
 ## Status
 
-The stage 1 framework is in. Feature slices are not.
+The stage 1 framework is in. Feature slices are in progress.
 
-| Surface                | State                                                          |
-| ---------------------- | -------------------------------------------------------------- |
-| Island toast           | Working end to end, hook to pixel                              |
-| HUD                    | Window and panel flags done, route is a placeholder until S5   |
-| Prompt panel           | Window and blocking hook done, route is a placeholder until S1 |
-| Hook server            | All endpoints of tech.md 6.2 answer                            |
-| Usage bars             | Fake provider only, the account provider lands with S4         |
-| Hotkey, CLI, packaging | Not started, S6 to S8                                          |
+| Surface                | State                                                    |
+| ---------------------- | -------------------------------------------------------- |
+| Island toast           | Working end to end, hook to pixel                        |
+| Island shape           | S1                                                       |
+| Feed, Stop, permission | Not started, S2 to S4. A blocking hook waits out its     |
+|                        | timeout until then, so do not point a live session at it |
+| Hook server            | All endpoints of tech.md 6.2 answer                      |
+| Usage bars             | Fake provider only, the account provider lands with S7   |
+| Hotkey, CLI, packaging | Not started, S8 to S10                                   |
 
 ## Requirements
 
@@ -42,24 +46,24 @@ a dev binary that points its windows at the vite dev server, so with no server
 running the windows load nothing and stay invisible.
 
 Nothing appears at startup on purpose. Peekle has no dock icon, no tray, no
-menu bar item and no close button. The panels exist only while they have
+menu bar item and no close button. The island exists only while it has
 something to say.
 
-## Drive the panels
+## Drive the island
 
-`peekle init` (S7) is what wires a real Claude Code session. Until then,
+`peekle init` (S9) is what wires a real Claude Code session. Until then,
 `scripts/demo.sh` plays the part of the agent:
 
 ```sh
 ./scripts/demo.sh island    # a toast, hides itself
-./scripts/demo.sh hud       # three tasks, the hud stays up
+./scripts/demo.sh tasks     # three tasks into the registry
 ./scripts/demo.sh clear     # empty the task list
-./scripts/demo.sh prompt    # the prompt panel, blocks like a real hook
+./scripts/demo.sh stop      # blocks like a real Stop hook
 ./scripts/demo.sh health    # is the server up
 ```
 
-`prompt` blocks the way a real hook does: the request waits until you answer or
-until `behavior.prompt_timeout_secs` lapses, then the turn ends normally.
+`stop` blocks the way a real hook does. Nothing answers it before S3, so it
+waits out `behavior.prompt_timeout_secs` and the turn then ends normally.
 
 ## How it fits together
 
@@ -74,9 +78,9 @@ Claude Code turn
 peekle-server (axum, 127.0.0.1)
   |  registers a pending request, emits a Tauri event
   v
-state in Rust  ->  prompt panel / hud / island
-  |                        |
-  |  <- answer_prompt() <--
+state in Rust  ->  island
+  |                    |
+  |  <- answer_prompt() <-
   v
 HTTP response body  ->  the turn continues
 ```
@@ -107,7 +111,7 @@ fixtures/hooks/      captured payloads, never hand written
 ```sh
 cargo test --workspace   # unit, contract, golden payload, property
 pnpm test                # component and property tests
-pnpm test:e2e            # the three routes under vite dev
+pnpm test:e2e            # the routes under vite dev
 ```
 
 Native panel behaviour is not covered by any of these. It lives in the manual

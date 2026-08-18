@@ -9,7 +9,6 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
-use crate::panel;
 use crate::state::AppState;
 use crate::windows;
 
@@ -55,7 +54,6 @@ pub fn set_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: boo
 
     if !enabled {
         state.pending.resolve_all(PromptOutcome::Bypassed);
-        let _ = panel::hide(&app, panel::PROMPT);
     }
 
     if let Err(err) = app.emit(events::ENABLED, serde_json::json!({ "enabled": enabled })) {

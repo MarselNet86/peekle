@@ -43,15 +43,12 @@ pub fn run() {
             let state = Arc::new(state::AppState::new(config, provider));
             app.manage(Arc::clone(&state));
 
-            for label in ["prompt", "hud", "island"] {
-                match app.get_webview_window(label) {
-                    Some(window) => tracing::debug!(
-                        label,
-                        url = %window.url().map(|u| u.to_string()).unwrap_or_default(),
-                        "window created"
-                    ),
-                    None => tracing::error!(label, "window missing"),
-                }
+            match app.get_webview_window(panel::ISLAND) {
+                Some(window) => tracing::debug!(
+                    url = %window.url().map(|u| u.to_string()).unwrap_or_default(),
+                    "island window created"
+                ),
+                None => tracing::error!("island window missing"),
             }
 
             panel::convert_all(app.handle())?;

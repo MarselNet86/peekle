@@ -18,7 +18,7 @@ pub const CONFIG_FILE: &str = "config.toml";
 pub const PORT_FILE: &str = ".peekle/port";
 
 const OWNER_ONLY: u32 = 0o600;
-const MAX_HUD_VISIBLE_TASKS: u8 = 6;
+const MAX_FEED_VISIBLE_ROWS: u8 = 6;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -70,10 +70,11 @@ pub struct HotkeyConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
-    pub prompt_opacity: f32,
-    pub hud_opacity: f32,
+    pub island_opacity: f32,
+    /// Always false: the island is opaque black, blur would give it away as a
+    /// window on top of the system rather than part of the bezel. tech.md 6.10.
     pub blur: bool,
-    pub hud_visible_tasks: u8,
+    pub feed_visible_rows: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,10 +123,9 @@ impl Default for HotkeyConfig {
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
-            prompt_opacity: 0.92,
-            hud_opacity: 0.55,
-            blur: true,
-            hud_visible_tasks: MAX_HUD_VISIBLE_TASKS,
+            island_opacity: 1.0,
+            blur: false,
+            feed_visible_rows: MAX_FEED_VISIBLE_ROWS,
         }
     }
 }
@@ -186,8 +186,8 @@ impl Config {
     }
 
     fn normalize(&mut self) {
-        if self.ui.hud_visible_tasks > MAX_HUD_VISIBLE_TASKS {
-            self.ui.hud_visible_tasks = MAX_HUD_VISIBLE_TASKS;
+        if self.ui.feed_visible_rows > MAX_FEED_VISIBLE_ROWS {
+            self.ui.feed_visible_rows = MAX_FEED_VISIBLE_ROWS;
         }
         if self.server.token.is_empty() {
             self.server.token = generate_token();
@@ -236,7 +236,7 @@ mod tests {
     fn partial_file_fills_in_defaults() {
         let config = Config::from_toml("[server]\nport = 5000\ntoken = \"abc\"\n").unwrap();
         assert_eq!(config.server.port, 5000);
-        assert_eq!(config.ui.hud_visible_tasks, 6);
+        assert_eq!(config.ui.feed_visible_rows, 6);
         assert!(config.usage.enabled);
     }
 
@@ -252,9 +252,9 @@ mod tests {
     }
 
     #[test]
-    fn hud_visible_tasks_clamps_to_six() {
-        let config = Config::from_toml("[ui]\nhud_visible_tasks = 40\n").unwrap();
-        assert_eq!(config.ui.hud_visible_tasks, 6);
+    fn feed_visible_rows_clamps_to_six() {
+        let config = Config::from_toml("[ui]\nfeed_visible_rows = 40\n").unwrap();
+        assert_eq!(config.ui.feed_visible_rows, 6);
     }
 
     #[test]

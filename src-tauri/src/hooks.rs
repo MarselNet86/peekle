@@ -63,7 +63,6 @@ impl HookSink for AppSink {
         if let Err(err) = self.app.emit(events::TASKS, &merged) {
             tracing::warn!(error = %err, "failed to emit tasks");
         }
-        windows::sync_hud(&self.app, merged.len());
     }
 
     fn on_session(&self, payload: &Value) {
@@ -109,7 +108,7 @@ fn status_of(raw: Option<&str>) -> TaskStatus {
 }
 
 /// Reads a `TodoWrite` payload into task items. An unrecognised shape yields
-/// an empty list rather than a partial one, so the HUD never shows debris.
+/// an empty list rather than a partial one, so the feed never shows debris.
 fn parse_tasks(payload: &Value) -> Vec<TaskItem> {
     let session_id = payload
         .get("session_id")

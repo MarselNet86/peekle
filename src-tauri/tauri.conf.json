@@ -14,30 +14,6 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "label": "prompt",
-        "url": "/prompt/",
-        "width": 720,
-        "height": 520,
-        "visible": false,
-        "decorations": false,
-        "transparent": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false
-      },
-      {
-        "label": "hud",
-        "url": "/hud/",
-        "width": 380,
-        "height": 344,
-        "visible": false,
-        "decorations": false,
-        "transparent": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false
-      },
-      {
         "label": "island",
         "url": "/island/",
         "width": 420,

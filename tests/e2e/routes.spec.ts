@@ -6,7 +6,7 @@ async function bodyIsTransparent(page: import('@playwright/test').Page) {
 }
 
 test.describe('overlay routes', () => {
-  for (const route of ['/prompt/', '/hud/', '/island/']) {
+  for (const route of ['/island/', '/kitchen-sink/']) {
     test(`${route} renders on a transparent ground`, async ({ page }) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
