@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use peekle_core::config::Config;
-use peekle_core::types::{PeekleState, PromptRequest, TaskItem, UsageSnapshot, UsageUnavailable};
+use peekle_core::types::{
+    IslandView, PeekleState, PromptRequest, SessionCard, TaskItem, UsageSnapshot, UsageUnavailable,
+};
 use peekle_core::PendingRegistry;
 use peekle_usage::{fake::unknown, UsageProvider};
 use tokio::sync::Notify;
@@ -21,12 +23,14 @@ pub struct AppState {
     pub usage_provider: Arc<dyn UsageProvider>,
 
     enabled: AtomicBool,
+    view: Mutex<IslandView>,
     hotkey_ok: AtomicBool,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
     /// Blocking requests that arrived while a prompt was already open. Not part
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
+    sessions: Mutex<Vec<SessionCard>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -40,10 +44,12 @@ impl AppState {
             pending: PendingRegistry::new(),
             usage_provider,
             enabled: AtomicBool::new(enabled),
+            view: Mutex::new(IslandView::default()),
             hotkey_ok: AtomicBool::new(true),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
+            sessions: Mutex::new(Vec::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(UsageUnavailable::Disabled)),
             ready: Mutex::new(HashMap::new()),
@@ -56,6 +62,14 @@ impl AppState {
 
     pub fn set_enabled(&self, value: bool) {
         self.enabled.store(value, Ordering::Relaxed);
+    }
+
+    pub fn view(&self) -> IslandView {
+        self.lock(&self.view).clone()
+    }
+
+    pub fn sessions(&self) -> Vec<SessionCard> {
+        self.lock(&self.sessions).clone()
     }
 
     pub fn hotkey_ok(&self) -> bool {
@@ -152,7 +166,9 @@ impl AppState {
     pub fn snapshot(&self) -> PeekleState {
         PeekleState {
             enabled: self.enabled(),
+            view: self.view(),
             active_prompt: self.active_prompt(),
+            sessions: self.sessions(),
             tasks: self.tasks(),
             usage: self.usage(),
             live_sessions: self.live_sessions(),
