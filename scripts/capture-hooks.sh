@@ -9,12 +9,29 @@
 #
 # Usage:
 #   scripts/capture-hooks.sh [seconds]
+#   scripts/capture-hooks.sh --restore   put settings back after a hard kill
 #
-# Then drive a Claude Code session in another terminal: let a turn finish
-# (Stop), trigger a tool that asks permission (PermissionRequest), let it write
-# a todo list (PostToolUse/TodoWrite).
+# The trap covers a normal exit and Ctrl-C. It cannot cover SIGKILL, and a
+# session left pointing at a dead capture server is a bad way to find that out,
+# so the backup path is written to a marker file that --restore reads.
+#
+# Then drive a Claude Code session in another terminal: send a prompt
+# (UserPromptSubmit), let it run tools (PreToolUse and PostToolUse), let a turn
+# finish (Stop), trigger a tool that asks permission (PermissionRequest).
 
 set -euo pipefail
+
+MARKER=/tmp/peekle-capture-restore
+
+if [ "${1:-}" = "--restore" ]; then
+  [ -f "$MARKER" ] || { echo "nothing to restore" >&2; exit 1; }
+  backup="$(cat "$MARKER")"
+  [ -f "$backup" ] || { echo "backup $backup is gone" >&2; exit 1; }
+  cp "$backup" "$HOME/.claude/settings.json"
+  rm -f "$MARKER"
+  echo "settings restored from $backup"
+  exit 0
+fi
 
 PORT="${PEEKLE_CAPTURE_PORT:-47822}"
 DURATION="${1:-180}"
@@ -29,14 +46,16 @@ command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
 mkdir -p "$OUT" "$(dirname "$SETTINGS")"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 cp "$SETTINGS" "$BACKUP"
+echo "$BACKUP" > "$MARKER"
 echo "backed up settings to $BACKUP"
 
 restore() {
   [ -f "$BACKUP" ] && cp "$BACKUP" "$SETTINGS"
+  rm -f "$MARKER"
   [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
   echo "settings restored"
 }
-trap restore EXIT INT TERM
+trap restore EXIT INT TERM HUP
 
 cat > /tmp/peekle-capture.mjs <<'NODE'
 import { createServer } from 'node:http';
@@ -81,22 +100,28 @@ handler() {
   fi
 }
 
+# The feed endpoint takes three events, so each lands in its own file rather
+# than all three in feed.jsonl: a golden test needs to name what it replays.
 jq \
   --argjson stop "$(handler stop)" \
   --argjson permission "$(handler permission '*')" \
   --argjson notification "$(handler notification 'permission_prompt|idle_prompt|agent_needs_input|agent_completed')" \
-  --argjson tasks "$(handler tasks 'TodoWrite')" \
+  --argjson prompt "$(handler user_prompt_submit)" \
+  --argjson pre "$(handler pre_tool_use '*')" \
+  --argjson post "$(handler post_tool_use '*')" \
   --argjson session "$(handler session)" \
   '.hooks.Stop = $stop
    | .hooks.PermissionRequest = $permission
    | .hooks.Notification = $notification
-   | .hooks.PostToolUse = $tasks
+   | .hooks.UserPromptSubmit = $prompt
+   | .hooks.PreToolUse = $pre
+   | .hooks.PostToolUse = $post
    | .hooks.SessionStart = $session
    | .hooks.SessionEnd = $session' \
   "$BACKUP" > "$SETTINGS"
 
 echo "capturing for ${DURATION}s into $OUT"
-echo "drive a Claude Code session now: finish a turn, trigger a permission, write a todo list"
+echo "drive a Claude Code session now: send a prompt, let it run tools, finish a turn"
 sleep "$DURATION"
 
 echo "captured files:"
