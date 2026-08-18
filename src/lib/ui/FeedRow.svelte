@@ -1,16 +1,28 @@
 <script lang="ts">
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
+  import MessageBlock from './MessageBlock.svelte';
 
   let { entry }: { entry: FeedEntry } = $props();
+
+  // What the agent said is prose and wants room; everything else is one line.
+  // tech.md S6.
+  let collapsed = $state(true);
 </script>
 
-<div class="row" data-kind={entry.kind}>
-  <span class="dot" data-state={entry.state}></span>
-  {#if entry.tool}
-    <span class="tool">{entry.tool}</span>
-  {/if}
-  <span class="text">{entry.text}</span>
-</div>
+{#if entry.kind === 'Assistant'}
+  <div class="row block" data-kind={entry.kind}>
+    <span class="dot" data-state={entry.state}></span>
+    <MessageBlock text={entry.text} bind:collapsed />
+  </div>
+{:else}
+  <div class="row" data-kind={entry.kind}>
+    <span class="dot" data-state={entry.state}></span>
+    {#if entry.tool}
+      <span class="tool">{entry.tool}</span>
+    {/if}
+    <span class="text">{entry.text}</span>
+  </div>
+{/if}
 
 <style>
   .row {
@@ -71,5 +83,17 @@
 
   .row[data-kind='Tool'] .text {
     color: var(--text-dim);
+  }
+
+  /* Prose needs its own height, so this row stops pretending to be a line. */
+  .row.block {
+    height: auto;
+    align-items: flex-start;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .row.block .dot {
+    margin-top: 6px;
   }
 </style>

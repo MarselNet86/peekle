@@ -368,3 +368,138 @@ async fn every_feed_event_answers_empty_and_reaches_the_sink() {
         assert_eq!(handle.feeds.lock().unwrap().len(), 1, "{name}");
     }
 }
+
+/// S4. Every behavior of the 6.2 permission table, driven by the captured
+/// PermissionRequest rather than a payload we imagined.
+#[tokio::test]
+async fn each_captured_permission_choice_maps_to_its_documented_envelope() {
+    for (choice, behavior) in [
+        ("allow_once", "allow"),
+        ("allow_always", "allow"),
+        ("deny", "deny"),
+    ] {
+        let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+            prompt_id: "p".to_string(),
+            choice: Some(choice.to_string()),
+            text: None,
+        })));
+
+        let (status, body) = post(sink, "permission", &payload("permission")).await;
+
+        assert_eq!(status, StatusCode::OK, "{choice}");
+        assert_eq!(
+            body,
+            json!({
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": {"behavior": behavior},
+                }
+            }),
+            "{choice}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_captured_permission_denied_with_a_reason_carries_it() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+        prompt_id: "p".to_string(),
+        choice: Some("deny".to_string()),
+        text: Some("  not on this machine  ".to_string()),
+    })));
+
+    let (status, body) = post(sink, "permission", &payload("permission")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["hookSpecificOutput"]["decision"],
+        json!({"behavior": "deny", "message": "not on this machine"})
+    );
+}
+
+/// Dismissed, timed out and bypassed all mean no decision. Claude Code falls
+/// back to asking in the terminal, which is the safe direction to fail.
+#[tokio::test]
+async fn a_captured_permission_left_alone_carries_no_decision() {
+    for outcome in [
+        PromptOutcome::Dismissed,
+        PromptOutcome::TimedOut,
+        PromptOutcome::Bypassed,
+    ] {
+        let sink = FixtureSink::new(Some(outcome.clone()));
+        let (status, body) = post(sink, "permission", &payload("permission")).await;
+
+        assert_eq!(status, StatusCode::OK, "{outcome:?}");
+        assert_eq!(body, json!({}), "{outcome:?}");
+    }
+}
+
+/// The prompt the island draws is built from the capture, so this pins the
+/// title and the input preview to what Claude Code actually sends.
+#[tokio::test]
+async fn a_captured_permission_builds_a_renderable_prompt() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
+    let handle = Arc::clone(&sink);
+
+    post(sink, "permission", &payload("permission")).await;
+
+    let seen = handle.seen.lock().unwrap();
+    let request = seen.first().expect("a prompt was opened");
+    assert_eq!(request.title, "Bash needs permission");
+    assert!(
+        request
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("echo appended")),
+        "the user has to see the command they are agreeing to: {:?}",
+        request.detail
+    );
+    assert!(!request.session.project.is_empty());
+}
+
+/// The v11 finding, pinned. If Claude Code starts sending tool_use_id here,
+/// the feed could tie a denial straight to its row and 6.3 should say so.
+#[tokio::test]
+async fn the_permission_capture_still_carries_no_tool_use_id() {
+    let captured = payload("permission");
+
+    assert_eq!(captured["hook_event_name"], "PermissionRequest");
+    assert!(captured["tool_name"].is_string());
+    assert!(captured["tool_input"].is_object());
+    assert!(
+        captured.get("tool_use_id").is_none(),
+        "PermissionRequest now carries tool_use_id, so a denial can be tied to its feed row"
+    );
+}
+
+#[tokio::test]
+async fn the_notification_capture_matches_the_documented_matcher() {
+    let captured = payload("notification");
+
+    assert_eq!(captured["hook_event_name"], "Notification");
+    assert!(captured["message"].is_string());
+
+    let kind = captured["notification_type"].as_str().unwrap_or_default();
+    assert!(
+        [
+            "permission_prompt",
+            "idle_prompt",
+            "agent_needs_input",
+            "agent_completed"
+        ]
+        .contains(&kind),
+        "the 6.1 matcher would drop {kind}"
+    );
+}
+
+#[tokio::test]
+async fn a_captured_notification_answers_empty() {
+    let sink = FixtureSink::new(None);
+    let handle = Arc::clone(&sink);
+
+    let (status, body) = post(sink, "notification", &payload("notification")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+    assert_eq!(handle.feeds.lock().unwrap().len(), 1);
+}
