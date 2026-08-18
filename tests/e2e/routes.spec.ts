@@ -6,7 +6,7 @@ async function bodyIsTransparent(page: import('@playwright/test').Page) {
 }
 
 test.describe('overlay routes', () => {
-  for (const route of ['/prompt/', '/hud/', '/island/']) {
+  for (const route of ['/island/', '/kitchen-sink/']) {
     test(`${route} renders on a transparent ground`, async ({ page }) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
@@ -24,16 +24,35 @@ test.describe('overlay routes', () => {
     page.on('pageerror', (error) => errors.push(error.message));
 
     await page.goto('/island/');
-    // No toast has arrived, so the pill is absent rather than empty.
-    await expect(page.locator('.toast')).toHaveCount(0);
+    // No event has arrived, so the shape is there but collapsed and invisible.
+    await expect(page.locator('.shape')).toHaveAttribute('data-view', 'Collapsed');
+    await expect(page.locator('.shape')).toHaveCSS('opacity', '0');
     expect(errors).toEqual([]);
+  });
+
+  test('the island shape grows and collapses without the window moving', async ({ page }) => {
+    await page.goto('/kitchen-sink/');
+    const shape = page.locator('.stage').first().locator('.shape');
+
+    await page.getByRole('button', { name: 'Collapsed', exact: true }).click();
+    const collapsed = await shape.boundingBox();
+
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect
+      .poll(async () => (await shape.boundingBox())?.height ?? 0)
+      .toBeGreaterThan(collapsed?.height ?? 0);
+
+    await page.getByRole('button', { name: 'Collapsed', exact: true }).click();
+    await expect
+      .poll(async () => (await shape.boundingBox())?.height ?? 0)
+      .toBeLessThanOrEqual((collapsed?.height ?? 0) + 1);
   });
 
   test('kitchen sink renders every primitive', async ({ page }) => {
     await page.goto('/kitchen-sink/');
 
     for (const heading of [
-      'Panel',
+      'Shape',
       'PromptInput',
       'OptionList',
       'MessageBlock',

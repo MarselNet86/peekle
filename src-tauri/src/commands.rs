@@ -4,12 +4,11 @@
 use std::sync::Arc;
 
 use peekle_core::types::{
-    PeekleState, PromptAnswer, PromptOutcome, ToastRequest, ToastTone, UsageSnapshot,
+    IslandView, PeekleState, PromptAnswer, PromptOutcome, ToastRequest, ToastTone, UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
-use crate::panel;
 use crate::state::AppState;
 use crate::windows;
 
@@ -55,7 +54,6 @@ pub fn set_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: boo
 
     if !enabled {
         state.pending.resolve_all(PromptOutcome::Bypassed);
-        let _ = panel::hide(&app, panel::PROMPT);
     }
 
     if let Err(err) = app.emit(events::ENABLED, serde_json::json!({ "enabled": enabled })) {
@@ -103,9 +101,25 @@ pub fn set_usage_enabled(state: State<'_, Arc<AppState>>, enabled: bool) {
     state.lock_config().usage.enabled = enabled;
 }
 
+/// The intent to open or collapse. Rust, not the webview, switches whether the
+/// window takes clicks. tech.md 6.5 and 6.7.
+#[tauri::command]
+pub fn set_view(app: AppHandle, view: IslandView) {
+    windows::set_view(&app, view);
+}
+
+/// The webview reports the size of the shape it drew. Rust records it for
+/// `doctor` and for tests and changes nothing: the window never resizes, and
+/// letting the frontend drive the frame is exactly the stutter 6.7 forbids.
+#[tauri::command]
+pub fn island_bounds(width: f64, height: f64) {
+    tracing::debug!(width, height, "island reported its bounds");
+}
+
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
 #[tauri::command]
 pub fn window_ready(state: State<'_, Arc<AppState>>, label: String) {
+    tracing::debug!(label, "webview reported ready");
     state.ready_gate(&label).notify_waiters();
 }
 

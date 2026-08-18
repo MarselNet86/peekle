@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { fly } from 'svelte/transition';
   import type { ToastTone } from '$lib/types/generated/ToastTone';
 
   let {
@@ -9,12 +8,9 @@
   }: { text: string; tone?: ToastTone; badge?: number | null } = $props();
 </script>
 
-<div
-  class="toast"
-  data-tone={tone}
-  in:fly={{ y: -12, duration: 220 }}
-  out:fly={{ y: -12, duration: 160 }}
->
+<!-- Content of the pill only. The black fill, the corners and the movement
+     belong to Shape. tech.md 9. -->
+<div class="band" data-tone={tone}>
   <span class="mark"></span>
   <span class="text">{text}</span>
   {#if badge != null}
@@ -23,48 +19,58 @@
 </div>
 
 <style>
-  .toast {
+  .band {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     height: 100%;
-    padding: 0 16px;
-    background: var(--surface-hud);
-    backdrop-filter: blur(var(--blur)) saturate(140%);
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
+    padding: 0 18px;
+    box-sizing: border-box;
     color: var(--text);
-    font-size: 13px;
   }
 
   .mark {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     flex: none;
     background: var(--text-dim);
   }
 
-  .toast[data-tone='On'] .mark {
+  .band[data-tone='On'] .mark {
     background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
   }
-  .toast[data-tone='Off'] .mark {
+  .band[data-tone='Off'] .mark {
     background: var(--text-dim);
   }
-  .toast[data-tone='Warn'] .mark {
+  .band[data-tone='Warn'] .mark {
     background: var(--warn);
+    box-shadow: 0 0 8px var(--warn);
+  }
+  .band[data-tone='Neutral'] .mark {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
   }
 
   .text {
     flex: 1;
+    font-size: 13px;
+    letter-spacing: 0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .badge {
+    flex: none;
+    min-width: 18px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-dim);
+    text-align: center;
   }
 </style>

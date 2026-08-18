@@ -18,7 +18,7 @@ use crate::map;
 use crate::sink::HookSink;
 
 /// Reported by `/v1/health`. Tracks the core version in the tech.md header.
-pub const CORE_VERSION: &str = "v4";
+pub const CORE_VERSION: &str = "v7";
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -143,7 +143,7 @@ async fn permission(
 }
 
 /// Non-blocking feeds. They keep collecting while Peekle is off, because the
-/// HUD and the session registry stay alive in bypass mode.
+/// The feed and the session registry stay alive in bypass mode.
 async fn feed(
     state: ServerState,
     token: String,

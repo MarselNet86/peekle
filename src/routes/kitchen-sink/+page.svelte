@@ -3,15 +3,16 @@
   import LabelPill from '$lib/ui/LabelPill.svelte';
   import MessageBlock from '$lib/ui/MessageBlock.svelte';
   import OptionList from '$lib/ui/OptionList.svelte';
-  import Panel from '$lib/ui/Panel.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import Shape from '$lib/ui/Shape.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { TaskItem } from '$lib/types/generated/TaskItem';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
+  import type { IslandView } from '$lib/types/generated/IslandView';
   import type { TaskStatus } from '$lib/types/generated/TaskStatus';
 
   const NOW = 1_700_000_000;
@@ -39,6 +40,17 @@
     (_, i) => `Line ${i + 1} of a closing message that runs past the six line clamp.`,
   ).join('\n');
 
+  // Every IslandView, because the spring cannot be looked at without a live
+  // session otherwise. tech.md 9.
+  const views: [string, IslandView][] = [
+    ['Collapsed', 'Collapsed'],
+    ['Pill', 'Pill'],
+    ['Sessions', 'Sessions'],
+    ['Session', { Session: '01J0' }],
+  ];
+  const NOTCH = { width: 200, height: 32 };
+
+  let view = $state<IslandView>('Pill');
   let text = $state('');
   let selected = $state('allow_once');
   let collapsed = $state(true);
@@ -46,59 +58,80 @@
 
 <div class="sink">
   <section>
-    <h2>Panel</h2>
-    <Panel tone="prompt">prompt tone</Panel>
-    <Panel tone="hud">hud tone</Panel>
-    <Panel tone="island">island tone</Panel>
+    <h2>Shape</h2>
+    <div class="views">
+      {#each views as [name, candidate] (name)}
+        <button
+          class="pick"
+          class:on={JSON.stringify(view) === JSON.stringify(candidate)}
+          onclick={() => (view = candidate)}>{name}</button
+        >
+      {/each}
+    </div>
+    <div class="stage">
+      <Shape {view} notch={NOTCH}>
+        <Toast text="Claude needs your input" tone="Neutral" badge={3} />
+      </Shape>
+    </div>
+
+    <div class="row">
+      {#each views as [name, candidate] (name)}
+        <div class="stage small">
+          <Shape view={candidate} notch={NOTCH}>
+            <Toast text={name} tone="Neutral" />
+          </Shape>
+        </div>
+      {/each}
+    </div>
   </section>
 
   <section>
     <h2>PromptInput</h2>
-    <Panel><PromptInput bind:value={text} placeholder="Reply to Claude" /></Panel>
-    <Panel><PromptInput value="disabled" disabled /></Panel>
+    <div class="frame"><PromptInput bind:value={text} placeholder="Reply to Claude" /></div>
+    <div class="frame"><PromptInput value="disabled" disabled /></div>
   </section>
 
   <section>
     <h2>OptionList</h2>
-    <Panel><OptionList {options} bind:selected /></Panel>
+    <div class="frame"><OptionList {options} bind:selected /></div>
   </section>
 
   <section>
     <h2>MessageBlock</h2>
-    <Panel><MessageBlock text={longMessage} bind:collapsed /></Panel>
-    <Panel><MessageBlock text="Short closing message." collapsed={false} /></Panel>
+    <div class="frame"><MessageBlock text={longMessage} bind:collapsed /></div>
+    <div class="frame"><MessageBlock text="Short closing message." collapsed={false} /></div>
   </section>
 
   <section>
     <h2>UsageBar</h2>
-    <Panel>
+    <div class="frame">
       <UsageBar label="5h" pct={12} resetsAt={NOW + 5400} now={NOW} />
       <UsageBar label="5h" pct={62} resetsAt={NOW + 600} now={NOW} />
       <UsageBar label="Week" pct={81} resetsAt={NOW + 300000} now={NOW} />
       <UsageBar label="Week" pct={96} resetsAt={NOW + 30} now={NOW} />
       <UsageBar label="5h" pct={null} reason="No Keychain access" />
       <UsageBar label="Week" pct={null} reason="Not logged in" />
-    </Panel>
+    </div>
   </section>
 
   <section>
     <h2>TaskRow and LabelPill</h2>
-    <Panel tone="hud">
+    <div class="frame">
       {#each tasks as task (task.id)}
         <TaskRow {task} />
       {/each}
-    </Panel>
-    <Panel>
+    </div>
+    <div class="frame">
       {#each labels as label (label)}
         <LabelPill {label} />
       {/each}
-    </Panel>
+    </div>
   </section>
 
   <section>
     <h2>ScrollHint</h2>
-    <Panel tone="hud"><ScrollHint visible /></Panel>
-    <Panel tone="hud"><ScrollHint visible={false} /></Panel>
+    <div class="frame"><ScrollHint visible /></div>
+    <div class="frame"><ScrollHint visible={false} /></div>
   </section>
 
   <section>
@@ -111,7 +144,11 @@
 
   <section>
     <h2>Kbd</h2>
-    <Panel><Kbd keys={['⌥', '⇧', 'Q']} /> <Kbd keys={['esc']} /> <Kbd keys={['⏎']} /></Panel>
+    <div class="frame">
+      <Kbd keys={['⌥', '⇧', 'Q']} />
+      <Kbd keys={['esc']} />
+      <Kbd keys={['⏎']} />
+    </div>
   </section>
 </div>
 
@@ -147,5 +184,55 @@
   .pill {
     height: 44px;
     width: 340px;
+    background: var(--notch);
+    border-radius: 0 0 20px 20px;
+  }
+
+  /* Dev-only framing so each primitive has an edge to be seen against. The
+     product draws its surfaces with Shape. */
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+
+  .views {
+    display: flex;
+    gap: 6px;
+  }
+
+  .pick {
+    background: transparent;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .pick.on {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  /* The window is 720 by 560 and the shape hangs from its top edge. */
+  .stage {
+    width: 720px;
+    height: 200px;
+    max-width: 100%;
+    background: repeating-linear-gradient(45deg, #22303f, #22303f 10px, #1f2b38 10px, #1f2b38 20px);
+    overflow: hidden;
+  }
+
+  .stage.small {
+    width: 170px;
+    height: 120px;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
   }
 </style>

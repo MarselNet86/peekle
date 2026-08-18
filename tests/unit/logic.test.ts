@@ -1,13 +1,13 @@
 /**
  * Property based tests for the pure frontend logic. tech.md section 10 names
- * the usage window math and the HUD window as the two that need them.
+ * the usage window math and the feed window as the two that need them.
  */
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { clampPct, resetCountdown, usageTone } from '$lib/logic/usage';
-import { hudWindow, MAX_VISIBLE_TASKS } from '$lib/logic/hud';
+import { feedWindow, MAX_VISIBLE_ROWS } from '$lib/logic/feed';
 import type { TaskItem } from '$lib/types/generated/TaskItem';
 
 const task = (i: number): TaskItem => ({
@@ -80,17 +80,17 @@ describe('usage math', () => {
   });
 });
 
-describe('hud window', () => {
+describe('feed window', () => {
   it('never renders more than six rows and hints exactly when it clips', () => {
     fc.assert(
       fc.property(fc.nat({ max: 200 }), (count) => {
         const tasks = Array.from({ length: count }, (_, i) => task(i));
-        const view = hudWindow(tasks);
+        const view = feedWindow(tasks);
 
-        expect(view.visible.length).toBeLessThanOrEqual(MAX_VISIBLE_TASKS);
-        expect(view.visible.length).toBe(Math.min(count, MAX_VISIBLE_TASKS));
-        expect(view.showScrollHint).toBe(count > MAX_VISIBLE_TASKS);
-        expect(view.showHud).toBe(count > 0);
+        expect(view.visible.length).toBeLessThanOrEqual(MAX_VISIBLE_ROWS);
+        expect(view.visible.length).toBe(Math.min(count, MAX_VISIBLE_ROWS));
+        expect(view.showScrollHint).toBe(count > MAX_VISIBLE_ROWS);
+        expect(view.showList).toBe(count > 0);
       }),
     );
   });
@@ -99,13 +99,13 @@ describe('hud window', () => {
     fc.assert(
       fc.property(fc.integer({ min: -20, max: 400 }), (limit) => {
         const tasks = Array.from({ length: 40 }, (_, i) => task(i));
-        expect(hudWindow(tasks, limit).visible.length).toBeLessThanOrEqual(MAX_VISIBLE_TASKS);
+        expect(feedWindow(tasks, limit).visible.length).toBeLessThanOrEqual(MAX_VISIBLE_ROWS);
       }),
     );
   });
 
-  it('hides the hud when there is nothing to show', () => {
-    expect(hudWindow([]).showHud).toBe(false);
-    expect(hudWindow([]).showScrollHint).toBe(false);
+  it('hides the list when there is nothing to show', () => {
+    expect(feedWindow([]).showList).toBe(false);
+    expect(feedWindow([]).showScrollHint).toBe(false);
   });
 });
