@@ -2,9 +2,11 @@
   import { commands } from '$lib/bridge';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
+  import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
   import { feedWindow } from '$lib/logic/feed';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
+  import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -26,6 +28,12 @@
   // Outside that there is nowhere to deliver the text, and a field that looks
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
   const waiting = $derived(openSession?.status === 'WaitingOnUser' && island.prompt !== null);
+  const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
+
+  function answerPermission(kind: 'allow' | 'deny') {
+    const choice = choiceFor(island.prompt, kind);
+    if (choice) island.choose(choice);
+  }
 
   let reply = $state('');
 
@@ -89,7 +97,15 @@
         </div>
         <ScrollHint visible={rows.showScrollHint && !waiting} />
 
-        {#if waiting}
+        {#if permission}
+          <div class="reply">
+            <PermissionRow
+              request={permission}
+              onallow={() => answerPermission('allow')}
+              ondeny={() => answerPermission('deny')}
+            />
+          </div>
+        {:else if waiting}
           <div class="reply">
             <PromptInput
               bind:value={reply}

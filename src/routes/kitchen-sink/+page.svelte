@@ -5,6 +5,7 @@
   import OptionList from '$lib/ui/OptionList.svelte';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
+  import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -12,6 +13,7 @@
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
+  import type { PromptRequest } from '$lib/types/generated/PromptRequest';
   import type { TaskItem } from '$lib/types/generated/TaskItem';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
@@ -82,6 +84,23 @@
       at: 4,
     },
   ];
+
+  const permission: PromptRequest = {
+    id: '01J0',
+    kind: 'Permission',
+    session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle' },
+    title: 'Bash needs permission',
+    last_message: null,
+    detail: '{"command":"rm -rf target/debug/incremental"}',
+    options: [
+      { id: 'allow_once', label: 'Allow once', hint: null, kind: 'AllowOnce' },
+      { id: 'allow_always', label: 'Allow for this session', hint: null, kind: 'AllowAlways' },
+      { id: 'deny', label: 'Deny', hint: null, kind: 'Deny' },
+    ],
+    allow_free_text: true,
+    created_at: 0,
+    expires_at: 0,
+  };
 
   let view = $state<IslandView>('Pill');
   let text = $state('');
@@ -168,6 +187,11 @@
         <FeedRow {entry} />
       {/each}
     </div>
+  </section>
+
+  <section>
+    <h2>PermissionRow</h2>
+    <div class="frame"><PermissionRow request={permission} /></div>
   </section>
 
   <section>
