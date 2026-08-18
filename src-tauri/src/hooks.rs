@@ -32,6 +32,11 @@ impl AppSink {
     }
 
     fn emit_sessions(&self, cards: Vec<peekle_core::types::SessionCard>) {
+        tracing::debug!(
+            sessions = cards.len(),
+            entries = cards.iter().map(|c| c.entries.len()).sum::<usize>(),
+            "feed updated"
+        );
         if let Err(err) = self.app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
