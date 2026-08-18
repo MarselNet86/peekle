@@ -99,10 +99,28 @@ impl HookSink for AppSink {
         }
     }
 
+    /// SessionStart has never appeared in a capture, only SessionEnd, so a card
+    /// is never created here. The registry opens one on the first feed event
+    /// instead, which is the event that actually arrives. tech.md 6.1.
     fn on_session(&self, payload: &Value) {
-        match payload.get("hook_event_name").and_then(Value::as_str) {
-            Some("SessionStart") => self.state.session_started(),
-            Some("SessionEnd") => self.state.session_ended(),
+        let Some(event) = payload.get("hook_event_name").and_then(Value::as_str) else {
+            return;
+        };
+        let Some(session_id) = payload.get("session_id").and_then(Value::as_str) else {
+            return;
+        };
+
+        match event {
+            "SessionStart" => self.state.session_started(),
+            "SessionEnd" => {
+                self.state.session_ended();
+                let at = now_ms();
+                // A turn cannot outlive its session, so anything still running
+                // never finished. tech.md 6.3.
+                self.state.end_turn(session_id, at);
+                let cards = self.state.mark_session_ended(session_id, at);
+                self.emit_sessions(cards);
+            }
             _ => {}
         }
     }

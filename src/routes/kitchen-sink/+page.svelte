@@ -8,12 +8,14 @@
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
+  import type { SessionCard } from '$lib/types/generated/SessionCard';
   import type { TaskItem } from '$lib/types/generated/TaskItem';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
@@ -102,6 +104,16 @@
     expires_at: 0,
   };
 
+  const cards: SessionCard[] = (['Working', 'WaitingOnUser', 'Idle', 'Ended'] as const).map(
+    (status, i) => ({
+      session: { session_id: `s${i}`, cwd: '/Users/x/peekle', project: 'peekle' },
+      title: 'Refactor the panel code and open a PR when the tests pass',
+      status,
+      entries: [],
+      updated_at: 0,
+    }),
+  );
+
   let view = $state<IslandView>('Pill');
   let text = $state('');
   let selected = $state('allow_once');
@@ -185,6 +197,15 @@
     <div class="frame">
       {#each entries as entry (entry.id)}
         <FeedRow {entry} />
+      {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>SessionRow</h2>
+    <div class="frame">
+      {#each cards as card (card.session.session_id)}
+        <SessionRow {card} />
       {/each}
     </div>
   </section>

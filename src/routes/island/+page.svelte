@@ -3,12 +3,14 @@
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
+  import { backToList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
   import { feedWindow } from '$lib/logic/feed';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
@@ -19,15 +21,18 @@
 
   let host = $state<HTMLElement | null>(null);
 
-  const openSession = $derived(
-    typeof island.view === 'object' ? feed.card(island.view.Session) : undefined,
-  );
-  const rows = $derived(feedWindow(openSession?.entries ?? []));
+  const current = $derived.by(() => {
+    const id = sessionOf(island.view);
+    return id ? feed.card(id) : undefined;
+  });
+  const rows = $derived(feedWindow(current?.entries ?? []));
+  const listing = $derived(island.view === 'Sessions');
+  const cards = $derived(feedWindow(feed.sessions));
 
   // The field is live only while a session is actually waiting on an answer.
   // Outside that there is nowhere to deliver the text, and a field that looks
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
-  const waiting = $derived(openSession?.status === 'WaitingOnUser' && island.prompt !== null);
+  const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
   function answerPermission(kind: 'allow' | 'deny') {
@@ -88,8 +93,23 @@
   <Shape view={island.view} notch={island.notch}>
     {#if island.view === 'Pill' && island.toast}
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
-    {:else if openSession}
+    {:else if listing}
       <div class="feed">
+        <div class="rows">
+          {#each cards.visible as card (card.session.session_id)}
+            <SessionRow {card} onopen={() => openSession(card.session.session_id)} />
+          {/each}
+        </div>
+        <ScrollHint visible={cards.showScrollHint} />
+      </div>
+    {:else if current}
+      <div class="feed">
+        <button class="back" onclick={() => backToList()} aria-label="Back to the session list">
+          <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+            <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+          <span>{current.session.project}</span>
+        </button>
         <div class="rows">
           {#each rows.visible as entry (entry.id)}
             <FeedRow {entry} />
@@ -148,6 +168,24 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 11px;
+    padding: 0 0 4px;
+    cursor: pointer;
+  }
+
+  .back:hover {
+    color: var(--text);
   }
 
   .reply {

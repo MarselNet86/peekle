@@ -20,7 +20,12 @@ on the wire.
 - `permission.jsonl` — `Bash` asking to append to a file
 - `notification.jsonl` — an `idle_prompt`
 - `tasks.jsonl` — `PostToolUse` for `TodoWrite`, with `tool_input.todos`
-- `session.jsonl` — `SessionEnd`
+- `session.jsonl` — `SessionEnd`, six of them and not one `SessionStart`
+
+`SessionStart` has never appeared in a capture, across every session driven
+here, while its handler was installed the whole time. Nothing depends on it:
+the registry opens a card on the first feed event, which is the one that
+actually arrives.
 
 ## Capturing the two that need a real prompt
 

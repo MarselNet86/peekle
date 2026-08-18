@@ -351,3 +351,76 @@ fn a_session_can_be_opened_by_a_stop_alone() {
     assert_eq!(registry.cards().len(), 1);
     assert!(registry.cards()[0].title.is_empty());
 }
+
+/// S5. Two sessions running at once stay separate and keep their own status.
+#[test]
+fn parallel_sessions_are_kept_apart() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    let session = |id: &str, project: &str| SessionRef {
+        session_id: id.to_string(),
+        cwd: format!("/work/{project}"),
+        project: project.to_string(),
+    };
+
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session("a", "peekle"),
+            text: "ship the island".into(),
+        },
+        1,
+    );
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session("b", "other"),
+            text: "write the docs".into(),
+        },
+        2,
+    );
+
+    registry.set_status("a", SessionStatus::WaitingOnUser, 3);
+    registry.set_status("b", SessionStatus::Working, 4);
+
+    assert_eq!(registry.cards().len(), 2);
+
+    let a = registry
+        .cards()
+        .iter()
+        .find(|c| c.session.session_id == "a")
+        .expect("session a");
+    let b = registry
+        .cards()
+        .iter()
+        .find(|c| c.session.session_id == "b")
+        .expect("session b");
+
+    assert_eq!(a.status, SessionStatus::WaitingOnUser);
+    assert_eq!(b.status, SessionStatus::Working);
+    assert_eq!(a.title, "ship the island");
+    assert_eq!(b.title, "write the docs");
+    assert_eq!(a.session.project, "peekle");
+}
+
+/// SessionEnd has never appeared in a capture without SessionStart preceding
+/// it, so a card has to survive being ended without ever being started.
+#[test]
+fn a_session_can_end_without_ever_having_started() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: SessionRef {
+                session_id: "a".into(),
+                cwd: "/work/peekle".into(),
+                project: "peekle".into(),
+            },
+            text: "go".into(),
+        },
+        1,
+    );
+
+    assert!(registry.set_status("a", SessionStatus::Ended, 2));
+    assert_eq!(registry.cards()[0].status, SessionStatus::Ended);
+}
