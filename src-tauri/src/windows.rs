@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest};
+use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
@@ -129,6 +129,20 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
             set_view(&handle, IslandView::Collapsed);
         }
     });
+}
+
+/// One warning on startup when the combination could not be taken. Swallowing
+/// it would leave the user pressing a key that does nothing. tech.md 6.9.
+pub fn warn_hotkey(app: &AppHandle, text: &str) {
+    toast(
+        app,
+        ToastRequest {
+            text: text.to_string(),
+            tone: ToastTone::Warn,
+            ttl_ms: 3200,
+            badge: None,
+        },
+    );
 }
 
 /// A toast is the `Pill` view for as long as it lives. Nothing here waits on

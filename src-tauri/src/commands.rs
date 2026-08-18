@@ -72,9 +72,22 @@ fn now_ms() -> i64 {
         .unwrap_or_default()
 }
 
+/// The hotkey path into the bypass switch. Reads the current value and flips
+/// it, so the key means the same thing whichever way the switch is sitting.
+pub fn toggle_enabled(app: AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let next = !state.enabled();
+    apply_enabled(&app, &state, next);
+}
+
 /// Bypass. Off resolves everything pending so no agent is left waiting.
 #[tauri::command]
 pub fn set_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
+    let state = state.inner().clone();
+    apply_enabled(&app, &state, enabled);
+}
+
+fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
     state.set_enabled(enabled);
     state.lock_config().behavior.enabled = enabled;
 
@@ -87,7 +100,7 @@ pub fn set_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: boo
     }
 
     windows::toast(
-        &app,
+        app,
         ToastRequest {
             text: if enabled {
                 "Peekle is ON".to_string()

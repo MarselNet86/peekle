@@ -1,6 +1,7 @@
 mod commands;
 mod events;
 mod hooks;
+mod hotkey;
 mod panel;
 mod state;
 mod windows;
@@ -20,6 +21,17 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_nspanel::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // Fire on press only. The plugin reports both edges and a
+                    // release would toggle straight back.
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        commands::toggle_enabled(app.clone());
+                    }
+                })
+                .build(),
+        )
         .on_page_load(|window, payload| {
             tracing::debug!(
                 label = window.label(),
@@ -38,6 +50,7 @@ pub fn run() {
             let config = load_config();
             let port = config.server.port;
             let token = config.server.token.clone();
+            let toggle = config.hotkey.toggle.clone();
             let provider = usage_provider(&config);
 
             let state = Arc::new(state::AppState::new(config, provider));
@@ -73,6 +86,8 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 windows::open_island(&handle).await;
             });
+
+            hotkey::install(app.handle(), &toggle);
 
             let sink = Arc::new(hooks::AppSink::new(app.handle().clone(), state));
             serve(port, token, sink);
