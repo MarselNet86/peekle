@@ -55,7 +55,7 @@ something to say.
 `scripts/demo.sh` plays the part of the agent:
 
 ```sh
-./scripts/demo.sh island    # a toast, hides itself
+./scripts/demo.sh island    # a toast: the notch grows, then collapses
 ./scripts/demo.sh tasks     # three tasks into the registry
 ./scripts/demo.sh clear     # empty the task list
 ./scripts/demo.sh stop      # blocks like a real Stop hook

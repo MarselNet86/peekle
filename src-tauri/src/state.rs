@@ -68,6 +68,18 @@ impl AppState {
         self.lock(&self.view).clone()
     }
 
+    /// Stores the intent and reports whether it moved. An unchanged view must
+    /// not churn the panel: toggling cursor events on a repeat is visible as a
+    /// dropped click.
+    pub fn set_view(&self, next: IslandView) -> bool {
+        let mut view = self.lock(&self.view);
+        if *view == next {
+            return false;
+        }
+        *view = next;
+        true
+    }
+
     pub fn sessions(&self) -> Vec<SessionCard> {
         self.lock(&self.sessions).clone()
     }
@@ -270,6 +282,24 @@ mod tests {
         let state = state();
         let many: Vec<_> = (0..80).map(|i| task(&i.to_string(), i)).collect();
         assert_eq!(state.merge_tasks(many).len(), TASK_CAP);
+    }
+
+    #[test]
+    fn setting_the_same_view_twice_reports_no_move() {
+        let state = state();
+        assert_eq!(state.view(), IslandView::Collapsed);
+        assert!(state.set_view(IslandView::Sessions));
+        assert!(!state.set_view(IslandView::Sessions));
+        assert!(state.set_view(IslandView::Session("s".into())));
+        assert_eq!(state.view(), IslandView::Session("s".into()));
+    }
+
+    #[test]
+    fn every_collapsed_view_lets_clicks_through_and_every_open_one_does_not() {
+        assert!(!IslandView::Collapsed.takes_clicks());
+        assert!(!IslandView::Pill.takes_clicks());
+        assert!(IslandView::Sessions.takes_clicks());
+        assert!(IslandView::Session("s".into()).takes_clicks());
     }
 
     #[test]

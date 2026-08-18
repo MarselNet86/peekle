@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { fly } from 'svelte/transition';
   import type { ToastTone } from '$lib/types/generated/ToastTone';
 
   let {
@@ -9,48 +8,25 @@
   }: { text: string; tone?: ToastTone; badge?: number | null } = $props();
 </script>
 
-<!-- Not a pill floating under the notch: the same black, flush with the top
-     edge, so the notch reads as having grown. tech.md 6.7 and 9. -->
-<div
-  class="notch"
-  data-tone={tone}
-  in:fly={{ y: -14, duration: 260, opacity: 1 }}
-  out:fly={{ y: -14, duration: 180, opacity: 1 }}
->
-  <div class="band">
-    <span class="mark"></span>
-    <span class="text">{text}</span>
-    {#if badge != null}
-      <span class="badge">{badge}</span>
-    {/if}
-  </div>
+<!-- Content of the pill only. The black fill, the corners and the movement
+     belong to Shape. tech.md 9. -->
+<div class="band" data-tone={tone}>
+  <span class="mark"></span>
+  <span class="text">{text}</span>
+  {#if badge != null}
+    <span class="badge">{badge}</span>
+  {/if}
 </div>
 
 <style>
-  .notch {
-    width: 100%;
-    height: 100%;
-    background: var(--notch);
-    /* Square at the top because the screen edge cuts it, rounded below so it
-       matches the curve the bezel already has. */
-    border-radius: 0 0 20px 20px;
-    /* Content clears the camera housing. Zero on a display without one. */
-    padding-top: var(--notch-h, 0px);
-    box-sizing: border-box;
-    color: var(--text);
-  }
-
-  /* No notch to continue, so it goes back to being a floating pill. */
-  :global(:root:not([data-notch])) .notch {
-    border-radius: 999px;
-  }
-
   .band {
     display: flex;
     align-items: center;
     gap: 10px;
     height: 100%;
     padding: 0 18px;
+    box-sizing: border-box;
+    color: var(--text);
   }
 
   .mark {
@@ -61,18 +37,18 @@
     background: var(--text-dim);
   }
 
-  .notch[data-tone='On'] .mark {
+  .band[data-tone='On'] .mark {
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
   }
-  .notch[data-tone='Off'] .mark {
+  .band[data-tone='Off'] .mark {
     background: var(--text-dim);
   }
-  .notch[data-tone='Warn'] .mark {
+  .band[data-tone='Warn'] .mark {
     background: var(--warn);
     box-shadow: 0 0 8px var(--warn);
   }
-  .notch[data-tone='Neutral'] .mark {
+  .band[data-tone='Neutral'] .mark {
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
   }

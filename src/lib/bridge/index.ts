@@ -10,6 +10,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
@@ -25,6 +26,7 @@ export const EVENTS = {
   usage: 'peekle://usage',
   enabled: 'peekle://enabled',
   toast: 'peekle://toast',
+  view: 'peekle://view',
 } as const;
 
 export function hasTauri(): boolean {
@@ -45,6 +47,8 @@ export const commands = {
   requestUsageAccess: () => call<UsageSnapshot>('request_usage_access'),
   setUsageEnabled: (enabled: boolean) => call<void>('set_usage_enabled', { enabled }),
   windowReady: (label: string) => call<void>('window_ready', { label }),
+  setView: (view: IslandView) => call<void>('set_view', { view }),
+  islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
@@ -62,4 +66,5 @@ export const events = {
   onEnabled: (handler: (payload: { enabled: boolean }) => void) =>
     on<{ enabled: boolean }>(EVENTS.enabled, handler),
   onToast: (handler: (toast: ToastRequest) => void) => on<ToastRequest>(EVENTS.toast, handler),
+  onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
 };

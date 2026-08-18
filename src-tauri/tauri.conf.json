@@ -16,8 +16,8 @@
       {
         "label": "island",
         "url": "/island/",
-        "width": 420,
-        "height": 76,
+        "width": 720,
+        "height": 560,
         "visible": false,
         "decorations": false,
         "transparent": true,

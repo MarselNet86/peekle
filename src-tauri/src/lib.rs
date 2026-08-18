@@ -54,17 +54,24 @@ pub fn run() {
             panel::convert_all(app.handle())?;
 
             // A borderless webview gets no safe area of its own, so Rust hands
-            // the measured notch height to the route. tech.md 6.7.
-            if let (Some(window), Some(notch)) =
-                (app.get_webview_window(panel::ISLAND), panel::notch_height())
+            // the measured notch over to the route. tech.md 6.7.
+            if let (Some(window), Some((height, width))) =
+                (app.get_webview_window(panel::ISLAND), panel::notch())
             {
-                let url = format!("/island/?notch={notch}");
+                let url = format!("/island/?notch={height}&notch_width={width}");
                 if let Err(err) = window.eval(format!(
                     "if (location.search.indexOf('notch=') === -1) location.replace('{url}')"
                 )) {
-                    tracing::warn!(error = %err, "could not hand the notch height over");
+                    tracing::warn!(error = %err, "could not hand the notch over");
                 }
             }
+
+            // The island goes up once and stays up, transparent while
+            // collapsed. tech.md section 8.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                windows::open_island(&handle).await;
+            });
 
             let sink = Arc::new(hooks::AppSink::new(app.handle().clone(), state));
             serve(port, token, sink);
@@ -96,6 +103,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::request_usage_access,
             commands::set_usage_enabled,
             commands::window_ready,
+            commands::set_view,
+            commands::island_bounds,
             commands::dev_emit_prompt,
         ]
     }
@@ -110,6 +119,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::request_usage_access,
             commands::set_usage_enabled,
             commands::window_ready,
+            commands::set_view,
+            commands::island_bounds,
         ]
     }
 }
