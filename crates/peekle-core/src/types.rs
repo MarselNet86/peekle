@@ -114,6 +114,85 @@ pub enum TaskStatus {
     Done,
 }
 
+/// What the island is showing right now.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum IslandView {
+    /// A notch like any other notch: the window is transparent end to end.
+    #[default]
+    Collapsed,
+    /// One line of status, width follows the content.
+    Pill,
+    /// The list of sessions.
+    Sessions,
+    /// The feed of one session, by its session_id.
+    Session(String),
+}
+
+impl IslandView {
+    /// Whether this view takes clicks. Collapsed and Pill are output only, and
+    /// a transparent window that swallows clicks makes the desktop unusable.
+    /// tech.md 6.7.
+    pub fn takes_clicks(&self) -> bool {
+        !matches!(self, Self::Collapsed | Self::Pill)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum EntryKind {
+    User,
+    Assistant,
+    Tool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum EntryState {
+    Running,
+    Ok,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FeedEntry {
+    /// ulid
+    pub id: String,
+    pub kind: EntryKind,
+    /// A turn, a reply, or the input preview of a tool call.
+    pub text: String,
+    /// Tool name, set for `EntryKind::Tool`.
+    pub tool: Option<String>,
+    pub state: EntryState,
+    /// unix ms
+    #[ts(type = "number")]
+    pub at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum SessionStatus {
+    Working,
+    WaitingOnUser,
+    Idle,
+    Ended,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SessionCard {
+    pub session: SessionRef,
+    /// First user turn, truncated to 80.
+    pub title: String,
+    pub status: SessionStatus,
+    /// Tail of the feed, capped at 200 per session.
+    pub entries: Vec<FeedEntry>,
+    /// unix ms
+    #[ts(type = "number")]
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum UsageWindow {
@@ -206,7 +285,10 @@ pub struct ToastRequest {
 #[ts(export)]
 pub struct PeekleState {
     pub enabled: bool,
+    pub view: IslandView,
     pub active_prompt: Option<PromptRequest>,
+    /// Freshest activity first, capped at 20.
+    pub sessions: Vec<SessionCard>,
     /// Freshest activity first, capped at 50.
     pub tasks: Vec<TaskItem>,
     pub usage: UsageSnapshot,

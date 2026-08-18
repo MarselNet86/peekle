@@ -14,34 +14,10 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "label": "prompt",
-        "url": "/prompt/",
-        "width": 720,
-        "height": 520,
-        "visible": false,
-        "decorations": false,
-        "transparent": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false
-      },
-      {
-        "label": "hud",
-        "url": "/hud/",
-        "width": 380,
-        "height": 344,
-        "visible": false,
-        "decorations": false,
-        "transparent": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false
-      },
-      {
         "label": "island",
         "url": "/island/",
-        "width": 340,
-        "height": 72,
+        "width": 720,
+        "height": 560,
         "visible": false,
         "decorations": false,
         "transparent": true,
@@ -51,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
     }
   },
   "bundle": {

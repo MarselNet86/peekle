@@ -4,7 +4,8 @@
    feature folder defines its own color, radius or blur. */
 :root {
   --surface: rgba(12, 12, 14, 0.72);
-  --surface-hud: rgba(12, 12, 14, 0.48);
+  /* Exactly black so the island is indistinguishable from the bezel. */
+  --notch: #000;
   --hairline: rgba(255, 255, 255, 0.08);
   --text: rgba(255, 255, 255, 0.94);
   --text-dim: rgba(255, 255, 255, 0.56);
@@ -19,7 +20,7 @@
 
 @theme inline {
   --color-surface: var(--surface);
-  --color-surface-hud: var(--surface-hud);
+  --color-notch: var(--notch);
   --color-hairline: var(--hairline);
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);

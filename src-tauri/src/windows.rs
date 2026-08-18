@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use peekle_core::types::{PromptOutcome, PromptRequest, ToastRequest};
+use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
@@ -27,48 +27,66 @@ where
     }
 }
 
-fn show(app: &AppHandle, label: &'static str) {
+/// Puts the island on screen once and leaves it there. It is transparent while
+/// collapsed, and hiding the window on every collapse would flash and cut the
+/// spring short. tech.md section 8.
+pub async fn open_island(app: &AppHandle) {
+    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
+    let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
+
     on_main(app, "show", move |handle| {
-        if let Err(err) = panel::show(handle, label) {
-            tracing::error!(error = %err, label, "failed to show a panel");
+        if let Err(err) = panel::show(handle, panel::ISLAND) {
+            tracing::error!(error = %err, "failed to show the island");
         }
     });
 }
 
-fn hide(app: &AppHandle, label: &'static str) {
-    on_main(app, "hide", move |handle| {
-        if let Err(err) = panel::hide(handle, label) {
-            tracing::error!(error = %err, label, "failed to hide a panel");
+/// The one way the island changes shape. Stores the intent, tells the webview
+/// to redraw, and switches mouse handling to match. A view that has not moved
+/// does nothing at all.
+pub fn set_view(app: &AppHandle, view: IslandView) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    if !state.set_view(view.clone()) {
+        return;
+    }
+
+    if let Err(err) = app.emit_to(panel::ISLAND, events::VIEW, &view) {
+        tracing::warn!(error = %err, "failed to emit view");
+    }
+
+    let takes_clicks = view.takes_clicks();
+    on_main(app, "cursor", move |handle| {
+        if let Err(err) = panel::set_takes_clicks(handle, takes_clicks) {
+            tracing::error!(error = %err, "failed to switch cursor events");
         }
     });
 }
 
-/// Emits the request, waits for the webview, then shows the panel. The wait is
-/// a courtesy, not a gate: if it lapses the panel is shown anyway, because a
-/// late frame is better than a hook that never gets an answer.
+/// Emits the request and waits for the webview.
+///
+/// The island has no prompt UI until S3, so the request is announced and the
+/// pending hook is left to its timeout. Growing an empty black shape for ten
+/// minutes would be worse than showing nothing.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
-    let gate = app.state::<Arc<AppState>>().ready_gate(panel::PROMPT);
+    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
 
-    if let Err(err) = app.emit_to(panel::PROMPT, events::PROMPT_OPEN, request) {
+    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_OPEN, request) {
         tracing::warn!(error = %err, "failed to emit prompt-open");
     }
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
-    show(app, panel::PROMPT);
 }
 
-/// Hides the panel and tells the webview which outcome settled it.
+/// Tells the webview which outcome settled the request.
 pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
-    hide(app, panel::PROMPT);
-
     let payload = serde_json::json!({ "prompt_id": prompt_id, "outcome": outcome });
-    if let Err(err) = app.emit_to(panel::PROMPT, events::PROMPT_CLOSE, payload) {
+    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_CLOSE, payload) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
 }
 
-/// Shows the island for the toast lifetime, then hides it again. The island is
-/// output only, so nothing here waits on the user.
+/// A toast is the `Pill` view for as long as it lives. Nothing here waits on
+/// the user, so the island collapses itself when the time is up.
 pub fn toast(app: &AppHandle, request: ToastRequest) {
     let ttl = Duration::from_millis(u64::from(request.ttl_ms));
 
@@ -76,20 +94,17 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
         tracing::warn!(error = %err, "failed to emit toast");
         return;
     }
-    show(app, panel::ISLAND);
+    set_view(app, IslandView::Pill);
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(ttl).await;
-        hide(&handle, panel::ISLAND);
-    });
-}
 
-/// The HUD is hidden entirely when there is nothing to show. tech.md S5.
-pub fn sync_hud(app: &AppHandle, task_count: usize) {
-    if task_count == 0 {
-        hide(app, panel::HUD);
-    } else {
-        show(app, panel::HUD);
-    }
+        // Something more important may have opened in the meantime. Collapsing
+        // then would throw away a session the user is reading.
+        let state = handle.state::<Arc<AppState>>().inner().clone();
+        if state.view() == IslandView::Pill {
+            set_view(&handle, IslandView::Collapsed);
+        }
+    });
 }
