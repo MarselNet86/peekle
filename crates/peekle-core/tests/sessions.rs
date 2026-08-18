@@ -288,3 +288,57 @@ fn an_event_this_build_does_not_know_is_dropped_whole() {
     let partial = serde_json::json!({"hook_event_name": "PreToolUse", "session_id": "s"});
     assert!(FeedEvent::from_payload(&partial).is_none());
 }
+
+#[test]
+fn a_status_change_moves_the_session_to_the_front() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    for i in 0..3 {
+        registry.apply(
+            FeedEvent::UserTurn {
+                session: SessionRef {
+                    session_id: format!("s{i}"),
+                    cwd: "/tmp/peekle".into(),
+                    project: "peekle".into(),
+                },
+                text: format!("turn {i}"),
+            },
+            i as i64,
+        );
+    }
+    assert_eq!(registry.cards()[0].session.session_id, "s2");
+
+    assert!(registry.set_status("s0", SessionStatus::WaitingOnUser, 10));
+    assert_eq!(registry.cards()[0].session.session_id, "s0");
+    assert_eq!(registry.cards()[0].status, SessionStatus::WaitingOnUser);
+}
+
+#[test]
+fn a_status_change_on_an_unknown_session_is_reported_not_guessed() {
+    use peekle_core::types::SessionStatus;
+
+    let mut registry = SessionRegistry::new();
+    assert!(!registry.set_status("nobody", SessionStatus::WaitingOnUser, 1));
+    assert!(registry.cards().is_empty());
+}
+
+/// A Stop can be the first event Peekle ever sees for a session, and the
+/// prompt still has to have a card to draw into.
+#[test]
+fn a_session_can_be_opened_by_a_stop_alone() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    registry.ensure(
+        SessionRef {
+            session_id: "s".into(),
+            cwd: "/tmp/peekle".into(),
+            project: "peekle".into(),
+        },
+        1,
+    );
+    assert!(registry.set_status("s", SessionStatus::WaitingOnUser, 2));
+    assert_eq!(registry.cards().len(), 1);
+    assert!(registry.cards()[0].title.is_empty());
+}

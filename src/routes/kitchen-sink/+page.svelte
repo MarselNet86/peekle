@@ -3,6 +3,7 @@
   import LabelPill from '$lib/ui/LabelPill.svelte';
   import MessageBlock from '$lib/ui/MessageBlock.svelte';
   import OptionList from '$lib/ui/OptionList.svelte';
+  import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
@@ -170,6 +171,15 @@
   </section>
 
   <section>
+    <h2>Button</h2>
+    <div class="frame choices">
+      <Button label="Continue" variant="primary" />
+      <Button label="Finish" />
+      <Button label="Finish" disabled />
+    </div>
+  </section>
+
+  <section>
     <h2>ScrollHint</h2>
     <div class="frame"><ScrollHint visible /></div>
     <div class="frame"><ScrollHint visible={false} /></div>
@@ -239,6 +249,11 @@
   }
 
   .views {
+    display: flex;
+    gap: 6px;
+  }
+
+  .choices {
     display: flex;
     gap: 6px;
   }

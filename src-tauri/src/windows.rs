@@ -55,18 +55,35 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
     }
 
     let takes_clicks = view.takes_clicks();
-    on_main(app, "cursor", move |handle| {
+    let opening = !matches!(view, IslandView::Collapsed);
+
+    on_main(app, "view", move |handle| {
         if let Err(err) = panel::set_takes_clicks(handle, takes_clicks) {
             tracing::error!(error = %err, "failed to switch cursor events");
+        }
+
+        // Re-order on every open. Section 8 forbids hiding the panel between
+        // events, not re-asserting its order: the window server decides space
+        // membership when a window is ordered front, so a panel ordered once at
+        // startup never follows the user onto a full screen space.
+        if opening {
+            if let Err(err) = panel::show(handle, panel::ISLAND) {
+                tracing::error!(error = %err, "failed to raise the island");
+            }
         }
     });
 }
 
-/// Emits the request and waits for the webview.
+/// How long the shape holds after an answer before collapsing. tech.md S3.
+const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
+
+/// Announces the request, waits for the webview, then opens the island on the
+/// session the prompt belongs to.
 ///
-/// The island has no prompt UI until S3, so the request is announced and the
-/// pending hook is left to its timeout. Growing an empty black shape for ten
-/// minutes would be worse than showing nothing.
+/// The island opens passively: the panel takes the mouse but never the
+/// keyboard, so a turn that ends while the user is watching something does not
+/// pull the keys out from under them. Focus moves only when they click the
+/// field. tech.md 6.7 and 15.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
 
@@ -75,14 +92,28 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     }
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
+    set_view(app, IslandView::Session(request.session.session_id.clone()));
 }
 
-/// Tells the webview which outcome settled the request.
+/// Tells the webview which outcome settled the request and collapses the
+/// island behind it.
 pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
     let payload = serde_json::json!({ "prompt_id": prompt_id, "outcome": outcome });
     if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_CLOSE, payload) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
+
+    // Long enough to read as an answer landing, short enough not to be a wait.
+    // Skipped when another prompt is already queued behind this one: collapsing
+    // and reopening in the same breath reads as a glitch.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(COLLAPSE_AFTER).await;
+        let state = handle.state::<Arc<AppState>>().inner().clone();
+        if state.active_prompt().is_none() {
+            set_view(&handle, IslandView::Collapsed);
+        }
+    });
 }
 
 /// A toast is the `Pill` view for as long as it lives. Nothing here waits on

@@ -59,6 +59,8 @@ test.describe('overlay routes', () => {
       'UsageBar',
       'TaskRow and LabelPill',
       'FeedRow',
+      'Button',
+      'FeedRow',
       'ScrollHint',
       'Toast',
       'Kbd',

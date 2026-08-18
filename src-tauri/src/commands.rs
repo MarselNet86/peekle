@@ -36,7 +36,22 @@ fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: Prom
         // Already settled by a timeout, a bypass or an earlier answer.
         return;
     }
-    windows::close_prompt(app, prompt_id, &outcome);
+
+    // The session is no longer waiting on anybody. Whether the agent picks the
+    // work back up is its business, so the status says idle rather than
+    // working. tech.md 6.3.
+    if let Some(request) = state.active_prompt() {
+        if request.id == prompt_id {
+            let cards = state.set_session_status(
+                &request.session,
+                peekle_core::types::SessionStatus::Idle,
+                now_ms(),
+            );
+            if let Err(err) = app.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit sessions");
+            }
+        }
+    }
 
     if let Some(next) = state.release_prompt(prompt_id) {
         let handle = app.clone();
@@ -44,6 +59,17 @@ fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: Prom
             windows::open_prompt(&handle, &next).await;
         });
     }
+
+    // After release_prompt, so the collapse can tell whether anything queued
+    // behind this one.
+    windows::close_prompt(app, prompt_id, &outcome);
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
 }
 
 /// Bypass. Off resolves everything pending so no agent is left waiting.

@@ -224,6 +224,29 @@ impl SessionRegistry {
         }
     }
 
+    /// Moves a session to a status. Returns false when the session is unknown,
+    /// which happens when Peekle started mid session.
+    pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.status = status;
+        card.updated_at = at;
+        self.touch(session_id);
+        true
+    }
+
+    /// Opens a card for a session Peekle has not seen a feed event from yet.
+    /// A Stop can be the first thing that arrives if the overlay started mid
+    /// turn, and a prompt with no card behind it has nothing to draw.
+    pub fn ensure(&mut self, session: SessionRef, at: i64) {
+        self.card_mut(session, at);
+    }
+
     /// The turn is over, so nothing can still be in flight. Whatever is still
     /// `Running` never reported success, and `PostToolUse` does not fire for a
     /// failed call. tech.md 6.1 and 6.3.

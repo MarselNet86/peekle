@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, LogicalPosition, Manager, WebviewWindow};
 use tauri_nspanel::{
-    tauri_panel, CollectionBehavior, ManagerExt, PanelLevel, StyleMask, WebviewWindowExt,
+    tauri_panel, CollectionBehavior, ManagerExt, Panel, PanelLevel, StyleMask, WebviewWindowExt,
 };
 
 pub const ISLAND: &str = "island";
@@ -41,32 +41,70 @@ pub fn convert_all(app: &AppHandle) -> Result<(), PanelError> {
     let window = window(app, ISLAND)?;
     let panel = window.to_panel::<IslandPanel>()?;
 
-    // Join every space, survive over full screen video, and never hide when the
-    // app deactivates. For an overlay that never activates, the app is
-    // deactivated permanently, so the AppKit default of hiding on deactivate
-    // would hide the panel forever.
-    panel.set_collection_behavior(
-        CollectionBehavior::new()
-            .can_join_all_spaces()
-            .full_screen_auxiliary()
-            .value(),
-    );
-    panel.set_hides_on_deactivate(false);
-    panel.set_released_when_closed(false);
-    panel.set_has_shadow(false);
-    panel.set_opaque(false);
+    // Style mask first. Changing it rebuilds the window frame view, and on that
+    // path AppKit drops the collection behavior, so anything set before it is
+    // silently lost and the panel never reaches a full screen space.
     panel.set_style_mask(
         StyleMask::empty()
             .nonactivating_panel()
             .borderless()
             .value(),
     );
-    panel.set_level(PanelLevel::ScreenSaver.value());
+    panel.set_hides_on_deactivate(false);
+    panel.set_released_when_closed(false);
+    panel.set_has_shadow(false);
+    panel.set_opaque(false);
     panel.set_becomes_key_only_if_needed(true);
+    apply_space_behavior(panel.as_ref());
 
     // Nothing is expanded yet, so clicks pass through to whatever is below.
     window.set_ignore_cursor_events(true)?;
     Ok(())
+}
+
+/// Join every space and survive over full screen video, above everything else.
+///
+/// Re-asserted on every show rather than set once: this is the one promise the
+/// product cannot degrade on, and AppKit resets collection behavior on frame
+/// view changes. Cheap to repeat, expensive to get silently wrong. tech.md 6.7.
+fn apply_space_behavior(panel: &dyn Panel) {
+    panel.set_collection_behavior(
+        CollectionBehavior::new()
+            .can_join_all_spaces()
+            .full_screen_auxiliary()
+            // Stationary keeps the panel out of the Spaces animation, and
+            // ignores_cycle keeps it out of window cycling. Neither is enough
+            // on its own to reach another application's full screen space:
+            // see R-11.
+            .stationary()
+            .ignores_cycle()
+            .value(),
+    );
+    panel.set_level(PanelLevel::ScreenSaver.value());
+}
+
+/// Reads the behavior back off the live NSWindow. Setting it is not proof it
+/// stuck: AppKit drops it on some frame view changes, and the only symptom is
+/// an overlay that quietly never reaches a full screen space.
+fn trace_space_behavior(window: &WebviewWindow) {
+    use objc2_app_kit::NSWindow;
+    use tauri_nspanel::objc2::msg_send;
+
+    let Ok(handle) = window.ns_window() else {
+        return;
+    };
+    let ns: &NSWindow = unsafe { &*(handle as *const NSWindow) };
+    let behavior: usize = unsafe { msg_send![ns, collectionBehavior] };
+    let level: isize = unsafe { msg_send![ns, level] };
+
+    // 1 is canJoinAllSpaces, 256 is fullScreenAuxiliary. tech.md 6.7.
+    tracing::debug!(
+        behavior,
+        level,
+        joins_all_spaces = behavior & 1 != 0,
+        full_screen_auxiliary = behavior & 256 != 0,
+        "island space behavior"
+    );
 }
 
 /// The notch on the main display, or None when there is none.
@@ -115,7 +153,9 @@ pub fn show(app: &AppHandle, label: &str) -> Result<(), PanelError> {
         .get_webview_panel(label)
         .map_err(|_| PanelError::MissingPanel(label.to_string()))?;
 
+    apply_space_behavior(panel.as_ref());
     panel.order_front_regardless();
+    trace_space_behavior(&window(app, label)?);
     tracing::debug!(label, visible = panel.is_visible(), "panel shown");
     Ok(())
 }
