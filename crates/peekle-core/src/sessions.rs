@@ -21,6 +21,8 @@ pub const ENTRY_CAP: usize = 200;
 const TITLE_LIMIT: usize = 80;
 /// Tool input preview, same budget as `PromptRequest::detail`. tech.md 6.3.
 const PREVIEW_LIMIT: usize = 400;
+/// Same budget the Stop mapping already applies to last_assistant_message.
+const ASSISTANT_LIMIT: usize = 2000;
 
 /// Keys worth showing before falling back to the whole input. A tool call reads
 /// as its subject, not as its JSON, and every one of these carries the subject.
@@ -222,6 +224,29 @@ impl SessionRegistry {
                 self.set_state(&card_id, &entry_id, EntryState::Ok, at);
             }
         }
+    }
+
+    /// What the agent said last, as a feed entry. Taken from the Stop payload
+    /// and never from the transcript file: that file is written asynchronously
+    /// and lags the live turn. tech.md section 8 and S6.
+    pub fn assistant_turn(&mut self, session: SessionRef, text: &str, at: i64) {
+        let trimmed = truncate(text, ASSISTANT_LIMIT);
+        if trimmed.is_empty() {
+            return;
+        }
+
+        let card = self.card_mut(session, at);
+        // A Stop can repeat while the user reads it, and the same closing line
+        // twice in the feed reads as the agent saying it twice.
+        if card
+            .entries
+            .last()
+            .is_some_and(|last| last.kind == EntryKind::Assistant && last.text == trimmed)
+        {
+            return;
+        }
+        let entry = now_entry(EntryKind::Assistant, trimmed, None, EntryState::Ok, at);
+        push_entry(card, entry);
     }
 
     /// Moves a session to a status. Returns false when the session is unknown,

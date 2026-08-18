@@ -60,10 +60,15 @@ impl HookSink for AppSink {
         if request.kind == PromptKind::Stop {
             let at = now_ms();
             self.state.end_turn(&request.session.session_id, at);
-            let cards =
-                self.state
-                    .set_session_status(&request.session, SessionStatus::WaitingOnUser, at);
-            self.emit_sessions(cards);
+            self.state
+                .set_session_status(&request.session, SessionStatus::WaitingOnUser, at);
+
+            // What the agent said last belongs in the feed, not only in the
+            // prompt: the user scrolls back to it. tech.md S6.
+            if let Some(text) = request.last_message.as_deref() {
+                self.state.assistant_turn(&request.session, text, at);
+            }
+            self.emit_sessions(self.state.sessions());
         }
 
         if self.state.claim_prompt(request.clone()) {

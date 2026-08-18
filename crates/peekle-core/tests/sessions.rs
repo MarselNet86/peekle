@@ -424,3 +424,74 @@ fn a_session_can_end_without_ever_having_started() {
     assert!(registry.set_status("a", SessionStatus::Ended, 2));
     assert_eq!(registry.cards()[0].status, SessionStatus::Ended);
 }
+
+/// S6. The closing message lands in the feed, and a Stop that repeats while the
+/// user is reading does not say it twice.
+#[test]
+fn the_closing_message_lands_once_however_often_stop_repeats() {
+    use peekle_core::types::{EntryKind, SessionRef};
+
+    let mut registry = SessionRegistry::new();
+    let session = SessionRef {
+        session_id: "a".into(),
+        cwd: "/work/peekle".into(),
+        project: "peekle".into(),
+    };
+
+    registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 1);
+    registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 2);
+
+    let said: Vec<_> = registry.cards()[0]
+        .entries
+        .iter()
+        .filter(|e| e.kind == EntryKind::Assistant)
+        .collect();
+    assert_eq!(said.len(), 1);
+    assert_eq!(said[0].text, "Tests pass. Want a PR?");
+
+    // A different message is a different thing to say.
+    registry.assistant_turn(session, "Opened the PR.", 3);
+    assert_eq!(
+        registry.cards()[0]
+            .entries
+            .iter()
+            .filter(|e| e.kind == EntryKind::Assistant)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn an_empty_closing_message_is_not_an_entry() {
+    use peekle_core::types::SessionRef;
+
+    let mut registry = SessionRegistry::new();
+    registry.assistant_turn(
+        SessionRef {
+            session_id: "a".into(),
+            cwd: "/work/peekle".into(),
+            project: "peekle".into(),
+        },
+        "   \n  ",
+        1,
+    );
+    assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
+}
+
+#[test]
+fn a_very_long_closing_message_is_cut_on_a_character_boundary() {
+    use peekle_core::types::SessionRef;
+
+    let mut registry = SessionRegistry::new();
+    let long = "мысль ".repeat(900);
+    registry.assistant_turn(
+        SessionRef {
+            session_id: "a".into(),
+            cwd: "/work/peekle".into(),
+            project: "peekle".into(),
+        },
+        &long,
+        1,
+    );
+    assert_eq!(registry.cards()[0].entries[0].text.chars().count(), 2000);
+}
