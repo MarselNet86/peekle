@@ -3,6 +3,7 @@
   import LabelPill from '$lib/ui/LabelPill.svelte';
   import MessageBlock from '$lib/ui/MessageBlock.svelte';
   import OptionList from '$lib/ui/OptionList.svelte';
+  import FeedRow from '$lib/ui/FeedRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -12,6 +13,7 @@
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { TaskItem } from '$lib/types/generated/TaskItem';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
+  import type { FeedEntry } from '$lib/types/generated/FeedEntry';
   import type { IslandView } from '$lib/types/generated/IslandView';
   import type { TaskStatus } from '$lib/types/generated/TaskStatus';
 
@@ -49,6 +51,36 @@
     ['Session', { Session: '01J0' }],
   ];
   const NOTCH = { width: 200, height: 32 };
+
+  // Every EntryState, including the one only the Stop sweep can produce.
+  const entries: FeedEntry[] = [
+    { id: 'e0', kind: 'User', text: 'ship the feed slice', tool: null, state: 'Ok', at: 0 },
+    {
+      id: 'e1',
+      kind: 'Tool',
+      text: 'cargo test --workspace',
+      tool: 'Bash',
+      state: 'Running',
+      at: 1,
+    },
+    {
+      id: 'e2',
+      kind: 'Tool',
+      text: 'crates/peekle-core/src/sessions.rs',
+      tool: 'Read',
+      state: 'Ok',
+      at: 2,
+    },
+    { id: 'e3', kind: 'Tool', text: 'exit 42', tool: 'Bash', state: 'Failed', at: 3 },
+    {
+      id: 'e4',
+      kind: 'Assistant',
+      text: 'The sweep closes the row at the turn boundary.',
+      tool: null,
+      state: 'Ok',
+      at: 4,
+    },
+  ];
 
   let view = $state<IslandView>('Pill');
   let text = $state('');
@@ -124,6 +156,15 @@
     <div class="frame">
       {#each labels as label (label)}
         <LabelPill {label} />
+      {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>FeedRow</h2>
+    <div class="frame">
+      {#each entries as entry (entry.id)}
+        <FeedRow {entry} />
       {/each}
     </div>
   </section>

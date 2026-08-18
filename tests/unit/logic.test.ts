@@ -89,6 +89,8 @@ describe('feed window', () => {
 
         expect(view.visible.length).toBeLessThanOrEqual(MAX_VISIBLE_ROWS);
         expect(view.visible.length).toBe(Math.min(count, MAX_VISIBLE_ROWS));
+        // The tail, so the newest row is always on screen.
+        if (count > 0) expect(view.visible[view.visible.length - 1]).toEqual(tasks[count - 1]);
         expect(view.showScrollHint).toBe(count > MAX_VISIBLE_ROWS);
         expect(view.showList).toBe(count > 0);
       }),

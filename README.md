@@ -125,8 +125,13 @@ than no test at all.
 
 ```sh
 ./scripts/capture-hooks.sh 180
+./scripts/capture-hooks.sh --restore   # after a hard kill
 ```
 
 The script backs up `~/.claude/settings.json`, installs capture handlers, and
 restores the file on exit including on Ctrl-C. Drive a Claude Code session in
 another terminal while it runs.
+
+The trap cannot cover SIGKILL, and settings left pointing at a dead capture
+server is a bad way to find that out, so the backup path is written to a marker
+file that `--restore` reads.
