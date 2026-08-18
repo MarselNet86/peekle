@@ -41,15 +41,17 @@ pub fn convert_all(app: &AppHandle) -> Result<(), PanelError> {
     let window = window(app, ISLAND)?;
     let panel = window.to_panel::<IslandPanel>()?;
 
-    // Style mask first. Changing it rebuilds the window frame view, and on that
-    // path AppKit drops the collection behavior, so anything set before it is
-    // silently lost and the panel never reaches a full screen space.
-    panel.set_style_mask(
-        StyleMask::empty()
-            .nonactivating_panel()
-            .borderless()
-            .value(),
-    );
+    // No `.borderless()` here, and that is the whole of R-11. The builder in
+    // tauri-nspanel assigns rather than ors:
+    //
+    //     pub fn borderless(mut self) -> Self { self.0 = Borderless; self }
+    //
+    // Borderless is zero, so chaining it wiped the NonactivatingPanel bit set
+    // the line before and left the mask at 0. macOS will not place a window
+    // without that bit on another application's full screen space, which is
+    // the one promise this product is built on. Borderless adds nothing anyway:
+    // it is the absence of the other bits.
+    panel.set_style_mask(StyleMask::empty().nonactivating_panel().value());
     panel.set_hides_on_deactivate(false);
     panel.set_released_when_closed(false);
     panel.set_has_shadow(false);
