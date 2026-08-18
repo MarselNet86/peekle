@@ -10,7 +10,7 @@ use peekle_core::config::Config;
 use peekle_core::types::{
     IslandView, PeekleState, PromptRequest, SessionCard, TaskItem, UsageSnapshot, UsageUnavailable,
 };
-use peekle_core::PendingRegistry;
+use peekle_core::{FeedEvent, PendingRegistry, SessionRegistry};
 use peekle_usage::{fake::unknown, UsageProvider};
 use tokio::sync::Notify;
 
@@ -30,7 +30,7 @@ pub struct AppState {
     /// Blocking requests that arrived while a prompt was already open. Not part
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
-    sessions: Mutex<Vec<SessionCard>>,
+    sessions: Mutex<SessionRegistry>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -49,7 +49,7 @@ impl AppState {
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
-            sessions: Mutex::new(Vec::new()),
+            sessions: Mutex::new(SessionRegistry::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(UsageUnavailable::Disabled)),
             ready: Mutex::new(HashMap::new()),
@@ -81,7 +81,22 @@ impl AppState {
     }
 
     pub fn sessions(&self) -> Vec<SessionCard> {
-        self.lock(&self.sessions).clone()
+        self.lock(&self.sessions).cards().to_vec()
+    }
+
+    /// Records one feed event and hands back the cards to broadcast.
+    pub fn apply_feed(&self, event: FeedEvent, at: i64) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.apply(event, at);
+        registry.cards().to_vec()
+    }
+
+    /// The turn ended, so every row still `Running` never reported success.
+    /// tech.md 6.3.
+    pub fn end_turn(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.end_turn(session_id, at);
+        registry.cards().to_vec()
     }
 
     pub fn hotkey_ok(&self) -> bool {

@@ -6,10 +6,10 @@
 pub const MANAGED_HOOK_EVENTS: &[&str] = &[
     "Stop",
     "PermissionRequest",
-    "Notification",
+    "UserPromptSubmit",
+    "PreToolUse",
     "PostToolUse",
-    "TaskCreated",
-    "TaskCompleted",
+    "Notification",
     "SessionStart",
     "SessionEnd",
 ];
@@ -21,6 +21,14 @@ pub const HOOK_PATH_PREFIX: &str = "/v1/h/";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The feed needs all three or the row never closes. tech.md 6.1 and 6.3.
+    #[test]
+    fn the_feed_events_are_all_managed() {
+        for event in ["UserPromptSubmit", "PreToolUse", "PostToolUse"] {
+            assert!(MANAGED_HOOK_EVENTS.contains(&event), "{event} is unmanaged");
+        }
+    }
 
     #[test]
     fn managed_events_are_unique() {
