@@ -133,6 +133,10 @@ impl AppState {
         self.hotkey_ok.load(Ordering::Relaxed)
     }
 
+    pub fn set_hotkey_ok(&self, value: bool) {
+        self.hotkey_ok.store(value, Ordering::Relaxed);
+    }
+
     pub fn prompt_timeout(&self) -> Duration {
         Duration::from_secs(self.lock_config().behavior.prompt_timeout_secs as u64)
     }

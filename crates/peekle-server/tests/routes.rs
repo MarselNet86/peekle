@@ -216,6 +216,34 @@ async fn permission_allow_carries_the_documented_envelope() {
     );
 }
 
+/// S8. Off short circuits the blocking endpoints while the feed and the
+/// session registry keep collecting, so switching mid run changes what the
+/// agent is told on the very next hook without a restart. tech.md 6.9 and 8.
+#[tokio::test]
+async fn a_disabled_peekle_keeps_collecting_while_it_stops_deciding() {
+    let sink = TestSink::disabled();
+    let handle = Arc::clone(&sink);
+
+    for path in ["notification", "feed", "session"] {
+        let uri = format!("/v1/h/{TOKEN}/{path}");
+        let (status, body) = post(
+            app(Arc::clone(&sink) as Arc<dyn HookSink>),
+            &uri,
+            r#"{"hook_event_name":"PreToolUse","session_id":"s"}"#,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(body, json!({}), "{path}");
+    }
+
+    assert_eq!(
+        handle.feeds.lock().unwrap().len(),
+        3,
+        "bypass stops decisions, not collection"
+    );
+    assert!(handle.seen.lock().unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn a_disabled_peekle_answers_empty_without_opening_a_prompt() {
     let sink = TestSink::disabled();

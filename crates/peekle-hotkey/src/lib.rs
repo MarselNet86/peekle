@@ -162,6 +162,29 @@ impl HotkeyRegistrar for FakeHotkeyRegistrar {
 mod tests {
     use super::*;
 
+    /// S8 error path. A taken combination is reported, not swallowed and not
+    /// fatal: everything else in the product keeps working. tech.md 6.9, R-1.
+    #[test]
+    fn a_taken_combination_is_reported_and_registers_nothing() {
+        let registrar = FakeHotkeyRegistrar::taken();
+        let combination = Combination::parse("Alt+Shift+KeyQ").expect("parses");
+
+        assert_eq!(registrar.register(&combination), Err(HotkeyError::Taken));
+        assert!(registrar.registered().is_empty());
+    }
+
+    #[test]
+    fn a_free_combination_registers_once() {
+        let registrar = FakeHotkeyRegistrar::new();
+        let combination = Combination::parse("Alt+Shift+KeyQ").expect("parses");
+
+        assert_eq!(registrar.register(&combination), Ok(()));
+        assert_eq!(registrar.registered(), vec![combination]);
+
+        registrar.unregister_all();
+        assert!(registrar.registered().is_empty());
+    }
+
     #[test]
     fn parses_the_default_combination() {
         let parsed = Combination::parse("Alt+Shift+KeyQ").unwrap();

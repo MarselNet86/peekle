@@ -15,17 +15,18 @@ this file only explains how to run what exists today.
 
 ## Status
 
-The stage 1 framework is in. Feature slices are in progress.
+Stage 1 is in and most of stage 2 with it.
 
-| Surface                | State                                                    |
-| ---------------------- | -------------------------------------------------------- |
-| Island toast           | Working end to end, hook to pixel                        |
-| Island shape           | S1                                                       |
-| Feed, Stop, permission | Not started, S2 to S4. A blocking hook waits out its     |
-|                        | timeout until then, so do not point a live session at it |
-| Hook server            | All endpoints of tech.md 6.2 answer                      |
-| Usage bars             | Fake provider only, the account provider lands with S7   |
-| Hotkey, CLI, packaging | Not started, S8 to S10                                   |
+| Surface              | State                                                          |
+| -------------------- | -------------------------------------------------------------- |
+| Island               | Working, and it reaches another app's full screen space        |
+| Feed and sessions    | Working, fed by the hooks                                      |
+| Stop and permission  | Working, answers reach the agent without touching the terminal |
+| Hook server          | Every endpoint of tech.md 6.2 answers                          |
+| Hotkey               | Working, ⌥⇧Q toggles the bypass                                |
+| CLI                  | init, uninstall, doctor, status. `off` is not built            |
+| Usage bars           | Fake provider only, the account provider is S7                 |
+| Packaging, first run | Not started, S10 and S11                                       |
 
 ## Requirements
 
@@ -88,6 +89,26 @@ HTTP response body  ->  the turn continues
 If Peekle is not running the connection fails, Claude Code treats that as a
 non-blocking error and works normally. The degradation is free: an agent never
 hangs on a dead overlay.
+
+## Install it into Claude Code
+
+```sh
+cargo build -p peekle-cli --bin peekle
+./target/debug/peekle init
+```
+
+`init` merges its handlers into `~/.claude/settings.json`, never removes anyone
+else's, takes a timestamped backup first, and changes nothing on a second run.
+`uninstall` takes back only its own entries.
+
+```sh
+./target/debug/peekle doctor    # what is wrong and what to do about it
+./target/debug/peekle status    # the same as JSON
+```
+
+`peekle off` is not built. Toggling from a shell means writing the config and
+having the running app notice, and the config watcher that tech.md 6.8 promises
+has not been built by any slice yet. Until then the toggle is the hotkey.
 
 ## Config
 
