@@ -123,8 +123,17 @@ fn the_stop_sweep_fails_only_what_never_finished() {
         registry.apply(event, 2);
     }
 
-    let session_id = registry.cards()[0].session.session_id.clone();
-    registry.end_turn(&session_id, 3);
+    // The capture spans several sessions, so every one of them has to end its
+    // turn. Sweeping only the first would leave the rest Running and say
+    // nothing about the rule.
+    let sessions: Vec<String> = registry
+        .cards()
+        .iter()
+        .map(|card| card.session.session_id.clone())
+        .collect();
+    for session_id in &sessions {
+        registry.end_turn(session_id, 3);
+    }
 
     let entries: Vec<_> = registry
         .cards()
