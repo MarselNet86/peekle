@@ -149,6 +149,41 @@ mod tests {
         assert_eq!(second.await.unwrap(), PromptOutcome::Bypassed);
     }
 
+    /// The S3 error path. A hook that already timed out is gone from the
+    /// registry, so the answer the user was still typing lands on nothing and
+    /// must not resurrect it or panic. tech.md 6.5 and section 10.
+    #[tokio::test]
+    async fn answering_after_a_timeout_is_a_no_op() {
+        let registry = PendingRegistry::new();
+        let receiver = registry.register("p");
+
+        // The router drops the receiver when its timeout elapses.
+        drop(receiver);
+        assert!(registry.resolve("p", PromptOutcome::TimedOut));
+        assert!(!registry.is_pending("p"));
+
+        // The user hits Enter a moment later.
+        assert!(!registry.resolve("p", answer("p")));
+        assert!(registry.is_empty());
+    }
+
+    /// Escape after a bypass is the same shape: two independent paths racing
+    /// for one request, and exactly one of them may win.
+    #[tokio::test]
+    async fn a_bypass_and_a_dismiss_cannot_both_settle_one_request() {
+        let registry = PendingRegistry::new();
+        let mut receiver = registry.register("p");
+
+        assert_eq!(registry.resolve_all(PromptOutcome::Bypassed), 1);
+        assert!(!registry.resolve("p", PromptOutcome::Dismissed));
+
+        assert_eq!(
+            receiver.try_recv(),
+            Ok(PromptOutcome::Bypassed),
+            "the first path to settle is the one the agent hears"
+        );
+    }
+
     #[tokio::test]
     async fn resolve_all_settles_every_waiter() {
         let registry = PendingRegistry::new();
