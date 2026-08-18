@@ -13,7 +13,11 @@ import type { PromptRequest } from '$lib/types/generated/PromptRequest';
 import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 
 export function createIsland(search = '') {
-  const notch: Notch = readNotch(search);
+  // The query string carries the first frame. After that the notch arrives as
+  // an event, because the island can open on a different display than it did
+  // last time and reloading the route would throw away the feed and the reply
+  // being typed. tech.md 6.7.
+  let notch = $state<Notch>(readNotch(search));
 
   let view = $state<IslandView>('Collapsed');
   let toast = $state<ToastRequest | null>(null);
@@ -59,10 +63,14 @@ export function createIsland(search = '') {
   }
 
   async function start(): Promise<() => void> {
-    const [offToast, offView, offOpen, offClose] = await Promise.all([
+    const [offToast, offView, offNotch, offOpen, offClose] = await Promise.all([
       events.onToast(show),
       events.onView((next) => {
         view = next;
+      }),
+      events.onNotch((next) => {
+        // A display with no notch reports zero, which is the floating pill.
+        notch = { width: next.width > 0 ? next.width : notch.width, height: next.height };
       }),
       events.onPromptOpen((request) => {
         prompt = request;
@@ -85,13 +93,16 @@ export function createIsland(search = '') {
       clearTimeout(timer);
       offToast();
       offView();
+      offNotch();
       offOpen();
       offClose();
     };
   }
 
   return {
-    notch,
+    get notch() {
+      return notch;
+    },
     get view() {
       return view;
     },

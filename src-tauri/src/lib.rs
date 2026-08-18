@@ -55,9 +55,10 @@ pub fn run() {
 
             // A borderless webview gets no safe area of its own, so Rust hands
             // the measured notch over to the route. tech.md 6.7.
-            if let (Some(window), Some((height, width))) =
-                (app.get_webview_window(panel::ISLAND), panel::notch())
-            {
+            if let (Some(window), Some((height, width))) = (
+                app.get_webview_window(panel::ISLAND),
+                panel::active_notch(app.handle()),
+            ) {
                 let url = format!("/island/?notch={height}&notch_width={width}");
                 if let Err(err) = window.eval(format!(
                     "if (location.search.indexOf('notch=') === -1) location.replace('{url}')"

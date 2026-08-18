@@ -9,3 +9,4 @@ pub const USAGE: &str = "peekle://usage";
 pub const ENABLED: &str = "peekle://enabled";
 pub const TOAST: &str = "peekle://toast";
 pub const VIEW: &str = "peekle://view";
+pub const NOTCH: &str = "peekle://notch";

@@ -107,17 +107,28 @@ fn trace_space_behavior(window: &WebviewWindow) {
     );
 }
 
-/// The notch on the main display, or None when there is none.
+/// The notch of the display with the given logical size, or None when that
+/// display has none.
 ///
 /// Measured rather than guessed: the value differs per model, and a hardcoded
 /// one puts the island either inside the bezel or floating below it. The
 /// height is the top safe area inset; the width is what the menu bar cannot
 /// use, which is the screen minus both auxiliary areas. tech.md 6.7.
-pub fn notch() -> Option<Notch> {
+///
+/// Screens are matched by size rather than by origin: AppKit counts y upwards
+/// from the primary display and Tauri counts it downwards, and a mismatch there
+/// would silently pick the wrong screen. A wrong match here costs a floating
+/// pill instead of one hugging the bezel, never a misplaced window.
+pub fn notch_for(size: (f64, f64)) -> Option<Notch> {
     use objc2_app_kit::NSScreen;
 
     let mtm = objc2_foundation::MainThreadMarker::new()?;
-    let screen = NSScreen::mainScreen(mtm)?;
+    let screens = NSScreen::screens(mtm);
+
+    let screen = screens.iter().find(|screen| {
+        let frame = screen.frame().size;
+        (frame.width - size.0).abs() < 2.0 && (frame.height - size.1).abs() < 2.0
+    })?;
 
     // A display without a notch reports a zero top inset. One with a notch
     // reports its height, which is what the island has to cover.
@@ -133,6 +144,28 @@ pub fn notch() -> Option<Notch> {
     // No auxiliary areas means nothing to subtract from, and a width of the
     // whole screen would paint the entire top edge black.
     (width > 0.0 && width < screen.frame().size.width).then_some((height, width))
+}
+
+/// The notch of the display the pointer is on. tech.md 6.7.
+pub fn active_notch(app: &AppHandle) -> Option<Notch> {
+    notch_for(active_screen(app)?.1)
+}
+
+/// The display the user is on, as logical origin and size.
+///
+/// The pointer is the signal: a non-activating overlay never owns the key
+/// window, and the hand is where the eyes are. tech.md 6.7.
+fn active_screen(app: &AppHandle) -> Option<((f64, f64), (f64, f64))> {
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|point| app.monitor_from_point(point.x, point.y).ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten())?;
+
+    let scale = monitor.scale_factor();
+    let origin = monitor.position().to_logical::<f64>(scale);
+    let size = monitor.size().to_logical::<f64>(scale);
+    Some(((origin.x, origin.y), (size.width, size.height)))
 }
 
 fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, PanelError> {
@@ -172,30 +205,31 @@ pub fn set_takes_clicks(app: &AppHandle, takes_clicks: bool) -> Result<(), Panel
 fn position(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     let window = window(app, label)?;
 
-    let Some(monitor) = window.current_monitor()? else {
-        // No monitor means no screen to place against. Leave the panel where
-        // it is rather than dropping it at the origin.
+    let Some((origin, screen)) = active_screen(app) else {
+        // No screen to place against. Leave the panel where it is rather than
+        // dropping it at the origin.
         return Ok(());
     };
-    let scale = monitor.scale_factor();
-    let screen = monitor.size().to_logical::<f64>(scale);
+    let scale = window
+        .current_monitor()?
+        .map(|monitor| monitor.scale_factor())
+        .unwrap_or(1.0);
     let size = window.outer_size()?.to_logical::<f64>(scale);
 
     // Flush with the top edge so the black fill continues the notch. A display
     // without one gets its inset from the shape, not from the window.
-    let x = (screen.width - size.width) / 2.0;
-    let origin = monitor.position().to_logical::<f64>(scale);
-    window.set_position(LogicalPosition::new(origin.x + x, origin.y))?;
+    let x = (screen.0 - size.width) / 2.0;
+    window.set_position(LogicalPosition::new(origin.0 + x, origin.1))?;
 
     tracing::debug!(
         label,
         scale,
-        screen_w = screen.width,
-        screen_h = screen.height,
+        screen_w = screen.0,
+        screen_h = screen.1,
         win_w = size.width,
         win_h = size.height,
-        placed_x = origin.x + x,
-        placed_y = origin.y,
+        placed_x = origin.0 + x,
+        placed_y = origin.1,
         "panel placed"
     );
     Ok(())

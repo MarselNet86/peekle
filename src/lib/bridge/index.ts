@@ -29,6 +29,7 @@ export const EVENTS = {
   enabled: 'peekle://enabled',
   toast: 'peekle://toast',
   view: 'peekle://view',
+  notch: 'peekle://notch',
 } as const;
 
 export function hasTauri(): boolean {
@@ -71,4 +72,6 @@ export const events = {
     on<{ enabled: boolean }>(EVENTS.enabled, handler),
   onToast: (handler: (toast: ToastRequest) => void) => on<ToastRequest>(EVENTS.toast, handler),
   onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
+  onNotch: (handler: (notch: { height: number; width: number }) => void) =>
+    on<{ height: number; width: number }>(EVENTS.notch, handler),
 };

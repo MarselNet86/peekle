@@ -41,6 +41,18 @@ pub async fn open_island(app: &AppHandle) {
     });
 }
 
+/// Hands the webview the notch of the display the island is on. Cheap enough
+/// to repeat on every open, and the only alternative is reloading the route,
+/// which throws away the feed and whatever the user had typed. tech.md 6.7.
+pub fn send_notch(app: &AppHandle) {
+    let (height, width) = panel::active_notch(app).unwrap_or((0.0, 0.0));
+    let payload = serde_json::json!({ "height": height, "width": width });
+
+    if let Err(err) = app.emit_to(panel::ISLAND, events::NOTCH, payload) {
+        tracing::warn!(error = %err, "failed to emit notch");
+    }
+}
+
 /// The one way the island changes shape. Stores the intent, tells the webview
 /// to redraw, and switches mouse handling to match. A view that has not moved
 /// does nothing at all.
@@ -70,6 +82,9 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
             if let Err(err) = panel::show(handle, panel::ISLAND) {
                 tracing::error!(error = %err, "failed to raise the island");
             }
+            // The island may have just landed on a different display, and the
+            // shape has to grow out of that display's bezel. tech.md 6.7.
+            send_notch(handle);
         }
     });
 }
