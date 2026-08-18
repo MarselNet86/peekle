@@ -22,9 +22,9 @@ pub trait HookSink: Send + Sync + 'static {
     /// Held below the hook timeout so Peekle always answers first.
     fn prompt_timeout(&self) -> Duration;
 
-    /// Non-blocking feeds. These never hold up a turn, so they take the raw
+    /// Non-blocking events. These never hold up a turn, so they take the raw
     /// payload and return nothing.
-    fn on_tasks(&self, payload: &Value);
+    fn on_feed(&self, payload: &Value);
     fn on_session(&self, payload: &Value);
     fn on_notification(&self, payload: &Value);
 }

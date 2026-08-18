@@ -6,10 +6,12 @@ pub mod feed;
 pub mod hooks;
 pub mod labels;
 pub mod pending;
+pub mod sessions;
 pub mod types;
 
 pub use feed::{FixtureFeed, TaskFeed};
 pub use hooks::{HOOK_PATH_PREFIX, MANAGED_HOOK_EVENTS};
 pub use labels::classify;
 pub use pending::PendingRegistry;
+pub use sessions::{FeedEvent, SessionRegistry};
 pub use types::*;

@@ -14,6 +14,7 @@ import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
+import type { SessionCard } from '$lib/types/generated/SessionCard';
 import type { TaskItem } from '$lib/types/generated/TaskItem';
 import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
@@ -22,6 +23,7 @@ import type { PromptOutcome } from '$lib/types/generated/PromptOutcome';
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
   promptClose: 'peekle://prompt-close',
+  sessions: 'peekle://sessions',
   tasks: 'peekle://tasks',
   usage: 'peekle://usage',
   enabled: 'peekle://enabled',
@@ -61,6 +63,8 @@ export const events = {
     on<PromptRequest>(EVENTS.promptOpen, handler),
   onPromptClose: (handler: (payload: { prompt_id: string; outcome: PromptOutcome }) => void) =>
     on<{ prompt_id: string; outcome: PromptOutcome }>(EVENTS.promptClose, handler),
+  onSessions: (handler: (sessions: SessionCard[]) => void) =>
+    on<SessionCard[]>(EVENTS.sessions, handler),
   onTasks: (handler: (tasks: TaskItem[]) => void) => on<TaskItem[]>(EVENTS.tasks, handler),
   onUsage: (handler: (usage: UsageSnapshot) => void) => on<UsageSnapshot>(EVENTS.usage, handler),
   onEnabled: (handler: (payload: { enabled: boolean }) => void) =>

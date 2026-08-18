@@ -18,7 +18,7 @@ use crate::map;
 use crate::sink::HookSink;
 
 /// Reported by `/v1/health`. Tracks the core version in the tech.md header.
-pub const CORE_VERSION: &str = "v7";
+pub const CORE_VERSION: &str = "v8";
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -33,7 +33,7 @@ pub fn router(state: ServerState) -> Router {
         .route("/v1/h/{token}/stop", post(stop))
         .route("/v1/h/{token}/permission", post(permission))
         .route("/v1/h/{token}/notification", post(notification))
-        .route("/v1/h/{token}/tasks", post(tasks))
+        .route("/v1/h/{token}/feed", post(feed_route))
         .route("/v1/h/{token}/session", post(session))
         .with_state(state)
 }
@@ -142,9 +142,9 @@ async fn permission(
     .await
 }
 
-/// Non-blocking feeds. They keep collecting while Peekle is off, because the
-/// The feed and the session registry stay alive in bypass mode.
-async fn feed(
+/// Non-blocking endpoints. They keep collecting while Peekle is off: the feed
+/// and the session registry stay alive in bypass mode. tech.md section 8.
+async fn non_blocking(
     state: ServerState,
     token: String,
     body: bytes::Bytes,
@@ -167,18 +167,18 @@ async fn notification(
     Path(token): Path<String>,
     body: bytes::Bytes,
 ) -> Response {
-    feed(state, token, body, |sink, payload| {
+    non_blocking(state, token, body, |sink, payload| {
         sink.on_notification(payload)
     })
     .await
 }
 
-async fn tasks(
+async fn feed_route(
     State(state): State<ServerState>,
     Path(token): Path<String>,
     body: bytes::Bytes,
 ) -> Response {
-    feed(state, token, body, |sink, payload| sink.on_tasks(payload)).await
+    non_blocking(state, token, body, |sink, payload| sink.on_feed(payload)).await
 }
 
 async fn session(
@@ -186,7 +186,7 @@ async fn session(
     Path(token): Path<String>,
     body: bytes::Bytes,
 ) -> Response {
-    feed(state, token, body, |sink, payload| sink.on_session(payload)).await
+    non_blocking(state, token, body, |sink, payload| sink.on_session(payload)).await
 }
 
 /// Convenience for callers that want a ready-made timeout.

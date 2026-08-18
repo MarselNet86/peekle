@@ -82,7 +82,7 @@ impl HookSink for FixtureSink {
         Duration::from_millis(80)
     }
 
-    fn on_tasks(&self, payload: &Value) {
+    fn on_feed(&self, payload: &Value) {
         self.feeds.lock().unwrap().push(payload.clone());
     }
 
@@ -187,10 +187,7 @@ async fn the_tasks_capture_is_a_todowrite_payload_we_can_read() {
     let captured = payload("tasks");
 
     assert_eq!(captured["hook_event_name"], "PostToolUse");
-    assert_eq!(
-        captured["tool_name"], "TodoWrite",
-        "the matcher of section 6.1 keeps other tools off this endpoint"
-    );
+    assert_eq!(captured["tool_name"], "TodoWrite");
 
     let todos = captured["tool_input"]["todos"]
         .as_array()
@@ -208,7 +205,7 @@ async fn a_captured_todowrite_answers_empty_and_reaches_the_sink() {
     let sink = FixtureSink::new(None);
     let handle = Arc::clone(&sink);
 
-    let (status, body) = post(sink, "tasks", &payload("tasks")).await;
+    let (status, body) = post(sink, "feed", &payload("tasks")).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
@@ -244,4 +241,78 @@ async fn unknown_captured_fields_pass_through_without_complaint() {
 
     let (status, _) = post(FixtureSink::new(None), "stop", &captured).await;
     assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_user_prompt_capture_carries_the_turn_itself() {
+    let captured = payload("user_prompt_submit");
+
+    assert_eq!(captured["hook_event_name"], "UserPromptSubmit");
+    assert!(
+        captured["prompt"].is_string(),
+        "the prompt is what the feed shows and what titles the session"
+    );
+    assert!(captured["session_id"].is_string());
+    assert!(captured["cwd"].is_string());
+}
+
+#[tokio::test]
+async fn the_pre_tool_capture_names_the_call_it_opens() {
+    let captured = payload("pre_tool_use");
+
+    assert_eq!(captured["hook_event_name"], "PreToolUse");
+    assert!(captured["tool_name"].is_string());
+    assert!(captured["tool_input"].is_object());
+    assert!(
+        captured["tool_use_id"].is_string(),
+        "without tool_use_id the row cannot be closed later"
+    );
+}
+
+#[tokio::test]
+async fn the_post_tool_capture_closes_a_call_by_the_same_id() {
+    let captured = payload("post_tool_use");
+
+    assert_eq!(captured["hook_event_name"], "PostToolUse");
+    assert!(captured["tool_use_id"].is_string());
+    assert!(
+        captured["tool_response"].is_object() || captured["tool_response"].is_string(),
+        "a closed call reports something back"
+    );
+}
+
+/// The v8 finding, pinned so a Claude Code update that starts reporting
+/// failures shows up here rather than in a user's feed. tech.md 6.1.
+#[tokio::test]
+async fn no_captured_post_tool_use_reports_a_failure() {
+    let path = fixture_dir().join("post_tool_use.jsonl");
+    let text = std::fs::read_to_string(&path).expect("capture post_tool_use.jsonl");
+
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let captured: Value = serde_json::from_str(line).unwrap();
+        let response = &captured["tool_response"];
+
+        assert!(
+            !response["is_error"].as_bool().unwrap_or(false),
+            "a captured PostToolUse reported an error, so 6.3 can stop inferring at the turn boundary"
+        );
+        assert!(
+            !response["interrupted"].as_bool().unwrap_or(false),
+            "a captured PostToolUse reported an interruption"
+        );
+    }
+}
+
+#[tokio::test]
+async fn every_feed_event_answers_empty_and_reaches_the_sink() {
+    for name in ["user_prompt_submit", "pre_tool_use", "post_tool_use"] {
+        let sink = FixtureSink::new(None);
+        let handle = Arc::clone(&sink);
+
+        let (status, body) = post(sink, "feed", &payload(name)).await;
+
+        assert_eq!(status, StatusCode::OK, "{name}");
+        assert_eq!(body, json!({}), "{name} must never carry a decision");
+        assert_eq!(handle.feeds.lock().unwrap().len(), 1, "{name}");
+    }
 }

@@ -91,8 +91,8 @@ impl HookSink for TestSink {
         self.timeout
     }
 
-    fn on_tasks(&self, payload: &Value) {
-        self.feeds.lock().unwrap().push(("tasks", payload.clone()));
+    fn on_feed(&self, payload: &Value) {
+        self.feeds.lock().unwrap().push(("feed", payload.clone()));
     }
 
     fn on_session(&self, payload: &Value) {
@@ -167,7 +167,7 @@ async fn health_reports_version_enabled_and_core() {
 
 #[tokio::test]
 async fn a_wrong_token_is_a_404_with_no_body() {
-    for path in ["stop", "permission", "notification", "tasks", "session"] {
+    for path in ["stop", "permission", "notification", "feed", "session"] {
         let uri = format!("/v1/h/deadbeef/{path}");
         let (status, body) = post(app(TestSink::new(None)), &uri, "{}").await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
@@ -177,7 +177,7 @@ async fn a_wrong_token_is_a_404_with_no_body() {
 
 #[tokio::test]
 async fn a_body_that_is_not_json_is_a_400() {
-    for path in ["stop", "permission", "notification", "tasks", "session"] {
+    for path in ["stop", "permission", "notification", "feed", "session"] {
         let uri = format!("/v1/h/{TOKEN}/{path}");
         let (status, _) = post(app(TestSink::new(None)), &uri, "not json at all").await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
@@ -247,7 +247,7 @@ async fn feeds_answer_empty_and_hand_the_payload_over() {
     let sink = TestSink::new(None);
     let handle = Arc::clone(&sink);
 
-    for path in ["notification", "tasks", "session"] {
+    for path in ["notification", "feed", "session"] {
         let uri = format!("/v1/h/{TOKEN}/{path}");
         let (status, body) = post(
             app(Arc::clone(&sink) as Arc<dyn HookSink>),

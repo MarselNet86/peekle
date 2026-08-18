@@ -11,6 +11,7 @@ use peekle_core::labels::classify;
 use peekle_core::types::{
     PromptOutcome, PromptRequest, TaskItem, TaskStatus, ToastRequest, ToastTone,
 };
+use peekle_core::FeedEvent;
 use peekle_server::HookSink;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -29,6 +30,17 @@ impl AppSink {
     pub fn new(app: AppHandle, state: Arc<AppState>) -> Self {
         Self { app, state }
     }
+
+    fn emit_sessions(&self, cards: Vec<peekle_core::types::SessionCard>) {
+        tracing::debug!(
+            sessions = cards.len(),
+            entries = cards.iter().map(|c| c.entries.len()).sum::<usize>(),
+            "feed updated"
+        );
+        if let Err(err) = self.app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+    }
 }
 
 impl HookSink for AppSink {
@@ -40,6 +52,14 @@ impl HookSink for AppSink {
         // Register before any window work: the channel has to exist before
         // anything can resolve it.
         let receiver = self.state.pending.register(request.id.clone());
+
+        // A Stop means the turn is over, so nothing can still be in flight.
+        // Whatever is still Running never reported success: PostToolUse does
+        // not fire for a failed call. tech.md 6.3.
+        if request.kind == peekle_core::types::PromptKind::Stop {
+            let cards = self.state.end_turn(&request.session.session_id, now_ms());
+            self.emit_sessions(cards);
+        }
 
         if self.state.claim_prompt(request.clone()) {
             let app = self.app.clone();
@@ -54,7 +74,16 @@ impl HookSink for AppSink {
         self.state.prompt_timeout()
     }
 
-    fn on_tasks(&self, payload: &Value) {
+    /// One endpoint, three events. UserPromptSubmit, PreToolUse and PostToolUse
+    /// all land here. tech.md 6.1.
+    fn on_feed(&self, payload: &Value) {
+        if let Some(event) = FeedEvent::from_payload(payload) {
+            let cards = self.state.apply_feed(event, now_ms());
+            self.emit_sessions(cards);
+        }
+
+        // A TodoWrite still carries the task list, which is a separate view of
+        // the same turn. tech.md 6.3 and 6.6.
         let items = parse_tasks(payload);
         if items.is_empty() {
             return;
