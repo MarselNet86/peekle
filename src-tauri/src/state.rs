@@ -106,6 +106,21 @@ impl AppState {
         registry.cards().to_vec()
     }
 
+    /// Records what the agent said last. tech.md S6.
+    pub fn assistant_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.assistant_turn(session.clone(), text, at);
+        registry.cards().to_vec()
+    }
+
+    /// The session is over. Unknown sessions are left alone rather than being
+    /// invented: Peekle may have started after the session did.
+    pub fn mark_session_ended(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.set_status(session_id, SessionStatus::Ended, at);
+        registry.cards().to_vec()
+    }
+
     /// The turn ended, so every row still `Running` never reported success.
     /// tech.md 6.3.
     pub fn end_turn(&self, session_id: &str, at: i64) -> Vec<SessionCard> {

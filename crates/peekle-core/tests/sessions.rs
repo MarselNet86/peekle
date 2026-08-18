@@ -123,8 +123,17 @@ fn the_stop_sweep_fails_only_what_never_finished() {
         registry.apply(event, 2);
     }
 
-    let session_id = registry.cards()[0].session.session_id.clone();
-    registry.end_turn(&session_id, 3);
+    // The capture spans several sessions, so every one of them has to end its
+    // turn. Sweeping only the first would leave the rest Running and say
+    // nothing about the rule.
+    let sessions: Vec<String> = registry
+        .cards()
+        .iter()
+        .map(|card| card.session.session_id.clone())
+        .collect();
+    for session_id in &sessions {
+        registry.end_turn(session_id, 3);
+    }
 
     let entries: Vec<_> = registry
         .cards()
@@ -341,4 +350,148 @@ fn a_session_can_be_opened_by_a_stop_alone() {
     assert!(registry.set_status("s", SessionStatus::WaitingOnUser, 2));
     assert_eq!(registry.cards().len(), 1);
     assert!(registry.cards()[0].title.is_empty());
+}
+
+/// S5. Two sessions running at once stay separate and keep their own status.
+#[test]
+fn parallel_sessions_are_kept_apart() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    let session = |id: &str, project: &str| SessionRef {
+        session_id: id.to_string(),
+        cwd: format!("/work/{project}"),
+        project: project.to_string(),
+    };
+
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session("a", "peekle"),
+            text: "ship the island".into(),
+        },
+        1,
+    );
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session("b", "other"),
+            text: "write the docs".into(),
+        },
+        2,
+    );
+
+    registry.set_status("a", SessionStatus::WaitingOnUser, 3);
+    registry.set_status("b", SessionStatus::Working, 4);
+
+    assert_eq!(registry.cards().len(), 2);
+
+    let a = registry
+        .cards()
+        .iter()
+        .find(|c| c.session.session_id == "a")
+        .expect("session a");
+    let b = registry
+        .cards()
+        .iter()
+        .find(|c| c.session.session_id == "b")
+        .expect("session b");
+
+    assert_eq!(a.status, SessionStatus::WaitingOnUser);
+    assert_eq!(b.status, SessionStatus::Working);
+    assert_eq!(a.title, "ship the island");
+    assert_eq!(b.title, "write the docs");
+    assert_eq!(a.session.project, "peekle");
+}
+
+/// SessionEnd has never appeared in a capture without SessionStart preceding
+/// it, so a card has to survive being ended without ever being started.
+#[test]
+fn a_session_can_end_without_ever_having_started() {
+    use peekle_core::types::{SessionRef, SessionStatus};
+
+    let mut registry = SessionRegistry::new();
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: SessionRef {
+                session_id: "a".into(),
+                cwd: "/work/peekle".into(),
+                project: "peekle".into(),
+            },
+            text: "go".into(),
+        },
+        1,
+    );
+
+    assert!(registry.set_status("a", SessionStatus::Ended, 2));
+    assert_eq!(registry.cards()[0].status, SessionStatus::Ended);
+}
+
+/// S6. The closing message lands in the feed, and a Stop that repeats while the
+/// user is reading does not say it twice.
+#[test]
+fn the_closing_message_lands_once_however_often_stop_repeats() {
+    use peekle_core::types::{EntryKind, SessionRef};
+
+    let mut registry = SessionRegistry::new();
+    let session = SessionRef {
+        session_id: "a".into(),
+        cwd: "/work/peekle".into(),
+        project: "peekle".into(),
+    };
+
+    registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 1);
+    registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 2);
+
+    let said: Vec<_> = registry.cards()[0]
+        .entries
+        .iter()
+        .filter(|e| e.kind == EntryKind::Assistant)
+        .collect();
+    assert_eq!(said.len(), 1);
+    assert_eq!(said[0].text, "Tests pass. Want a PR?");
+
+    // A different message is a different thing to say.
+    registry.assistant_turn(session, "Opened the PR.", 3);
+    assert_eq!(
+        registry.cards()[0]
+            .entries
+            .iter()
+            .filter(|e| e.kind == EntryKind::Assistant)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn an_empty_closing_message_is_not_an_entry() {
+    use peekle_core::types::SessionRef;
+
+    let mut registry = SessionRegistry::new();
+    registry.assistant_turn(
+        SessionRef {
+            session_id: "a".into(),
+            cwd: "/work/peekle".into(),
+            project: "peekle".into(),
+        },
+        "   \n  ",
+        1,
+    );
+    assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
+}
+
+#[test]
+fn a_very_long_closing_message_is_cut_on_a_character_boundary() {
+    use peekle_core::types::SessionRef;
+
+    let mut registry = SessionRegistry::new();
+    let long = "мысль ".repeat(900);
+    registry.assistant_turn(
+        SessionRef {
+            session_id: "a".into(),
+            cwd: "/work/peekle".into(),
+            project: "peekle".into(),
+        },
+        &long,
+        1,
+    );
+    assert_eq!(registry.cards()[0].entries[0].text.chars().count(), 2000);
 }

@@ -57,3 +57,22 @@ describe('FeedRow', () => {
     expect(screen.getByText('проверить установку')).toBeInTheDocument();
   });
 });
+
+describe('what the agent said last', () => {
+  it('gets room to be read instead of one clipped line', () => {
+    const long = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join('\n');
+    const { container } = render(FeedRow, {
+      props: { entry: entry({ kind: 'Assistant', tool: null, text: long, state: 'Ok' }) },
+    });
+
+    expect(container.querySelector('.row')).toHaveClass('block');
+    // MessageBlock clamps to six lines and opens on a click, so the whole
+    // message is in the DOM rather than truncated away.
+    expect(container.textContent).toContain('line 12');
+  });
+
+  it('keeps a tool call on its single line', () => {
+    const { container } = render(FeedRow, { props: { entry: entry() } });
+    expect(container.querySelector('.row')).not.toHaveClass('block');
+  });
+});
