@@ -3,7 +3,9 @@
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { feedWindow } from '$lib/logic/feed';
+  import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
+  import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
@@ -19,6 +21,18 @@
     typeof island.view === 'object' ? feed.card(island.view.Session) : undefined,
   );
   const rows = $derived(feedWindow(openSession?.entries ?? []));
+
+  // The field is live only while a session is actually waiting on an answer.
+  // Outside that there is nowhere to deliver the text, and a field that looks
+  // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
+  const waiting = $derived(openSession?.status === 'WaitingOnUser' && island.prompt !== null);
+
+  let reply = $state('');
+
+  // A settled request leaves nothing behind for the next one to inherit.
+  $effect(() => {
+    if (!island.prompt) reply = '';
+  });
 
   $effect(() => {
     const stop = Promise.all([island.start(), feed.start()]);
@@ -73,7 +87,27 @@
             <FeedRow {entry} />
           {/each}
         </div>
-        <ScrollHint visible={rows.showScrollHint} />
+        <ScrollHint visible={rows.showScrollHint && !waiting} />
+
+        {#if waiting}
+          <div class="reply">
+            <PromptInput
+              bind:value={reply}
+              placeholder="Reply to Claude"
+              onsubmit={(text) => island.answer(text)}
+              onescape={() => island.dismiss()}
+            />
+            <div class="choices">
+              {#each island.prompt?.options ?? [] as option (option.id)}
+                <Button
+                  label={option.label}
+                  variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
+                  onclick={() => island.choose(option.id)}
+                />
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
   </Shape>
@@ -98,5 +132,18 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .reply {
+    flex: none;
+    border-top: 1px solid var(--hairline);
+    padding-top: 6px;
+  }
+
+  .choices {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 6px;
   }
 </style>

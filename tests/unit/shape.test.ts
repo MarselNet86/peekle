@@ -103,3 +103,28 @@ describe('reading the notch off the query string', () => {
     expect(readNotch('')).toEqual(FALLBACK_NOTCH);
   });
 });
+
+describe('a display with no notch', () => {
+  it('floats the pill instead of hugging a bezel that is not there', () => {
+    const withNotch = shapeBounds('Pill', { width: 185, height: 33 });
+    const without = shapeBounds('Pill', { width: 185, height: 0 });
+
+    expect(without.height).toBeLessThan(withNotch.height);
+    expect(without.radius).toBeGreaterThan(0);
+  });
+
+  it('collapses to nothing at all, so an external monitor stays clean', () => {
+    const bounds = shapeBounds('Collapsed', { width: 185, height: 0 });
+    expect(bounds.height).toBe(0);
+  });
+
+  it('keeps every open view inside the window on any screen', () => {
+    fc.assert(
+      fc.property(views, fc.double({ min: 0, max: 200, noNaN: true }), (view, height) => {
+        const bounds = shapeBounds(view, { width: 185, height });
+        expect(bounds.height).toBeLessThanOrEqual(WINDOW.height);
+        expect(bounds.width).toBeLessThanOrEqual(WINDOW.width);
+      }),
+    );
+  });
+});

@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use peekle_core::labels::classify;
 use peekle_core::types::{
-    PromptOutcome, PromptRequest, TaskItem, TaskStatus, ToastRequest, ToastTone,
+    PromptKind, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest,
+    ToastTone,
 };
 use peekle_core::FeedEvent;
 use peekle_server::HookSink;
@@ -56,8 +57,12 @@ impl HookSink for AppSink {
         // A Stop means the turn is over, so nothing can still be in flight.
         // Whatever is still Running never reported success: PostToolUse does
         // not fire for a failed call. tech.md 6.3.
-        if request.kind == peekle_core::types::PromptKind::Stop {
-            let cards = self.state.end_turn(&request.session.session_id, now_ms());
+        if request.kind == PromptKind::Stop {
+            let at = now_ms();
+            self.state.end_turn(&request.session.session_id, at);
+            let cards =
+                self.state
+                    .set_session_status(&request.session, SessionStatus::WaitingOnUser, at);
             self.emit_sessions(cards);
         }
 

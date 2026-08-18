@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use peekle_core::config::Config;
 use peekle_core::types::{
-    IslandView, PeekleState, PromptRequest, SessionCard, TaskItem, UsageSnapshot, UsageUnavailable,
+    IslandView, PeekleState, PromptRequest, SessionCard, SessionRef, SessionStatus, TaskItem,
+    UsageSnapshot, UsageUnavailable,
 };
 use peekle_core::{FeedEvent, PendingRegistry, SessionRegistry};
 use peekle_usage::{fake::unknown, UsageProvider};
@@ -88,6 +89,20 @@ impl AppState {
     pub fn apply_feed(&self, event: FeedEvent, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.apply(event, at);
+        registry.cards().to_vec()
+    }
+
+    /// Opens the card if the session is new, then moves it to a status.
+    /// A Stop can be the first event Peekle sees, so the card may not exist.
+    pub fn set_session_status(
+        &self,
+        session: &SessionRef,
+        status: SessionStatus,
+        at: i64,
+    ) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.ensure(session.clone(), at);
+        registry.set_status(&session.session_id, status, at);
         registry.cards().to_vec()
     }
 

@@ -154,6 +154,58 @@ async fn a_captured_stop_answered_with_text_blocks_with_that_text() {
     );
 }
 
+/// Every outcome the island can produce, checked against 6.2 on the real
+/// capture. The buttons are the only way to reach continue and finish, so a
+/// drift here would silently change what the agent is told to do.
+#[tokio::test]
+async fn each_captured_stop_choice_maps_to_its_documented_body() {
+    for (choice, expected) in [
+        (
+            "continue",
+            json!({"decision": "block", "reason": "Continue with the current plan."}),
+        ),
+        ("finish", json!({})),
+    ] {
+        let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+            prompt_id: "p".to_string(),
+            choice: Some(choice.to_string()),
+            text: None,
+        })));
+
+        let (status, body) = post(sink, "stop", &payload("stop")).await;
+
+        assert_eq!(status, StatusCode::OK, "{choice}");
+        assert_eq!(body, expected, "{choice}");
+    }
+}
+
+/// Escape. The turn ends the way it would without Peekle installed.
+#[tokio::test]
+async fn a_captured_stop_dismissed_ends_the_turn_normally() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
+
+    let (status, body) = post(sink, "stop", &payload("stop")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+}
+
+/// Whitespace only is not an answer. The reason becomes the next prompt, and
+/// handing the agent a blank instruction is worse than ending the turn.
+#[tokio::test]
+async fn a_captured_stop_answered_with_blank_text_does_not_block() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+        prompt_id: "p".to_string(),
+        choice: None,
+        text: Some("   \n  ".to_string()),
+    })));
+
+    let (status, body) = post(sink, "stop", &payload("stop")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+}
+
 #[tokio::test]
 async fn a_captured_stop_left_unanswered_ends_the_turn_normally() {
     let (status, body) = post(FixtureSink::new(None), "stop", &payload("stop")).await;
