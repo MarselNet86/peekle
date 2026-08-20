@@ -87,6 +87,11 @@ pub fn run() {
                 windows::open_island(&handle).await;
             });
 
+            // The resting mark is the only clickable part of a collapsed
+            // island, and nothing but a poll can tell when the pointer reaches
+            // it. tech.md 6.7.
+            windows::track_pointer(app.handle());
+
             hotkey::install(app.handle(), &toggle);
 
             poll_usage(app.handle(), Arc::clone(&state));
