@@ -12,7 +12,7 @@
   aria-label="Scroll to the newest message"
   onclick={() => onclick?.()}
 >
-  <svg viewBox="0 0 12 8" width="12" height="8" aria-hidden="true">
+  <svg viewBox="0 0 12 8" width="11" height="7" aria-hidden="true">
     <path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.5" />
   </svg>
 </button>
@@ -26,7 +26,9 @@
     border: none;
     background: transparent;
     color: var(--text-dim);
-    padding: 3px 0;
+    /* Room to breathe. Pinned to the edge of the shape it read as a glitch in
+       the corner rather than as a control. */
+    padding: 9px 0 7px;
     opacity: 0;
     transition: opacity 120ms ease;
     pointer-events: none;

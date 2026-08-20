@@ -166,6 +166,26 @@
   });
 </script>
 
+<!-- The windows are the same fact in both views: how much of the hour is gone
+     is as much a part of reading a dialogue as of picking one. tech.md S7. -->
+{#snippet usage_bars()}
+  <div class="usage">
+    {#if usage.connectLabel}
+      <Button
+        label={usage.connecting ? 'Connecting' : usage.connectLabel}
+        variant="connect"
+        disabled={usage.connecting}
+        wide
+        onclick={() => usage.connect()}
+      />
+    {:else}
+      {#each usage.bars as bar (bar.label)}
+        <UsageBar label={bar.label} pct={bar.pct} resetsAt={bar.resetsAt} reason={usage.reason} />
+      {/each}
+    {/if}
+  </div>
+{/snippet}
+
 <div class="island" bind:this={host}>
   <Shape view={island.view} notch={island.notch}>
     {#snippet rest()}
@@ -188,30 +208,7 @@
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
-        <div class="usage">
-          <!-- Disconnected there are no numbers, and two rows of dashes under a
-               button say nothing the button does not already say. The only
-               control that raises the Keychain dialog, and only because the
-               user pressed it. tech.md 6.4 and rule 12. -->
-          {#if usage.connectLabel}
-            <Button
-              label={usage.connecting ? 'Connecting' : usage.connectLabel}
-              variant="connect"
-              disabled={usage.connecting}
-              wide
-              onclick={() => usage.connect()}
-            />
-          {:else}
-            {#each usage.bars as bar (bar.label)}
-              <UsageBar
-                label={bar.label}
-                pct={bar.pct}
-                resetsAt={bar.resetsAt}
-                reason={usage.reason}
-              />
-            {/each}
-          {/if}
-        </div>
+        {@render usage_bars()}
       </div>
     {:else if current}
       <div class="feed">
@@ -227,6 +224,7 @@
           {/each}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
+        {@render usage_bars()}
 
         {#if permission}
           <div class="reply">
