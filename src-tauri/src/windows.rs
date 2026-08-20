@@ -117,10 +117,10 @@ fn update_hover(app: &AppHandle) {
     // An open island already takes the mouse outright, and `set_view` said so.
     state.set_over_rest(false);
 
-    // A request in flight closes on an answer, a dismissal or a timeout, never
-    // on the pointer wandering off: that is the resolve exactly once invariant
-    // of rule 10. A pill runs on its own clock.
-    if state.active_prompt().is_some() || state.view() == IslandView::Pill {
+    // A pill runs on its own clock. A request in flight does not stop this:
+    // hiding the shape resolves nothing, the hook stays pending, and the mark
+    // pulses until it is answered. tech.md 6.7.
+    if state.view() == IslandView::Pill {
         state.pointer_returned();
         return;
     }

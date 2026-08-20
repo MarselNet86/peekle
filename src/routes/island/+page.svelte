@@ -13,6 +13,7 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -83,6 +84,14 @@
   // The mark is all the user sees while the island rests, so it carries the
   // one bit worth acting on. tech.md 6.7.
   const resting = $derived(restStatus(feed.sessions));
+
+  // A request that is still waiting is the reason to come back, so the mark
+  // opens its session rather than the list. tech.md 6.7.
+  function reopen() {
+    const waiting = island.prompt?.session.session_id;
+    if (waiting) openSession(waiting);
+    else openList();
+  }
   // The ring on the mark and the 5h bar inside read the same number, so they
   // come from the same place. tech.md 6.7.
   const hourWindow = $derived(usage.bars[0]?.pct ?? null);
@@ -119,15 +128,13 @@
   // beside the shape is already lost to whatever is underneath. Spending it on
   // putting the island away is the one useful thing left to do with it.
   //
-  // A pending request is left alone: rule 10 wants a blocking hook resolved by
-  // an answer, a dismissal or a timeout, never by a stray click. tech.md 6.7.
+  // A pending request does not stop it: collapsing is not resolving, the hook
+  // stays pending, and the mark keeps pulsing until it is answered. tech.md 6.7.
   $effect(() => {
-    if (island.view === 'Collapsed' || island.prompt) return;
+    if (island.view === 'Collapsed') return;
 
     const dismiss = (event: MouseEvent) => {
-      if (clickPutsAway(island.view, island.prompt !== null, event.target)) {
-        commands.setView('Collapsed');
-      }
+      if (clickPutsAway(island.view, event.target)) commands.setView('Collapsed');
     };
 
     window.addEventListener('click', dismiss);
@@ -189,7 +196,7 @@
 <div class="island" bind:this={host}>
   <Shape view={island.view} notch={island.notch}>
     {#snippet rest()}
-      <RestMark status={resting} pct={hourWindow} onopen={() => openList()} />
+      <RestMark status={resting} pct={hourWindow} onopen={() => reopen()} />
     {/snippet}
 
     {#if island.view === 'Pill' && island.toast}
@@ -222,6 +229,11 @@
           {#each rows as entry (entry.id)}
             <FeedRow {entry} />
           {/each}
+          <!-- The agent is mid turn, so the dialogue says so instead of sitting
+               still and reading as broken. tech.md 6.12. -->
+          {#if current.status === 'Working'}
+            <TypingLine />
+          {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
         {@render usage_bars()}

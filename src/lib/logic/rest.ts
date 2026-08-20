@@ -26,15 +26,14 @@ export function restStatus(cards: SessionCard[]): RestStatus {
  *
  * An open island takes the mouse on the whole 720 by 560 window, so a click
  * beside the shape is already lost to whatever is underneath; spending it on
- * closing is the one useful thing left. A pending request is left alone: rule
- * 10 wants a blocking hook resolved by an answer, a dismissal or a timeout,
- * never by a stray click. tech.md 6.7.
+ * closing is the one useful thing left.
+ *
+ * A pending request does not stop this. Collapsing is not resolving: the hook
+ * stays pending and still ends on an answer, a dismissal or a timeout, so rule
+ * 10 holds. Keeping a window over the whole screen after the user asked for it
+ * to go is arguing with them. tech.md 6.7.
  */
-export function clickPutsAway(
-  view: IslandView,
-  hasPrompt: boolean,
-  target: EventTarget | null,
-): boolean {
-  if (view === 'Collapsed' || hasPrompt) return false;
+export function clickPutsAway(view: IslandView, target: EventTarget | null): boolean {
+  if (view === 'Collapsed') return false;
   return !(target instanceof Element && target.closest('.shape'));
 }

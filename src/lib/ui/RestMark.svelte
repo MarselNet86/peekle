@@ -26,21 +26,23 @@
   aria-label="{labels[status]}{usageLabel}. Open the session list"
   onclick={onopen}
 >
-  <!-- Two strokes at rest. While the agent works they turn in steps through
-       `/`, `|`, `\`, `-`, half a phase apart: the spinner every console
-       has. tech.md 6.12. -->
+  <!-- Two strokes at rest. While the agent works they give way to one stroke
+       stepping through `|`, `\`, `-`, `/`: the console spinner, where a frame
+       is replaced rather than turned. tech.md 6.12. -->
   <span class="glyph">
     <svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
+      <g class="sign">
+        <path d="M4 10.6L6.9 1.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+        <path
+          d="M9.1 10.6L12 1.4"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+        />
+      </g>
       <path
-        class="bar"
-        d="M4 10.6L6.9 1.4"
-        stroke="currentColor"
-        stroke-width="2.2"
-        stroke-linecap="round"
-      />
-      <path
-        class="bar second"
-        d="M9.1 10.6L12 1.4"
+        class="spin"
+        d="M7 1.8L7 10.2"
         stroke="currentColor"
         stroke-width="2.2"
         stroke-linecap="round"
@@ -105,25 +107,31 @@
     opacity: 1;
   }
 
-  /* Eight steps around the circle, so each stroke lands on `/`, `|`, `\` and
-     `-` in turn. Transform only: nothing here repaints what is under the
-     window. tech.md 6.10. */
-  .mark[data-status='working'] .bar {
+  /* One stroke at a time, four frames, no in between: a console spinner does
+     not turn, it swaps characters. Half a turn in four steps lands the stroke
+     on `|`, `\`, `-` and `/`. Transform only, so nothing under the window is
+     repainted. tech.md 6.10 and 6.12. */
+  .spin {
+    display: none;
     transform-box: fill-box;
     transform-origin: center;
-    animation: turn 1s steps(8, end) infinite;
   }
 
-  .mark[data-status='working'] .second {
-    animation-delay: -0.5s;
+  .mark[data-status='working'] .sign {
+    display: none;
   }
 
-  @keyframes turn {
+  .mark[data-status='working'] .spin {
+    display: block;
+    animation: tick 600ms steps(4, end) infinite;
+  }
+
+  @keyframes tick {
     from {
       transform: rotate(0deg);
     }
     to {
-      transform: rotate(360deg);
+      transform: rotate(180deg);
     }
   }
 
@@ -201,7 +209,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mark[data-status='waiting'] .glyph,
-    .mark[data-status='working'] .bar {
+    .mark[data-status='working'] .spin {
       animation: none;
     }
   }
