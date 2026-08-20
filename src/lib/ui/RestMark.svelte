@@ -6,22 +6,6 @@
   let { status, pct, onopen }: { status: RestStatus; pct: number | null; onopen: () => void } =
     $props();
 
-  /** A 4 by 6 grid of pixels. Cells lit for the letter p. */
-  const PIXELS = [
-    [0, 0],
-    [1, 0],
-    [2, 0],
-    [0, 1],
-    [3, 1],
-    [0, 2],
-    [3, 2],
-    [0, 3],
-    [1, 3],
-    [2, 3],
-    [0, 4],
-    [0, 5],
-  ];
-
   const RADIUS = 6;
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -50,10 +34,13 @@
   onclick={onopen}
 >
   <span class="glyph">
-    <svg viewBox="0 0 4 6" width="8" height="12" aria-hidden="true">
-      {#each PIXELS as [x, y] (`${x}:${y}`)}
-        <rect {x} {y} width="1" height="1" rx="0.28" fill="currentColor" />
-      {/each}
+    <svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
+      <path
+        d="M4 10.6L6.9 1.4M9.1 10.6L12 1.4"
+        stroke="currentColor"
+        stroke-width="2.2"
+        stroke-linecap="round"
+      />
     </svg>
   </span>
 
@@ -93,28 +80,46 @@
     cursor: pointer;
   }
 
+  /* No focus rings anywhere in the island. The panel never takes the keyboard
+     (tech.md 6.7), and WebKit draws the ring in the user's system accent
+     colour, which reads as somebody else's element sitting on the sign. */
+  .mark:focus,
+  .mark:focus-visible,
+  .mark svg {
+    outline: none;
+  }
+
+  /* The click belongs to the button, never to a child that WebKit can focus. */
+  .mark svg {
+    pointer-events: none;
+  }
+
+  /* One colour in every state. A sign is recognised by its colour, and
+     swapping it to carry a status makes it somebody else's sign each time.
+     Presence carries the status instead. tech.md 9. */
   .glyph {
     display: flex;
-    color: var(--text-dim);
-    /* Colour only. The shape underneath belongs to Shape and never moves for a
-       hover. tech.md 6.10. */
-    transition: color 160ms ease-out;
+    color: var(--brand);
+    opacity: 0.55;
+    /* Opacity only. The shape underneath belongs to Shape and never moves for
+       a hover. tech.md 6.10. */
+    transition: opacity 160ms ease-out;
   }
 
   .mark[data-status='working'] .glyph {
-    color: var(--text);
+    opacity: 1;
   }
 
   /* Waiting is the one state that costs the user time, so it is the one state
-     that moves. Opacity only: filter and backdrop-filter repaint everything
+     that moves. Never filter or backdrop-filter: those repaint everything
      under the window on every frame. tech.md 6.10. */
   .mark[data-status='waiting'] .glyph {
-    color: var(--accent);
+    opacity: 1;
     animation: breathe 1600ms ease-in-out infinite;
   }
 
   .mark:hover .glyph {
-    color: var(--text);
+    opacity: 1;
   }
 
   .ring {

@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 
-import { restStatus } from '$lib/logic/rest';
+import { clickPutsAway, restStatus } from '$lib/logic/rest';
 import { REST_DROP, REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
 import RestMark from '$lib/ui/RestMark.svelte';
 import Shape from '$lib/ui/Shape.svelte';
@@ -85,6 +85,44 @@ describe('RestMark', () => {
       expect(container.querySelector('.mark')?.getAttribute('data-status')).toBe(status);
       unmount();
     }
+  });
+});
+
+describe('closing an open island with a click', () => {
+  function targets() {
+    const shape = document.createElement('div');
+    shape.className = 'shape';
+    const inside = document.createElement('button');
+    shape.append(inside);
+    // Detached on purpose: `closest` walks the tree it is given, and appending
+    // to the document would leak these into every later test.
+    const outside = document.createElement('div');
+    return { shape, inside, outside };
+  }
+
+  it('closes on a click beside the shape', () => {
+    const { outside } = targets();
+    expect(clickPutsAway('Sessions', false, outside)).toBe(true);
+    expect(clickPutsAway({ Session: 'abc' }, false, null)).toBe(true);
+  });
+
+  it('leaves a click on the shape alone, however deep it landed', () => {
+    const { shape, inside } = targets();
+    expect(clickPutsAway('Sessions', false, shape)).toBe(false);
+    expect(clickPutsAway('Sessions', false, inside)).toBe(false);
+  });
+
+  /// Rule 10: a blocking hook is resolved by an answer, a dismissal or a
+  /// timeout. A stray click is none of those.
+  it('never closes an island that is holding a request', () => {
+    const { outside } = targets();
+    expect(clickPutsAway('Sessions', true, outside)).toBe(false);
+    expect(clickPutsAway({ Session: 'abc' }, true, outside)).toBe(false);
+  });
+
+  it('does nothing while the island is already resting', () => {
+    const { outside } = targets();
+    expect(clickPutsAway('Collapsed', false, outside)).toBe(false);
   });
 });
 

@@ -10,6 +10,9 @@
   --text: rgba(255, 255, 255, 0.94);
   --text-dim: rgba(255, 255, 255, 0.56);
   --accent: #7dd88f;
+  /* The sign in the resting mark. Apple's system green, brighter than the
+     accent on purpose: it is the one mark that has to read as ours. */
+  --brand: #30d158;
   --warn: #e8b34a;
   --orange: #e8894a;
   --danger: #e8654a;
@@ -25,6 +28,7 @@
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);
   --color-accent: var(--accent);
+  --color-brand: var(--brand);
   --color-warn: var(--warn);
   --color-orange: var(--orange);
   --color-danger: var(--danger);
