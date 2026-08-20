@@ -140,6 +140,14 @@ pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapsho
         }
     };
 
+    // The outcome, not the token. Without this line a failing account leaves
+    // nothing behind but `could not reach the API` on the bars.
+    tracing::debug!(
+        source = ?snapshot.source,
+        reason = ?snapshot.reason,
+        windows = snapshot.windows.len(),
+        "usage snapshot"
+    );
     state.set_usage(snapshot.clone());
     if let Err(err) = app.emit(events::USAGE, &snapshot) {
         tracing::warn!(error = %err, "failed to emit usage");
