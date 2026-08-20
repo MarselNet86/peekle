@@ -6,7 +6,7 @@
  * answer to a hook.
  */
 
-import { events } from '$lib/bridge';
+import { commands, events } from '$lib/bridge';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 import type { UsageWindow } from '$lib/types/generated/UsageWindow';
@@ -49,13 +49,35 @@ export function bars(
   });
 }
 
+/** The reasons the user can do something about, right where they are. */
+const FIXABLE: UsageUnavailable[] = ['NotGranted', 'Denied'];
+
+export function needsGrant(snapshot: UsageSnapshot | null): boolean {
+  return snapshot?.reason ? FIXABLE.includes(snapshot.reason) : false;
+}
+
 export function createUsage() {
   let snapshot = $state<UsageSnapshot | null>(null);
 
   async function start(): Promise<() => void> {
-    return events.onUsage((next) => {
+    const off = await events.onUsage((next) => {
       snapshot = next;
     });
+
+    // A late mount must not drop what Rust already knows, and before the first
+    // poll that is the only thing there is to show.
+    const state = await commands.getState();
+    if (state && !snapshot) snapshot = state.usage;
+    return off;
+  }
+
+  /**
+   * The one path allowed to raise the Keychain dialog, and it exists only
+   * because the user pressed something. tech.md 6.4 and rule 12.
+   */
+  async function grant() {
+    const next = await commands.requestUsageAccess();
+    if (next) snapshot = next;
   }
 
   return {
@@ -68,6 +90,10 @@ export function createUsage() {
     get reason() {
       return reasonText(snapshot);
     },
+    get needsGrant() {
+      return needsGrant(snapshot);
+    },
+    grant,
     start,
   };
 }

@@ -150,6 +150,13 @@
               reason={usage.reason}
             />
           {/each}
+          <!-- The only control that raises the Keychain dialog, and only
+               because the user pressed it. tech.md 6.4 and rule 12. -->
+          {#if usage.needsGrant}
+            <div class="grant">
+              <Button label="Grant usage access" variant="ghost" onclick={() => usage.grant()} />
+            </div>
+          {/if}
         </div>
       </div>
     {:else if current}
@@ -226,6 +233,12 @@
   .usage {
     flex: none;
     border-top: 1px solid var(--hairline);
+    padding-top: 6px;
+  }
+
+  .grant {
+    display: flex;
+    justify-content: flex-end;
     padding-top: 6px;
   }
 
