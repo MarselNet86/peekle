@@ -8,6 +8,8 @@ pub mod island;
 pub mod labels;
 pub mod pending;
 pub mod sessions;
+pub mod time;
+pub mod transcripts;
 pub mod types;
 
 pub use feed::{FixtureFeed, TaskFeed};

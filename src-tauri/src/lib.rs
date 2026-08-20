@@ -12,7 +12,7 @@ use peekle_core::config::UsageProviderKind;
 use peekle_core::config::{self, Config};
 use peekle_server::routes::ServerState;
 use peekle_usage::{FakeUsage, UsageProvider};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -91,6 +91,11 @@ pub fn run() {
             // island, and nothing but a poll can tell when the pointer reaches
             // it. tech.md 6.7.
             windows::track_pointer(app.handle());
+
+            // Past dialogues live in Claude Code's own transcripts. Reading
+            // them is the only way an island opened on a fresh start shows
+            // anything at all. tech.md 6.11.
+            backfill_sessions(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
 
@@ -177,6 +182,47 @@ fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
 /// It never starts before the user has granted Keychain access. Reading the
 /// Keychain is what raises the dialog, and rule 12 forbids this app from
 /// raising it on its own: only `request_usage_access` may.
+/// Reads past sessions off disk and hands them to the registry.
+///
+/// Off the main thread and off the async runtime: it opens files, and nothing
+/// about a hook may wait on a directory scan. Failure is silence, because a
+/// missing history is not a reason to say anything to the user.
+fn backfill_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(root) = peekle_core::transcripts::default_root() else {
+            return;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or_default();
+
+        let Ok(cards) = tauri::async_runtime::spawn_blocking(move || {
+            peekle_core::transcripts::scan(&root, now)
+        })
+        .await
+        else {
+            return;
+        };
+        if cards.is_empty() {
+            return;
+        }
+
+        let found = cards.len();
+        let cards = state.seed_sessions(cards);
+        tracing::debug!(
+            found,
+            total = cards.len(),
+            "backfilled sessions from transcripts"
+        );
+
+        if let Err(err) = handle.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit backfilled sessions");
+        }
+    });
+}
+
 fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
     const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
     /// While the network is down, come back sooner. A user who lost wifi in a

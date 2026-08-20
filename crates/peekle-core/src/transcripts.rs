@@ -1,0 +1,228 @@
+//! Reading past dialogues out of Claude Code's own transcripts. tech.md 6.11.
+//!
+//! The registry is fed by hooks and lives in memory, so it knows nothing about
+//! a session that ran before the app started, and a restart empties it. Claude
+//! Code keeps that history on disk anyway, one JSON record per line, and this
+//! module turns those files into cards.
+//!
+//! Read only, and only to fill gaps: a card that arrived over a hook is never
+//! replaced by one from a file.
+
+use std::path::{Path, PathBuf};
+
+use serde_json::Value;
+use ulid::Ulid;
+
+use crate::sessions::{ENTRY_CAP, SESSION_CAP};
+use crate::types::{EntryKind, EntryState, FeedEntry, SessionCard, SessionRef, SessionStatus};
+
+/// Same limits the live feed applies, so a backfilled row and a live row of the
+/// same length look the same. tech.md 6.3.
+const TITLE_LIMIT: usize = 80;
+const TEXT_LIMIT: usize = 2000;
+
+/// Where Claude Code keeps them, under the user's home.
+pub fn default_root() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| Path::new(&home).join(".claude").join("projects"))
+}
+
+/// Builds one card out of the lines of a transcript.
+///
+/// Returns nothing when the file carries no dialogue at all: a session that
+/// never got a turn is not worth a row, and an empty card would be a lie about
+/// what happened there.
+pub fn card_from_lines<I, S>(lines: I, fallback_id: &str, updated_at: i64) -> Option<SessionCard>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut session_id = String::new();
+    let mut cwd = String::new();
+    let mut title = String::new();
+    let mut first_turn = String::new();
+    let mut entries: Vec<FeedEntry> = Vec::new();
+    let mut latest = 0i64;
+
+    for line in lines {
+        let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) else {
+            // A half written last line is normal: Claude Code appends while we
+            // read. One bad line is skipped, the rest of the file still counts.
+            continue;
+        };
+
+        if session_id.is_empty() {
+            if let Some(id) = record.get("sessionId").and_then(Value::as_str) {
+                session_id = id.to_string();
+            }
+        }
+        if cwd.is_empty() {
+            if let Some(dir) = record.get("cwd").and_then(Value::as_str) {
+                cwd = dir.to_string();
+            }
+        }
+        let at = record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(iso_ms)
+            .unwrap_or(latest);
+        latest = latest.max(at);
+
+        match record.get("type").and_then(Value::as_str) {
+            // The title Claude Code wrote for its own list. Better than a first
+            // line, and it costs nothing to reuse.
+            Some("ai-title") => {
+                if let Some(text) = record.get("aiTitle").and_then(Value::as_str) {
+                    title = truncate(text, TITLE_LIMIT);
+                }
+            }
+            Some("user") => {
+                for text in texts_of(&record) {
+                    if first_turn.is_empty() {
+                        first_turn = truncate(&text, TITLE_LIMIT);
+                    }
+                    entries.push(entry(EntryKind::User, text, at));
+                }
+            }
+            Some("assistant") => {
+                for text in texts_of(&record) {
+                    entries.push(entry(EntryKind::Assistant, text, at));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if entries.is_empty() {
+        return None;
+    }
+    // The tail, for the same reason the live feed keeps a tail. tech.md 6.3.
+    if entries.len() > ENTRY_CAP {
+        entries.drain(..entries.len() - ENTRY_CAP);
+    }
+
+    let session_id = if session_id.is_empty() {
+        fallback_id.to_string()
+    } else {
+        session_id
+    };
+    let project = project_of(&cwd);
+
+    Some(SessionCard {
+        session: SessionRef {
+            session_id,
+            cwd,
+            project,
+        },
+        title: if title.is_empty() { first_turn } else { title },
+        // Whether it ended cleanly or was killed is not in the file, and
+        // `Ended` would be a claim nobody made. tech.md 6.11.
+        status: SessionStatus::Idle,
+        entries,
+        updated_at: if latest > 0 { latest } else { updated_at },
+    })
+}
+
+/// Every `text` block of a message, in order.
+///
+/// `thinking` never comes back. It is the agent reasoning with itself, it was
+/// never meant for this surface, and a transcript is the only place it is
+/// written down. Tool calls are skipped too: their state would be a guess, and
+/// history does not need them. tech.md 6.11.
+fn texts_of(record: &Value) -> Vec<String> {
+    let content = record.get("message").and_then(|m| m.get("content"));
+
+    match content {
+        Some(Value::String(text)) => vec![text.clone()],
+        Some(Value::Array(blocks)) => blocks
+            .iter()
+            .filter(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+            .filter_map(|block| block.get("text").and_then(Value::as_str))
+            .map(|text| text.to_string())
+            .filter(|text| !text.trim().is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn entry(kind: EntryKind, text: String, at: i64) -> FeedEntry {
+    FeedEntry {
+        id: Ulid::generate().to_string(),
+        kind,
+        text: truncate(&text, TEXT_LIMIT),
+        tool: None,
+        // Nothing here is in flight: the file is a record of what already
+        // happened.
+        state: EntryState::Ok,
+        at,
+    }
+}
+
+fn truncate(text: &str, limit: usize) -> String {
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= limit {
+        return trimmed.to_string();
+    }
+    trimmed.chars().take(limit).collect()
+}
+
+/// The last path component, which is what the user calls the project.
+fn project_of(cwd: &str) -> String {
+    Path::new(cwd)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Milliseconds since the epoch for the `2026-08-17T14:55:28.780Z` form the
+/// transcripts use. Only the shape written by Claude Code is accepted.
+fn iso_ms(raw: &str) -> Option<i64> {
+    let seconds = crate::time::iso_seconds(raw)?;
+    let millis = raw
+        .split('.')
+        .nth(1)
+        .and_then(|tail| tail.get(0..3))
+        .and_then(|frac| frac.parse::<i64>().ok())
+        .unwrap_or(0);
+    Some(seconds * 1000 + millis)
+}
+
+/// Reads the newest transcripts under `root` into cards, freshest first.
+///
+/// Only `SESSION_CAP` files are opened at all, so the size of the directory
+/// does not decide how long a launch takes.
+pub fn scan(root: &Path, now: i64) -> Vec<SessionCard> {
+    let mut files = transcript_files(root);
+    files.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
+    files.truncate(SESSION_CAP);
+
+    let mut cards: Vec<SessionCard> = files
+        .into_iter()
+        .filter_map(|(path, _)| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let id = path.file_stem()?.to_str()?;
+            card_from_lines(text.lines(), id, now)
+        })
+        .collect();
+
+    cards.sort_by_key(|card| std::cmp::Reverse(card.updated_at));
+    cards
+}
+
+/// Every `<project>/<session>.jsonl` under the root, with its modified time.
+fn transcript_files(root: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
+    let Ok(projects) = std::fs::read_dir(root) else {
+        return Vec::new();
+    };
+
+    projects
+        .flatten()
+        .filter_map(|project| std::fs::read_dir(project.path()).ok())
+        .flat_map(|files| files.flatten())
+        .filter(|file| file.path().extension().is_some_and(|ext| ext == "jsonl"))
+        .filter_map(|file| {
+            let modified = file.metadata().ok()?.modified().ok()?;
+            Some((file.path(), modified))
+        })
+        .collect()
+}

@@ -344,6 +344,29 @@ impl SessionRegistry {
         &mut self.cards[index]
     }
 
+    /// Adds cards the hooks have not seen, leaving everything they have seen
+    /// alone.
+    ///
+    /// History fills the gaps and never overwrites the present: a card that
+    /// arrived over a hook carries a live status and a live feed, and a file on
+    /// disk knows neither. Freshest first afterwards, and the same cap as every
+    /// other path in. tech.md 6.11.
+    pub fn seed(&mut self, cards: Vec<SessionCard>) {
+        for card in cards {
+            let known = self
+                .cards
+                .iter()
+                .any(|c| c.session.session_id == card.session.session_id);
+            if !known {
+                self.cards.push(card);
+            }
+        }
+
+        self.cards
+            .sort_by_key(|card| std::cmp::Reverse(card.updated_at));
+        self.evict_sessions();
+    }
+
     /// Moves a session to the front. The list is ordered by activity, not by
     /// when the session started.
     fn touch(&mut self, session_id: &str) {

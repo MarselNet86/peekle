@@ -170,6 +170,14 @@ impl AppState {
         now.duration_since(*start) >= grace
     }
 
+    /// Adds past dialogues the hooks never saw. A live session is never
+    /// overwritten by a file. tech.md 6.11.
+    pub fn seed_sessions(&self, cards: Vec<SessionCard>) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.seed(cards);
+        sessions.cards().to_vec()
+    }
+
     pub fn sessions(&self) -> Vec<SessionCard> {
         self.lock(&self.sessions).cards().to_vec()
     }
