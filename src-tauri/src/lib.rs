@@ -12,7 +12,7 @@ use peekle_core::config::UsageProviderKind;
 use peekle_core::config::{self, Config};
 use peekle_server::routes::ServerState;
 use peekle_usage::{FakeUsage, UsageProvider};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -89,6 +89,8 @@ pub fn run() {
 
             hotkey::install(app.handle(), &toggle);
 
+            poll_usage(app.handle(), Arc::clone(&state));
+
             let sink = Arc::new(hooks::AppSink::new(app.handle().clone(), state));
             serve(port, token, sink);
             Ok(())
@@ -155,12 +157,56 @@ fn load_config() -> Config {
 
 fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
     match config.usage.provider {
-        // The account provider lands with S4. Until then every mode runs on
-        // the fake, which is also the dev default.
-        UsageProviderKind::Account | UsageProviderKind::Fake | UsageProviderKind::Off => {
-            Arc::new(FakeUsage::default())
-        }
+        UsageProviderKind::Account => Arc::new(peekle_usage::AccountUsage::new(
+            Box::new(peekle_usage::SecurityToolStore::for_current_user()),
+            VERSION,
+        )),
+        // Off still needs a provider: the bars render the reason rather than
+        // disappearing, so the user can see why they are empty.
+        UsageProviderKind::Fake | UsageProviderKind::Off => Arc::new(FakeUsage::default()),
     }
+}
+
+/// The background poll of tech.md 6.4.
+///
+/// It never starts before the user has granted Keychain access. Reading the
+/// Keychain is what raises the dialog, and rule 12 forbids this app from
+/// raising it on its own: only `request_usage_access` may.
+fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(EVERY).await;
+
+            let (enabled, granted, denied) = {
+                let config = state.lock_config();
+                (
+                    config.usage.enabled,
+                    config.usage.keychain_granted,
+                    config.usage.keychain_denied,
+                )
+            };
+            if !enabled || !granted || denied {
+                continue;
+            }
+
+            // The provider blocks on a network call, so it never runs on the
+            // async runtime: a slow answer must not hold up a hook.
+            let provider = Arc::clone(&state.usage_provider);
+            let Ok(snapshot) =
+                tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await
+            else {
+                continue;
+            };
+
+            state.set_usage(snapshot.clone());
+            if let Err(err) = handle.emit(events::USAGE, &snapshot) {
+                tracing::warn!(error = %err, "failed to emit usage");
+            }
+        }
+    });
 }
 
 /// A port already in use must not take the app down: hooks stop arriving, the

@@ -84,6 +84,11 @@ pub struct UsageConfig {
     pub provider: UsageProviderKind,
     /// Set by the app when the user denies Keychain access. Cleared by hand.
     pub keychain_denied: bool,
+    /// Set by the app after one successful read from `request_usage_access`.
+    /// The background poll stays off until then, because reading the Keychain
+    /// before a grant would raise the dialog the app is forbidden to raise on
+    /// its own. tech.md 6.4 and rule 12.
+    pub keychain_granted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +141,7 @@ impl Default for UsageConfig {
             enabled: true,
             provider: UsageProviderKind::Account,
             keychain_denied: false,
+            keychain_granted: false,
         }
     }
 }
