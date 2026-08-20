@@ -26,10 +26,21 @@
   aria-label="{labels[status]}{usageLabel}. Open the session list"
   onclick={onopen}
 >
+  <!-- Two strokes at rest. While the agent works they turn in steps through
+       `/`, `|`, `\`, `-`, half a phase apart: the spinner every console
+       has. tech.md 6.12. -->
   <span class="glyph">
     <svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
       <path
-        d="M4 10.6L6.9 1.4M9.1 10.6L12 1.4"
+        class="bar"
+        d="M4 10.6L6.9 1.4"
+        stroke="currentColor"
+        stroke-width="2.2"
+        stroke-linecap="round"
+      />
+      <path
+        class="bar second"
+        d="M9.1 10.6L12 1.4"
         stroke="currentColor"
         stroke-width="2.2"
         stroke-linecap="round"
@@ -92,6 +103,28 @@
 
   .mark[data-status='working'] .glyph {
     opacity: 1;
+  }
+
+  /* Eight steps around the circle, so each stroke lands on `/`, `|`, `\` and
+     `-` in turn. Transform only: nothing here repaints what is under the
+     window. tech.md 6.10. */
+  .mark[data-status='working'] .bar {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: turn 1s steps(8, end) infinite;
+  }
+
+  .mark[data-status='working'] .second {
+    animation-delay: -0.5s;
+  }
+
+  @keyframes turn {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Waiting is the one state that costs the user time, so it is the one state
@@ -167,7 +200,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .mark[data-status='waiting'] .glyph {
+    .mark[data-status='waiting'] .glyph,
+    .mark[data-status='working'] .bar {
       animation: none;
     }
   }

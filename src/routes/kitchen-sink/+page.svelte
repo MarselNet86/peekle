@@ -59,6 +59,16 @@
   const NOTCH = { width: 200, height: 32 };
 
   // Every EntryState, including the one only the Stop sweep can produce.
+  // Everything a message can carry: inline code, bold, and a fenced block.
+  const formatted: FeedEntry = {
+    id: 'k0',
+    kind: 'Assistant',
+    text: 'Ran `cargo test` and it is **green**.\n\n```rust\nlet ok = true;\n```',
+    tool: null,
+    state: 'Ok',
+    at: 0,
+  };
+
   const entries: FeedEntry[] = [
     { id: 'e0', kind: 'User', text: 'ship the feed slice', tool: null, state: 'Ok', at: 0 },
     {
@@ -172,6 +182,15 @@
           <RestMark status="idle" {pct} onopen={() => {}} />
         </div>
       {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>Message formatting</h2>
+    <!-- The three things a turn actually uses, on the island's own black. -->
+    <div class="stage messages">
+      <FeedRow entry={formatted} />
+      <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
     </div>
   </section>
 
@@ -363,6 +382,12 @@
 
   /* The mark only ever sits on the island fill, so anything else here would
      lie about its contrast. */
+  .messages {
+    background: var(--notch);
+    padding: 10px;
+    height: auto;
+  }
+
   .mark-stage {
     width: 96px;
     height: 26px;
