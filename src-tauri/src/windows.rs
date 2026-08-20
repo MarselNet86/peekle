@@ -151,6 +151,13 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
     let takes_clicks = view.takes_clicks();
     let opening = !matches!(view, IslandView::Collapsed);
 
+    // An island that opens on a stale snapshot draws it and refreshes behind
+    // itself. It never waits: a slow network must not delay the shape.
+    // tech.md 6.4.
+    if opening {
+        refresh_stale_usage(app, &state);
+    }
+
     on_main(app, "view", move |handle| {
         if let Err(err) = panel::set_takes_clicks(handle, takes_clicks) {
             tracing::error!(error = %err, "failed to switch cursor events");
@@ -169,6 +176,36 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
             send_notch(handle);
         }
     });
+}
+
+/// How old a snapshot may be when the island opens before it is worth asking
+/// again. tech.md 6.4.
+const STALE_AFTER_MS: i64 = 60_000;
+
+/// Asks for fresh numbers behind an opening island, and only if the last ones
+/// are old. Silent when usage may not be fetched at all: rule 12 keeps every
+/// automatic path off the Keychain until the user has granted it once.
+fn refresh_stale_usage(app: &AppHandle, state: &Arc<AppState>) {
+    if !state.may_fetch_usage() {
+        return;
+    }
+    let age = now_ms() - state.usage().fetched_at;
+    if age < STALE_AFTER_MS {
+        return;
+    }
+
+    let app = app.clone();
+    let state = Arc::clone(state);
+    tauri::async_runtime::spawn(async move {
+        crate::commands::fetch_usage(&app, &state).await;
+    });
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
 }
 
 /// How long the shape holds after an answer before collapsing. tech.md S3.

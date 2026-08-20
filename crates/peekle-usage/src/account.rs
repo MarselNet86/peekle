@@ -179,12 +179,24 @@ impl AccountUsage {
 
         match response {
             Ok(mut response) => {
-                let raw = response.body_mut().read_to_string().map_err(|_| None)?;
-                let body: Value = serde_json::from_str(&raw).map_err(|_| None)?;
+                let raw = response.body_mut().read_to_string().map_err(|err| {
+                    tracing::warn!(error = %err, "could not read the usage body");
+                    None
+                })?;
+                let body: Value = serde_json::from_str(&raw).map_err(|err| {
+                    tracing::warn!(error = %err, bytes = raw.len(), "usage body is not json");
+                    None
+                })?;
                 Ok(snapshot_from(&body, now_ms()))
             }
             Err(ureq::Error::StatusCode(code)) => Err(Some(code)),
-            Err(_) => Err(None),
+            Err(err) => {
+                // The error carries the endpoint and the transport failure,
+                // never a header, so the token cannot ride along. Swallowing
+                // it left `could not reach the API` with nothing behind it.
+                tracing::warn!(error = %err, endpoint = ENDPOINT, "usage request failed");
+                Err(None)
+            }
         }
     }
 }

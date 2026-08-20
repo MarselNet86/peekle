@@ -130,7 +130,7 @@ pub async fn refresh_usage(
     Ok(fetch_usage(&app, &state).await)
 }
 
-async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
+pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
     let provider = Arc::clone(&state.usage_provider);
     let snapshot = match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
         Ok(snapshot) => snapshot,
@@ -161,13 +161,17 @@ pub async fn request_usage_access(
     let snapshot = fetch_usage(&app, &state).await;
 
     {
+        use peekle_core::types::UsageUnavailable;
+
         let mut config = state.lock_config();
         match snapshot.reason {
-            Some(peekle_core::types::UsageUnavailable::Denied) => {
-                config.usage.keychain_denied = true;
-            }
-            // Anything that is not a refusal means the read itself went
-            // through, so the dialog will not come back.
+            Some(UsageUnavailable::Denied) => config.usage.keychain_denied = true,
+            // A network failure says nothing about the Keychain: the read may
+            // never have happened. Recording a grant on it would start the
+            // background poll on a permission nobody confirmed.
+            Some(UsageUnavailable::Network) => {}
+            // Everything else means the read itself went through, entry there
+            // or not, so the dialog will not come back.
             _ => {
                 config.usage.keychain_denied = false;
                 config.usage.keychain_granted = true;

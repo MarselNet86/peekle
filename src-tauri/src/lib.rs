@@ -12,7 +12,7 @@ use peekle_core::config::UsageProviderKind;
 use peekle_core::config::{self, Config};
 use peekle_server::routes::ServerState;
 use peekle_usage::{FakeUsage, UsageProvider};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -179,42 +179,26 @@ fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
 /// raising it on its own: only `request_usage_access` may.
 fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
     const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+    /// While the network is down, come back sooner. A user who lost wifi in a
+    /// tunnel should not stare at dashes for five minutes after it returns.
+    const RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(EVERY).await;
-
-            let (enabled, granted, denied, from_account) = {
-                let config = state.lock_config();
-                (
-                    config.usage.enabled,
-                    config.usage.keychain_granted,
-                    config.usage.keychain_denied,
-                    config.usage.provider == UsageProviderKind::Account,
-                )
-            };
-            // The Keychain gate belongs to the account provider and to nothing
-            // else. A fake never touches the Keychain, so holding it back on a
-            // permission it does not need would leave dev with no numbers at
-            // all, which is the opposite of what section 7 promises.
-            if !enabled || (from_account && (!granted || denied)) {
-                continue;
-            }
-
-            // The provider blocks on a network call, so it never runs on the
-            // async runtime: a slow answer must not hold up a hook.
-            let provider = Arc::clone(&state.usage_provider);
-            let Ok(snapshot) =
-                tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await
-            else {
-                continue;
+            // Fetch first and sleep after, so a granted account has numbers a
+            // second after launch rather than five minutes into the session.
+            let wait = if state.may_fetch_usage() {
+                let snapshot = commands::fetch_usage(&handle, &state).await;
+                match snapshot.reason {
+                    Some(peekle_core::types::UsageUnavailable::Network) => RETRY,
+                    _ => EVERY,
+                }
+            } else {
+                EVERY
             };
 
-            state.set_usage(snapshot.clone());
-            if let Err(err) = handle.emit(events::USAGE, &snapshot) {
-                tracing::warn!(error = %err, "failed to emit usage");
-            }
+            tokio::time::sleep(wait).await;
         }
     });
 }

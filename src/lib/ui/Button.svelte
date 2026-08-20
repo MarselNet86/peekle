@@ -6,7 +6,7 @@
     onclick,
   }: {
     label: string;
-    variant?: 'primary' | 'ghost';
+    variant?: 'primary' | 'ghost' | 'connect';
     disabled?: boolean;
     onclick?: () => void;
   } = $props();
@@ -49,6 +49,20 @@
   }
 
   button[data-variant='primary']:hover:not(:disabled) {
+    color: var(--notch);
+    filter: brightness(1.08);
+  }
+
+  /* Connecting is the one action that gets the product's own green, the same
+     one the sign in the resting mark wears. tech.md 9. */
+  button[data-variant='connect'] {
+    color: var(--notch);
+    background: var(--brand);
+    border-color: var(--brand);
+    font-weight: 600;
+  }
+
+  button[data-variant='connect']:hover:not(:disabled) {
     color: var(--notch);
     filter: brightness(1.08);
   }
