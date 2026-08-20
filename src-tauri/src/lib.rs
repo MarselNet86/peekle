@@ -185,15 +185,20 @@ fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
         loop {
             tokio::time::sleep(EVERY).await;
 
-            let (enabled, granted, denied) = {
+            let (enabled, granted, denied, from_account) = {
                 let config = state.lock_config();
                 (
                     config.usage.enabled,
                     config.usage.keychain_granted,
                     config.usage.keychain_denied,
+                    config.usage.provider == UsageProviderKind::Account,
                 )
             };
-            if !enabled || !granted || denied {
+            // The Keychain gate belongs to the account provider and to nothing
+            // else. A fake never touches the Keychain, so holding it back on a
+            // permission it does not need would leave dev with no numbers at
+            // all, which is the opposite of what section 7 promises.
+            if !enabled || (from_account && (!granted || denied)) {
                 continue;
             }
 
