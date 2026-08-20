@@ -2,8 +2,9 @@
 //! Step 3 of tech.md 6.4, driven by the body a live response actually carried.
 //! The values here are the ones recorded in core v18.
 
+use peekle_core::time::iso_seconds;
 use peekle_core::types::{UsageSource, UsageUnavailable, UsageWindow};
-use peekle_usage::account::{iso_seconds, snapshot_from};
+use peekle_usage::account::snapshot_from;
 use serde_json::{json, Value};
 
 /// Exactly what the probe saw, including the fields we deliberately ignore.
