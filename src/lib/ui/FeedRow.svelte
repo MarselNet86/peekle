@@ -1,18 +1,17 @@
 <script lang="ts">
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
-  import MessageBlock from './MessageBlock.svelte';
 
   let { entry }: { entry: FeedEntry } = $props();
 
-  // What the agent said is prose and wants room; everything else is one line.
-  // tech.md S6.
-  let collapsed = $state(true);
+  const spoken = $derived(entry.kind === 'User' || entry.kind === 'Assistant');
 </script>
 
-{#if entry.kind === 'Assistant'}
-  <div class="row block" data-kind={entry.kind}>
-    <span class="dot" data-state={entry.state}></span>
-    <MessageBlock text={entry.text} bind:collapsed />
+<!-- What a person said and what the agent answered are messages: they wrap,
+     they carry their whole text, and the user's own turn is the green one. A
+     tool call stays a single quiet line. tech.md 9 and 6.12. -->
+{#if spoken}
+  <div class="line" data-kind={entry.kind}>
+    <div class="bubble">{entry.text}</div>
   </div>
 {:else}
   <div class="row" data-kind={entry.kind}>
@@ -25,6 +24,41 @@
 {/if}
 
 <style>
+  .line {
+    display: flex;
+    padding: 3px 2px;
+  }
+
+  .bubble {
+    max-width: 82%;
+    padding: 7px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    /* The whole message, wrapped. Cutting it with an ellipsis was the reason
+       the dialogue could not be read at all. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* The user's own turn, in the product's green, on the side a messenger puts
+     it. tech.md 9. */
+  .line[data-kind='User'] {
+    justify-content: flex-end;
+  }
+
+  .line[data-kind='User'] .bubble {
+    background: var(--brand);
+    color: var(--notch);
+    border-bottom-right-radius: 4px;
+  }
+
+  .line[data-kind='Assistant'] .bubble {
+    background: var(--surface);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -68,32 +102,9 @@
     flex: 1;
     min-width: 0;
     font-size: 13px;
-    color: var(--text);
+    color: var(--text-dim);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  /* The user's own turn is the anchor of the feed, so it carries full weight
-     while the tool calls under it stay quiet. */
-  .row[data-kind='User'] .text {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .row[data-kind='Tool'] .text {
-    color: var(--text-dim);
-  }
-
-  /* Prose needs its own height, so this row stops pretending to be a line. */
-  .row.block {
-    height: auto;
-    align-items: flex-start;
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-
-  .row.block .dot {
-    margin-top: 6px;
   }
 </style>
