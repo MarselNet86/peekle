@@ -6,16 +6,9 @@
   let { status, pct, onopen }: { status: RestStatus; pct: number | null; onopen: () => void } =
     $props();
 
-  const RADIUS = 6;
-  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
   const known = $derived(pct !== null);
   const value = $derived(known ? clampPct(pct as number) : 0);
   const tone = $derived(usageTone(value));
-  // The ring runs anticlockwise from twelve o'clock, so a full window reads as
-  // a closed circle rather than as an arc that stopped somewhere.
-  const dash = $derived(`${(value / 100) * CIRCUMFERENCE} ${CIRCUMFERENCE}`);
-
   const labels: Record<RestStatus, string> = {
     idle: 'Peekle is running',
     working: 'Claude is working',
@@ -44,24 +37,13 @@
     </svg>
   </span>
 
-  <span class="ring" data-known={known}>
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-      <circle cx="8" cy="8" r={RADIUS} fill="none" stroke="var(--hairline)" stroke-width="2" />
-      {#if known}
-        <circle
-          cx="8"
-          cy="8"
-          r={RADIUS}
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-dasharray={dash}
-          transform="rotate(-90 8 8)"
-          data-tone={tone}
-        />
-      {/if}
-    </svg>
+  <!-- Drawn in CSS rather than as an svg: an inline svg inside this button
+       picks up a box in WebKit that no rule of ours asks for, and a ring is a
+       gradient and a mask anyway. -->
+  <span class="ring" data-tone={known ? tone : undefined} style:--pct={value}>
+    {#if known}
+      <span class="fill"></span>
+    {/if}
   </span>
 </button>
 
@@ -89,8 +71,8 @@
     outline: none;
   }
 
-  /* The click belongs to the button, never to a child that WebKit can focus. */
-  .mark svg {
+  /* The click belongs to the button, never to a child. */
+  .mark span {
     pointer-events: none;
   }
 
@@ -123,20 +105,40 @@
   }
 
   .ring {
-    display: flex;
+    position: relative;
+    box-sizing: border-box;
+    width: 15px;
+    height: 15px;
+    border: 2px solid var(--hairline);
+    border-radius: 50%;
     color: var(--accent);
   }
 
   /* The same four thresholds UsageBar draws, because two readouts of one
      number that disagree are worse than one of them missing. tech.md 9. */
-  .ring:has([data-tone='warn']) {
+  .ring[data-tone='warn'] {
     color: var(--warn);
   }
-  .ring:has([data-tone='orange']) {
+  .ring[data-tone='orange'] {
     color: var(--orange);
   }
-  .ring:has([data-tone='danger']) {
+  .ring[data-tone='danger'] {
     color: var(--danger);
+  }
+
+  /* The arc starts at twelve o'clock and the mask cuts the disc back to a
+     ring of the same width as the track it sits on. */
+  .fill {
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: conic-gradient(currentColor calc(var(--pct) * 1%), transparent 0);
+    -webkit-mask: radial-gradient(
+      closest-side,
+      transparent calc(100% - 2px),
+      #000 calc(100% - 2px)
+    );
+    mask: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
   }
 
   @keyframes breathe {
