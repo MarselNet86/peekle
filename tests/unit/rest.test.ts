@@ -127,7 +127,7 @@ describe('closing an open island with a click', () => {
 });
 
 describe('the limit ring', () => {
-  const ring = (container: HTMLElement) => container.querySelector('.ring[data-tone]');
+  const ring = (container: HTMLElement) => container.querySelector('.dial[data-tone]');
 
   it('takes its colour from the thresholds UsageBar uses', () => {
     for (const [pct, tone] of [
@@ -152,8 +152,8 @@ describe('the limit ring', () => {
     });
 
     expect(ring(container)).toBeNull();
-    expect(container.querySelector('.ring')).toBeInstanceOf(HTMLElement);
-    expect(container.querySelector('.ring .fill')).toBeNull();
+    expect(container.querySelector('.dial')).toBeInstanceOf(HTMLElement);
+    expect(container.querySelector('.dial .fill')).toBeNull();
   });
 
   it('says the number out loud, so the colour is not the only signal', () => {

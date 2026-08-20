@@ -37,13 +37,15 @@
     </svg>
   </span>
 
-  <!-- Drawn in CSS rather than as an svg: an inline svg inside this button
-       picks up a box in WebKit that no rule of ours asks for, and a ring is a
-       gradient and a mask anyway. -->
-  <span class="ring" data-tone={known ? tone : undefined} style:--pct={value}>
+  <!-- Never call this `dial` a `ring`: Tailwind owns that class name and paints
+       its own box-shadow over anything wearing it. Svelte scoping does not save
+       you, the element still carries the bare class. -->
+  <span class="dial" data-tone={known ? tone : undefined} style:--pct={value}>
+    <span class="track"></span>
     {#if known}
       <span class="fill"></span>
     {/if}
+    <span class="hole"></span>
   </span>
 </button>
 
@@ -104,41 +106,54 @@
     opacity: 1;
   }
 
-  .ring {
+  .dial {
     position: relative;
-    box-sizing: border-box;
     width: 15px;
     height: 15px;
-    border: 2px solid var(--hairline);
-    border-radius: 50%;
     color: var(--accent);
   }
 
   /* The same four thresholds UsageBar draws, because two readouts of one
      number that disagree are worse than one of them missing. tech.md 9. */
-  .ring[data-tone='warn'] {
+  .dial[data-tone='warn'] {
     color: var(--warn);
   }
-  .ring[data-tone='orange'] {
+  .dial[data-tone='orange'] {
     color: var(--orange);
   }
-  .ring[data-tone='danger'] {
+  .dial[data-tone='danger'] {
     color: var(--danger);
   }
 
-  /* The arc starts at twelve o'clock and the mask cuts the disc back to a
-     ring of the same width as the track it sits on. */
-  .fill {
+  .track,
+  .fill,
+  .hole {
     position: absolute;
-    inset: -2px;
     border-radius: 50%;
+  }
+
+  /* The empty dial. Dimmed rather than hairline: that token is meant for one
+     pixel separators and disappears at two pixels on pure black. */
+  .track {
+    inset: 0;
+    box-sizing: border-box;
+    border: 2px solid var(--text-dim);
+    opacity: 0.3;
+  }
+
+  /* The arc starts at twelve o'clock and runs clockwise. It is a full disc cut
+     back by the hole rather than a mask: masks are the one part of this that
+     the app webview renders differently from every browser we test in. */
+  .fill {
+    inset: 0;
     background: conic-gradient(currentColor calc(var(--pct) * 1%), transparent 0);
-    -webkit-mask: radial-gradient(
-      closest-side,
-      transparent calc(100% - 2px),
-      #000 calc(100% - 2px)
-    );
-    mask: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  }
+
+  /* The island fill is exactly black and fully opaque (tech.md 9), so punching
+     the middle out with it is the same thing as punching a hole. */
+  .hole {
+    inset: 2px;
+    background: var(--notch);
   }
 
   @keyframes breathe {
