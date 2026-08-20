@@ -6,7 +6,7 @@
   import { openList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { feedWindow } from '$lib/logic/feed';
-  import { restStatus } from '$lib/logic/rest';
+  import { clickPutsAway, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
@@ -66,6 +66,25 @@
     return () => {
       void stop.then((offs) => offs.forEach((off) => off()));
     };
+  });
+
+  // An open island takes the mouse on the whole 720 by 560 window, so a click
+  // beside the shape is already lost to whatever is underneath. Spending it on
+  // putting the island away is the one useful thing left to do with it.
+  //
+  // A pending request is left alone: rule 10 wants a blocking hook resolved by
+  // an answer, a dismissal or a timeout, never by a stray click. tech.md 6.7.
+  $effect(() => {
+    if (island.view === 'Collapsed' || island.prompt) return;
+
+    const dismiss = (event: MouseEvent) => {
+      if (clickPutsAway(island.view, island.prompt !== null, event.target)) {
+        commands.setView('Collapsed');
+      }
+    };
+
+    window.addEventListener('click', dismiss);
+    return () => window.removeEventListener('click', dismiss);
   });
 
   // Rust records what the shape actually measured and changes nothing with it:
