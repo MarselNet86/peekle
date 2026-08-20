@@ -36,6 +36,9 @@
   // The mark is all the user sees while the island rests, so it carries the
   // one bit worth acting on. tech.md 6.7.
   const resting = $derived(restStatus(feed.sessions));
+  // The ring on the mark and the 5h bar inside read the same number, so they
+  // come from the same place. tech.md 6.7.
+  const hourWindow = $derived(usage.bars[0]?.pct ?? null);
 
   // The field is live only while a session is actually waiting on an answer.
   // Outside that there is nowhere to deliver the text, and a field that looks
@@ -100,7 +103,7 @@
 <div class="island" bind:this={host}>
   <Shape view={island.view} notch={island.notch}>
     {#snippet rest()}
-      <RestMark status={resting} onopen={() => openList()} />
+      <RestMark status={resting} pct={hourWindow} onopen={() => openList()} />
     {/snippet}
 
     {#if island.view === 'Pill' && island.toast}

@@ -14,17 +14,24 @@ export const WINDOW = { width: 720, height: 560 } as const;
 export const FALLBACK_NOTCH = { width: 200, height: 0 } as const;
 
 /**
- * How far the collapsed island hangs below the notch. Those pixels are the
- * only visible sign that Peekle is running, and the only place a collapsed
- * island takes a click. tech.md 6.7.
+ * How far the collapsed island hangs below the notch. tech.md 6.7.
  */
 export const REST_DROP = 14;
+
+/**
+ * How far it overhangs the notch on each side.
+ *
+ * A notch is the absence of pixels, so anything drawn across its width cannot
+ * be seen at all. The overhangs are the real pixels beside the cutout, and
+ * they are what carries the mark. tech.md 6.7.
+ */
+export const REST_SIDE = 38;
 
 /**
  * The mark on a display with no bezel to hang from. Stretching it to
  * `FALLBACK_NOTCH` would lay a black bar across the middle of the menu bar.
  */
-export const REST_PILL = { width: 46, height: 16 } as const;
+export const REST_PILL = { width: 78, height: 20 } as const;
 
 export interface Notch {
   width: number;
@@ -69,7 +76,7 @@ export function shapeBounds(view: IslandView, notch: Notch): ShapeBounds {
   const bounds =
     view === 'Collapsed'
       ? height > 0
-        ? { width, height: height + REST_DROP, radius: 10 }
+        ? { width: width + 2 * REST_SIDE, height: height + REST_DROP, radius: 12 }
         : { width: REST_PILL.width, height: REST_PILL.height, radius: REST_PILL.height / 2 }
       : view === 'Pill'
         ? { width: 420, height: height + 44, radius: 20 }

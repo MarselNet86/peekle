@@ -11,7 +11,7 @@ import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 
 import { restStatus } from '$lib/logic/rest';
-import { REST_DROP, REST_PILL, shapeBounds } from '$lib/logic/shape';
+import { REST_DROP, REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
 import RestMark from '$lib/ui/RestMark.svelte';
 import Shape from '$lib/ui/Shape.svelte';
 import type { IslandView } from '$lib/types/generated/IslandView';
@@ -53,10 +53,12 @@ describe('the status the resting mark carries', () => {
 });
 
 describe('the collapsed shape', () => {
-  it('drops below the notch so there is something to see and to hit', () => {
+  /// A notch is the absence of pixels, so a mark drawn across its width cannot
+  /// be seen at all. The overhang is the whole point. tech.md 6.7.
+  it('overhangs the notch on both sides, where the pixels actually are', () => {
     const bounds = shapeBounds('Collapsed', { width: 200, height: 32 });
+    expect(bounds.width).toBe(200 + 2 * REST_SIDE);
     expect(bounds.height).toBe(32 + REST_DROP);
-    expect(bounds.width).toBe(200);
   });
 
   it('floats a small pill on a display with no bezel to hang from', () => {
@@ -69,7 +71,7 @@ describe('the collapsed shape', () => {
 describe('RestMark', () => {
   it('opens the session list on a click', async () => {
     const onopen = vi.fn();
-    render(RestMark, { props: { status: 'idle', onopen } });
+    render(RestMark, { props: { status: 'idle', pct: 12, onopen } });
 
     await userEvent.click(screen.getByRole('button'));
     expect(onopen).toHaveBeenCalledOnce();
@@ -77,10 +79,49 @@ describe('RestMark', () => {
 
   it('names the status it is showing, so the colour is not the only signal', () => {
     for (const status of ['idle', 'working', 'waiting'] as const) {
-      const { container, unmount } = render(RestMark, { props: { status, onopen: () => {} } });
+      const { container, unmount } = render(RestMark, {
+        props: { status, pct: 12, onopen: () => {} },
+      });
       expect(container.querySelector('.mark')?.getAttribute('data-status')).toBe(status);
       unmount();
     }
+  });
+});
+
+describe('the limit ring', () => {
+  const ring = (container: HTMLElement) => container.querySelector('.ring [data-tone]');
+
+  it('takes its colour from the thresholds UsageBar uses', () => {
+    for (const [pct, tone] of [
+      [12, 'accent'],
+      [62, 'warn'],
+      [81, 'orange'],
+      [96, 'danger'],
+    ] as [number, string][]) {
+      const { container, unmount } = render(RestMark, {
+        props: { status: 'idle', pct, onopen: () => {} },
+      });
+      expect(ring(container)?.getAttribute('data-tone')).toBe(tone);
+      unmount();
+    }
+  });
+
+  /// The numbers come off undocumented headers, so an unknown one draws an
+  /// empty ring. A zero would be a claim nobody made. tech.md R-3.
+  it('draws nothing at all rather than a zero it was never told', () => {
+    const { container } = render(RestMark, {
+      props: { status: 'idle', pct: null, onopen: () => {} },
+    });
+
+    expect(ring(container)).toBeNull();
+    expect(container.querySelector('.ring')).toBeInstanceOf(HTMLElement);
+  });
+
+  it('says the number out loud, so the colour is not the only signal', () => {
+    render(RestMark, { props: { status: 'waiting', pct: 62, onopen: () => {} } });
+    expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(
+      /waiting on you, 62% of the 5h window used/,
+    );
   });
 });
 

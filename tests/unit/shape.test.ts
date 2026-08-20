@@ -11,6 +11,7 @@ import {
   readNotch,
   REST_DROP,
   REST_PILL,
+  REST_SIDE,
   shapeBounds,
   WINDOW,
 } from '$lib/logic/shape';
@@ -64,13 +65,13 @@ describe('shape bounds', () => {
     );
   });
 
-  it('collapses to the width of the notch itself, never wider', () => {
+  it('rests around the notch it was measured from, never adrift of it', () => {
     fc.assert(
       fc.property(fc.double({ min: 1, max: 400, noNaN: true }), (width) => {
         const bounds = shapeBounds('Collapsed', { width, height: 32 });
-        expect(bounds.width).toBeCloseTo(width);
-        // The drop below the bezel is what carries the mark, and it is the
-        // only clickable part of a resting island. tech.md 6.7.
+        // Wider than the cutout on purpose: the overhangs are the only pixels
+        // a resting island has to draw on. tech.md 6.7.
+        expect(bounds.width).toBeCloseTo(width + 2 * REST_SIDE);
         expect(bounds.height).toBeCloseTo(32 + REST_DROP);
       }),
     );
