@@ -5,7 +5,7 @@
   import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
   import { openList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
-  import { feedWindow } from '$lib/logic/feed';
+  import { scrollState } from '$lib/logic/feed';
   import { clickPutsAway, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -30,9 +30,43 @@
     const id = sessionOf(island.view);
     return id ? feed.card(id) : undefined;
   });
-  const rows = $derived(feedWindow(current?.entries ?? []));
+  const rows = $derived(current?.entries ?? []);
   const listing = $derived(island.view === 'Sessions');
-  const cards = $derived(feedWindow(feed.sessions));
+  const cards = $derived(feed.sessions);
+
+  // The feed scrolls for real, so where it stands is a fact about the DOM
+  // rather than about the number of rows. tech.md 6.12.
+  let scroller = $state<HTMLElement | null>(null);
+  let atBottom = $state(true);
+  let showHint = $state(false);
+
+  function readScroll() {
+    if (!scroller) return;
+    const state = scrollState(scroller.scrollTop, scroller.clientHeight, scroller.scrollHeight);
+    atBottom = state.atBottom;
+    showHint = state.showHint;
+  }
+
+  function toBottom(smooth = true) {
+    if (!scroller) return;
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  // Opening a session lands on the last message: a messenger that opens on the
+  // first one reads as broken. A new message follows the view down only if the
+  // user was already there, because dragging them off what they are reading is
+  // worse than making them press the hint. tech.md 6.12.
+  $effect(() => {
+    void island.view;
+    void rows.length;
+    if (!scroller) return;
+
+    const wasAtBottom = atBottom;
+    requestAnimationFrame(() => {
+      if (wasAtBottom) toBottom(false);
+      readScroll();
+    });
+  });
   // The mark is all the user sees while the island rests, so it carries the
   // one bit worth acting on. tech.md 6.7.
   const resting = $derived(restStatus(feed.sessions));
@@ -129,17 +163,17 @@
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
       <div class="feed">
-        <div class="rows">
-          {#each cards.visible as card (card.session.session_id)}
+        <div class="rows" bind:this={scroller} onscroll={readScroll}>
+          {#each cards as card (card.session.session_id)}
             <SessionRow {card} onopen={() => openSession(card.session.session_id)} />
           {/each}
           <!-- An empty list opened from the mark says so. Collapsing on the
                click the user just made reads as a broken island. tech.md S12. -->
-          {#if cards.visible.length === 0}
+          {#if cards.length === 0}
             <p class="empty">No sessions yet. Start Claude Code and it shows up here.</p>
           {/if}
         </div>
-        <ScrollHint visible={cards.showScrollHint} />
+        <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
         <div class="usage">
           <!-- Disconnected there are no numbers, and two rows of dashes under a
@@ -174,12 +208,12 @@
           </svg>
           <span>{current.session.project}</span>
         </button>
-        <div class="rows">
-          {#each rows.visible as entry (entry.id)}
+        <div class="rows" bind:this={scroller} onscroll={readScroll}>
+          {#each rows as entry (entry.id)}
             <FeedRow {entry} />
           {/each}
         </div>
-        <ScrollHint visible={rows.showScrollHint && !waiting} />
+        <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
         {#if permission}
           <div class="reply">
@@ -228,10 +262,14 @@
     box-sizing: border-box;
   }
 
+  /* The feed scrolls natively. Every row is in the markup: a window of six
+     was the reason the chevron did nothing. tech.md 6.12. */
   .rows {
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
   }
 
   /* The bars sit under the session list, where the eye lands after reading
