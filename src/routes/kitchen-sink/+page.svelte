@@ -15,6 +15,7 @@
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
+  import UsageDial from '$lib/ui/UsageDial.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
   import type { SessionCard } from '$lib/types/generated/SessionCard';
@@ -64,6 +65,7 @@
   const formatted: FeedEntry = {
     id: 'k0',
     kind: 'Assistant',
+    detail: null,
     text: 'Ran `cargo test` and it is **green**.\n\n```rust\nlet ok = true;\n```',
     tool: null,
     state: 'Ok',
@@ -71,10 +73,19 @@
   };
 
   const entries: FeedEntry[] = [
-    { id: 'e0', kind: 'User', text: 'ship the feed slice', tool: null, state: 'Ok', at: 0 },
+    {
+      id: 'e0',
+      kind: 'User',
+      detail: null,
+      text: 'ship the feed slice',
+      tool: null,
+      state: 'Ok',
+      at: 0,
+    },
     {
       id: 'e1',
       kind: 'Tool',
+      detail: null,
       text: 'cargo test --workspace',
       tool: 'Bash',
       state: 'Running',
@@ -83,15 +94,17 @@
     {
       id: 'e2',
       kind: 'Tool',
+      detail: null,
       text: 'crates/peekle-core/src/sessions.rs',
       tool: 'Read',
       state: 'Ok',
       at: 2,
     },
-    { id: 'e3', kind: 'Tool', text: 'exit 42', tool: 'Bash', state: 'Failed', at: 3 },
+    { id: 'e3', kind: 'Tool', detail: null, text: 'exit 42', tool: 'Bash', state: 'Failed', at: 3 },
     {
       id: 'e4',
       kind: 'Assistant',
+      detail: null,
       text: 'The sweep closes the row at the turn boundary.',
       tool: null,
       state: 'Ok',
@@ -192,6 +205,46 @@
     <div class="stage messages">
       <FeedRow entry={formatted} />
       <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
+    </div>
+  </section>
+
+  <section>
+    <h2>UsageDial</h2>
+    <div class="stage messages dials">
+      <UsageDial pct={null} label="5h" />
+      <UsageDial pct={18} label="5h" />
+      <UsageDial pct={64} label="5h" />
+      <UsageDial pct={82} label="7d" />
+      <UsageDial pct={97} label="7d" />
+    </div>
+  </section>
+
+  <section>
+    <h2>Objects with a body</h2>
+    <!-- A tool call and a thought, collapsed as the terminal shows them. -->
+    <div class="stage messages">
+      <FeedRow
+        entry={{
+          id: 'o0',
+          kind: 'Tool',
+          tool: 'Bash',
+          text: 'cargo test --workspace',
+          detail: '{\n  "command": "cargo test --workspace"\n}\n\ntest result: ok. 54 passed',
+          state: 'Ok',
+          at: 0,
+        }}
+      />
+      <FeedRow
+        entry={{
+          id: 'o1',
+          kind: 'Thought',
+          tool: null,
+          text: 'Thought for 12s',
+          detail: 'weighing two options',
+          state: 'Ok',
+          at: 0,
+        }}
+      />
     </div>
   </section>
 
@@ -388,6 +441,12 @@
 
   /* The mark only ever sits on the island fill, so anything else here would
      lie about its contrast. */
+  .dials {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
   .messages {
     background: var(--notch);
     padding: 10px;

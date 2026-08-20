@@ -16,6 +16,7 @@
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
+  import UsageDial from '$lib/ui/UsageDial.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
@@ -219,12 +220,20 @@
       </div>
     {:else if current}
       <div class="feed">
-        <button class="back" onclick={() => openList()} aria-label="Back to the session list">
-          <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
-            <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-          </svg>
-          <span>{current.session.project}</span>
-        </button>
+        <div class="head">
+          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+            <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+              <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <span>{current.session.project}</span>
+          </button>
+          <!-- The windows in miniature. The full bars stay in the list, where
+               there is room for them. tech.md 6.12. -->
+          <div class="dials">
+            <UsageDial pct={usage.bars[0]?.pct ?? null} label="5h" size={13} />
+            <UsageDial pct={usage.bars[1]?.pct ?? null} label="7d" size={13} />
+          </div>
+        </div>
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each rows as entry (entry.id)}
             <FeedRow {entry} />
@@ -236,7 +245,9 @@
           {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
-        {@render usage_bars()}
+        {#if usage.connectLabel}
+          {@render usage_bars()}
+        {/if}
 
         {#if permission}
           <div class="reply">
@@ -309,6 +320,21 @@
     padding: 10px 2px;
     color: var(--text-dim);
     font-size: 12px;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+  }
+
+  .dials {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 4px;
   }
 
   .back {

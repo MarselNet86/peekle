@@ -144,6 +144,9 @@ pub enum EntryKind {
     User,
     Assistant,
     Tool,
+    /// The agent reasoning with itself, collapsed to a marker. Claude Code
+    /// shows the same thing in the terminal. tech.md 6.11.
+    Thought,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -164,6 +167,9 @@ pub struct FeedEntry {
     pub text: String,
     /// Tool name, set for `EntryKind::Tool`.
     pub tool: Option<String>,
+    /// The body behind an expansion: the input and output of a tool call, or
+    /// the reasoning behind a `Thought`. tech.md 6.3.
+    pub detail: Option<String>,
     pub state: EntryState,
     /// unix ms
     #[ts(type = "number")]

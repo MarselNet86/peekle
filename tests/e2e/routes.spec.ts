@@ -72,6 +72,8 @@ test.describe('overlay routes', () => {
       'Shape',
       'RestMark',
       'Message formatting',
+      'UsageDial',
+      'Objects with a body',
       'TypingLine',
       'PromptInput',
       'OptionList',

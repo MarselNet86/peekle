@@ -40,7 +40,8 @@ def walk(node, key=None):
         # Ids, timestamps and paths stay: the parser reads them, and none of
         # them is the conversation.
         if key in {"sessionId", "uuid", "parentUuid", "timestamp", "cwd", "version",
-                   "gitBranch", "leafUuid", "requestId", "id", "model", "promptId"}:
+                   "gitBranch", "leafUuid", "requestId", "id", "model", "promptId",
+                   "tool_use_id", "signature"}:
             return node
         return redact(node)
     return node

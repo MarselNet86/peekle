@@ -5,6 +5,7 @@
  */
 
 import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -15,6 +16,7 @@ const entry = (over: Partial<FeedEntry> = {}): FeedEntry => ({
   kind: 'Tool',
   text: 'cargo test --workspace',
   tool: 'Bash',
+  detail: null,
   state: 'Running',
   at: 0,
   ...over,
@@ -77,5 +79,42 @@ describe('what the agent said last', () => {
     const { container } = render(FeedRow, { props: { entry: entry() } });
     expect(container.querySelector('.line')).toBeNull();
     expect(container.querySelector('.row')).toBeInstanceOf(HTMLElement);
+  });
+});
+
+describe('an object with a body', () => {
+  const call = entry({
+    kind: 'Tool',
+    tool: 'Bash',
+    text: 'cargo test',
+    detail: '{\n  "command": "cargo test"\n}\n\nok. 54 passed',
+  });
+
+  /// The terminal shows a collapsed line and opens it on demand. tech.md 6.12.
+  it('keeps its body hidden until it is asked for', async () => {
+    const { container } = render(FeedRow, { props: { entry: call } });
+
+    expect(container.querySelector('.detail')).toBeNull();
+    await userEvent.click(screen.getByRole('button'));
+    expect(container.querySelector('.detail')?.textContent).toContain('ok. 54 passed');
+
+    await userEvent.click(screen.getByRole('button'));
+    expect(container.querySelector('.detail')).toBeNull();
+  });
+
+  it('offers nothing to open when there is no body', () => {
+    render(FeedRow, { props: { entry: entry({ detail: null }) } });
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  it('draws a thought as its own marker', () => {
+    const { container } = render(FeedRow, {
+      props: {
+        entry: entry({ kind: 'Thought', tool: null, text: 'Thought for 12s', detail: 'weighing' }),
+      },
+    });
+
+    expect(container.querySelector('.object')?.getAttribute('data-kind')).toBe('Thought');
+    expect(screen.getByText('Thought for 12s')).toBeInTheDocument();
   });
 });

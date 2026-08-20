@@ -74,6 +74,11 @@ where
     let mut first_turn = String::new();
     let mut entries: Vec<FeedEntry> = Vec::new();
     let mut latest = 0i64;
+    // The timestamp of the record before this one, so a thought can report how
+    // long it took. Assigned on every iteration before it is read.
+    let mut previous;
+    // Where each open call sits in `entries`, so its result can find it.
+    let mut open_calls: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for line in lines {
         let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) else {
@@ -97,6 +102,7 @@ where
             .and_then(Value::as_str)
             .and_then(iso_ms)
             .unwrap_or(latest);
+        previous = if latest > 0 { latest } else { at };
         latest = latest.max(at);
 
         match record.get("type").and_then(Value::as_str) {
@@ -108,6 +114,38 @@ where
                 }
             }
             Some("user") => {
+                // A tool result wears the user's role. It belongs to the call
+                // that asked for it, not to the conversation. tech.md 6.11.
+                for block in &blocks_of(&record) {
+                    if block.get("type").and_then(Value::as_str) != Some("tool_result") {
+                        continue;
+                    }
+                    let Some(index) = block
+                        .get("tool_use_id")
+                        .and_then(Value::as_str)
+                        .and_then(|id| open_calls.remove(id))
+                    else {
+                        continue;
+                    };
+                    let Some(call) = entries.get_mut(index) else {
+                        continue;
+                    };
+
+                    let failed = block
+                        .get("is_error")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    call.state = if failed {
+                        EntryState::Failed
+                    } else {
+                        EntryState::Ok
+                    };
+                    if let Some(output) = result_text(block) {
+                        let body = call.detail.take().unwrap_or_default();
+                        call.detail = Some(truncate(&format!("{body}\n\n{output}"), TEXT_LIMIT));
+                    }
+                }
+
                 for text in texts_of(&record).into_iter().filter(|t| !is_synthetic(t)) {
                     if first_turn.is_empty() {
                         first_turn = truncate(&text, TITLE_LIMIT);
@@ -116,8 +154,43 @@ where
                 }
             }
             Some("assistant") => {
-                for text in texts_of(&record) {
-                    entries.push(entry(EntryKind::Assistant, text, at));
+                for block in &blocks_of(&record) {
+                    match block.get("type").and_then(Value::as_str) {
+                        Some("text") => {
+                            if let Some(text) = string_at(block, "text") {
+                                entries.push(entry(EntryKind::Assistant, text, at));
+                            }
+                        }
+                        // Collapsed to a marker with its own duration, exactly
+                        // as the terminal shows it. tech.md 6.11.
+                        Some("thinking") => {
+                            let seconds = ((at - previous).max(0) as f64 / 1000.0).round() as i64;
+                            let mut thought =
+                                entry(EntryKind::Thought, format!("Thought for {seconds}s"), at);
+                            thought.detail = string_at(block, "thinking");
+                            entries.push(thought);
+                        }
+                        Some("tool_use") => {
+                            let name = block
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or("tool")
+                                .to_string();
+                            let input = block.get("input");
+
+                            let mut call = entry(EntryKind::Tool, one_line(input), at);
+                            call.tool = Some(name);
+                            call.detail = input.map(pretty);
+                            // No result yet. A call whose result never arrives
+                            // stays this way, which is the truth about it.
+                            call.state = EntryState::Running;
+                            if let Some(id) = block.get("id").and_then(Value::as_str) {
+                                open_calls.insert(id.to_string(), entries.len());
+                            }
+                            entries.push(call);
+                        }
+                        _ => {}
+                    }
                 }
             }
             _ => {}
@@ -154,6 +227,68 @@ where
     })
 }
 
+/// The content blocks of a message, in order.
+fn blocks_of(record: &Value) -> Vec<Value> {
+    match record.get("message").and_then(|m| m.get("content")) {
+        Some(Value::Array(blocks)) => blocks.clone(),
+        Some(Value::String(text)) => {
+            vec![serde_json::json!({ "type": "text", "text": text })]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn string_at(block: &Value, key: &str) -> Option<String> {
+    let text = block.get(key)?.as_str()?;
+    (!text.trim().is_empty()).then(|| text.to_string())
+}
+
+/// A tool result is text, or a list of blocks that contain text.
+fn result_text(block: &Value) -> Option<String> {
+    match block.get("content") {
+        Some(Value::String(text)) => (!text.trim().is_empty()).then(|| text.clone()),
+        Some(Value::Array(parts)) => {
+            let joined: Vec<String> = parts.iter().filter_map(|p| string_at(p, "text")).collect();
+            (!joined.is_empty()).then(|| joined.join("\n"))
+        }
+        _ => None,
+    }
+}
+
+/// One line for the collapsed row: the command, the path, or whatever the tool
+/// was actually given, rather than the whole JSON.
+fn one_line(input: Option<&Value>) -> String {
+    const KEYS: &[&str] = &[
+        "command",
+        "file_path",
+        "path",
+        "pattern",
+        "query",
+        "prompt",
+        "url",
+    ];
+
+    let Some(Value::Object(map)) = input else {
+        return String::new();
+    };
+    for key in KEYS {
+        if let Some(text) = map.get(*key).and_then(Value::as_str) {
+            return truncate(text, 200);
+        }
+    }
+    truncate(
+        &serde_json::to_string(input.unwrap_or(&Value::Null)).unwrap_or_default(),
+        200,
+    )
+}
+
+fn pretty(input: &Value) -> String {
+    truncate(
+        &serde_json::to_string_pretty(input).unwrap_or_default(),
+        TEXT_LIMIT,
+    )
+}
+
 /// Every `text` block of a message, in order.
 ///
 /// `thinking` never comes back. It is the agent reasoning with itself, it was
@@ -182,6 +317,7 @@ fn entry(kind: EntryKind, text: String, at: i64) -> FeedEntry {
         kind,
         text: truncate(&text, TEXT_LIMIT),
         tool: None,
+        detail: None,
         // Nothing here is in flight: the file is a record of what already
         // happened.
         state: EntryState::Ok,
