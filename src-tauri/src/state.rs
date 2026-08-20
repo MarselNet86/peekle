@@ -25,6 +25,13 @@ pub struct AppState {
 
     enabled: AtomicBool,
     view: Mutex<IslandView>,
+    /// Bounds of the collapsed shape as the webview last measured them, in CSS
+    /// pixels. The resting mark is the only part of a collapsed island that
+    /// takes a click, and this is where its rectangle comes from. tech.md 6.7.
+    rest_bounds: Mutex<Option<(f64, f64)>>,
+    /// Whether the pointer is currently inside that rectangle. Held so the
+    /// tracker touches AppKit on the crossing only, not on every tick.
+    over_rest: AtomicBool,
     hotkey_ok: AtomicBool,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
@@ -46,6 +53,8 @@ impl AppState {
             usage_provider,
             enabled: AtomicBool::new(enabled),
             view: Mutex::new(IslandView::default()),
+            rest_bounds: Mutex::new(None),
+            over_rest: AtomicBool::new(false),
             hotkey_ok: AtomicBool::new(true),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -79,6 +88,20 @@ impl AppState {
         }
         *view = next;
         true
+    }
+
+    pub fn rest_bounds(&self) -> Option<(f64, f64)> {
+        *self.lock(&self.rest_bounds)
+    }
+
+    pub fn set_rest_bounds(&self, bounds: (f64, f64)) {
+        *self.lock(&self.rest_bounds) = Some(bounds);
+    }
+
+    /// Records where the pointer is and reports whether it crossed the edge.
+    /// Only a crossing is worth an AppKit call.
+    pub fn set_over_rest(&self, inside: bool) -> bool {
+        self.over_rest.swap(inside, Ordering::SeqCst) != inside
     }
 
     pub fn sessions(&self) -> Vec<SessionCard> {

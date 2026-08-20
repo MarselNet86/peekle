@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use peekle_core::island::rest_rect;
 use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -50,6 +51,66 @@ pub fn send_notch(app: &AppHandle) {
 
     if let Err(err) = app.emit_to(panel::ISLAND, events::NOTCH, payload) {
         tracing::warn!(error = %err, "failed to emit notch");
+    }
+}
+
+/// How often Rust asks where the pointer is while the island rests.
+///
+/// The webview cannot answer this: a window that ignores the cursor never sees
+/// a `mousemove`, so the only way to know the pointer reached the resting mark
+/// is to look. Ten times a second is under the threshold where a user notices
+/// the mark lighting up late, and the tick costs a rectangle test.
+const HOVER_TICK: Duration = Duration::from_millis(100);
+
+/// Hands the mouse to the island while the pointer is over the resting mark
+/// and takes it back the moment it leaves.
+///
+/// A collapsed island is a transparent 720 by 560 rectangle. Letting it keep
+/// the mouse would swallow every click in the top third of the screen, and
+/// letting it never take the mouse would make the mark impossible to press.
+/// tech.md 6.7.
+pub fn track_pointer(app: &AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(HOVER_TICK);
+        loop {
+            ticker.tick().await;
+            on_main(&handle, "hover", update_hover);
+        }
+    });
+}
+
+fn update_hover(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+
+    // Every other view takes the mouse outright, and `set_view` has already
+    // said so. Touching the flag here would fight it.
+    if state.view() != IslandView::Collapsed {
+        state.set_over_rest(false);
+        return;
+    }
+
+    // No measurement yet means no hotspot. Guessing one would eat clicks next
+    // to a mark the user cannot even see. tech.md 6.7.
+    let Some(bounds) = state.rest_bounds() else {
+        return;
+    };
+    let Ok((frame, scale)) = panel::island_frame(app) else {
+        return;
+    };
+    let Some(rect) = rest_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
+        return;
+    };
+    let Ok(pointer) = app.cursor_position() else {
+        return;
+    };
+
+    let inside = rect.contains((pointer.x, pointer.y));
+    if !state.set_over_rest(inside) {
+        return;
+    }
+    if let Err(err) = panel::set_takes_clicks(app, inside) {
+        tracing::error!(error = %err, "failed to switch cursor events for the rest mark");
     }
 }
 
