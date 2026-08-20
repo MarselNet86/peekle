@@ -9,6 +9,7 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
@@ -192,6 +193,11 @@
       <FeedRow entry={formatted} />
       <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
     </div>
+  </section>
+
+  <section>
+    <h2>TypingLine</h2>
+    <div class="stage messages"><TypingLine /></div>
   </section>
 
   <section>

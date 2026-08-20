@@ -102,27 +102,27 @@ describe('closing an open island with a click', () => {
 
   it('closes on a click beside the shape', () => {
     const { outside } = targets();
-    expect(clickPutsAway('Sessions', false, outside)).toBe(true);
-    expect(clickPutsAway({ Session: 'abc' }, false, null)).toBe(true);
+    expect(clickPutsAway('Sessions', outside)).toBe(true);
+    expect(clickPutsAway({ Session: 'abc' }, null)).toBe(true);
   });
 
   it('leaves a click on the shape alone, however deep it landed', () => {
     const { shape, inside } = targets();
-    expect(clickPutsAway('Sessions', false, shape)).toBe(false);
-    expect(clickPutsAway('Sessions', false, inside)).toBe(false);
+    expect(clickPutsAway('Sessions', shape)).toBe(false);
+    expect(clickPutsAway('Sessions', inside)).toBe(false);
   });
 
-  /// Rule 10: a blocking hook is resolved by an answer, a dismissal or a
-  /// timeout. A stray click is none of those.
-  it('never closes an island that is holding a request', () => {
+  /// Collapsing is not resolving. The hook stays pending either way, and rule
+  /// 10 is about who resolves it, not about who may hide a window.
+  it('closes even while a request is still waiting', () => {
     const { outside } = targets();
-    expect(clickPutsAway('Sessions', true, outside)).toBe(false);
-    expect(clickPutsAway({ Session: 'abc' }, true, outside)).toBe(false);
+    expect(clickPutsAway('Sessions', outside)).toBe(true);
+    expect(clickPutsAway({ Session: 'abc' }, outside)).toBe(true);
   });
 
   it('does nothing while the island is already resting', () => {
     const { outside } = targets();
-    expect(clickPutsAway('Collapsed', false, outside)).toBe(false);
+    expect(clickPutsAway('Collapsed', outside)).toBe(false);
   });
 });
 
