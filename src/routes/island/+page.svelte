@@ -4,6 +4,7 @@
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
   import { backToList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
+  import { createUsage } from '$lib/features/usage/usage.svelte';
   import { feedWindow } from '$lib/logic/feed';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -11,6 +12,7 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
+  import UsageBar from '$lib/ui/UsageBar.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
@@ -18,6 +20,7 @@
   // string, because a borderless webview reports no safe area of its own.
   const island = createIsland(typeof location === 'undefined' ? '' : location.search);
   const feed = createFeed();
+  const usage = createUsage();
 
   let host = $state<HTMLElement | null>(null);
 
@@ -48,7 +51,7 @@
   });
 
   $effect(() => {
-    const stop = Promise.all([island.start(), feed.start()]);
+    const stop = Promise.all([island.start(), feed.start(), usage.start()]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
     commands.windowReady('island');
@@ -101,6 +104,17 @@
           {/each}
         </div>
         <ScrollHint visible={cards.showScrollHint} />
+
+        <div class="usage">
+          {#each usage.bars as bar (bar.label)}
+            <UsageBar
+              label={bar.label}
+              pct={bar.pct}
+              resetsAt={bar.resetsAt}
+              reason={usage.reason}
+            />
+          {/each}
+        </div>
       </div>
     {:else if current}
       <div class="feed">
@@ -168,6 +182,15 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  /* The bars sit under the session list, where the eye lands after reading
+     what is running. They never gate the island opening: it draws on the last
+     snapshot and a fresh one arrives as an event. tech.md 6.4. */
+  .usage {
+    flex: none;
+    border-top: 1px solid var(--hairline);
+    padding-top: 6px;
   }
 
   .back {
