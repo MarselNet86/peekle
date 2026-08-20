@@ -245,6 +245,8 @@
     <h2>Button</h2>
     <div class="frame choices">
       <Button label="Continue" variant="primary" />
+      <Button label="Connect" variant="connect" />
+      <Button label="Connecting" variant="connect" disabled />
       <Button label="Finish" />
       <Button label="Finish" disabled />
     </div>
