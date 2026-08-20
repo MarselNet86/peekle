@@ -247,6 +247,7 @@
       <Button label="Continue" variant="primary" />
       <Button label="Connect" variant="connect" />
       <Button label="Connecting" variant="connect" disabled />
+      <Button label="Connect" variant="connect" wide />
       <Button label="Finish" />
       <Button label="Finish" disabled />
     </div>

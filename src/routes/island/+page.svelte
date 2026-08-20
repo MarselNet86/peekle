@@ -142,25 +142,27 @@
         <ScrollHint visible={cards.showScrollHint} />
 
         <div class="usage">
-          {#each usage.bars as bar (bar.label)}
-            <UsageBar
-              label={bar.label}
-              pct={bar.pct}
-              resetsAt={bar.resetsAt}
-              reason={usage.reason}
-            />
-          {/each}
-          <!-- The only control that raises the Keychain dialog, and only
-               because the user pressed it. tech.md 6.4 and rule 12. -->
+          <!-- Disconnected there are no numbers, and two rows of dashes under a
+               button say nothing the button does not already say. The only
+               control that raises the Keychain dialog, and only because the
+               user pressed it. tech.md 6.4 and rule 12. -->
           {#if usage.connectLabel}
-            <div class="grant">
-              <Button
-                label={usage.connecting ? 'Connecting' : usage.connectLabel}
-                variant="connect"
-                disabled={usage.connecting}
-                onclick={() => usage.connect()}
+            <Button
+              label={usage.connecting ? 'Connecting' : usage.connectLabel}
+              variant="connect"
+              disabled={usage.connecting}
+              wide
+              onclick={() => usage.connect()}
+            />
+          {:else}
+            {#each usage.bars as bar (bar.label)}
+              <UsageBar
+                label={bar.label}
+                pct={bar.pct}
+                resetsAt={bar.resetsAt}
+                reason={usage.reason}
               />
-            </div>
+            {/each}
           {/if}
         </div>
       </div>
@@ -238,12 +240,6 @@
   .usage {
     flex: none;
     border-top: 1px solid var(--hairline);
-    padding-top: 6px;
-  }
-
-  .grant {
-    display: flex;
-    justify-content: flex-end;
     padding-top: 6px;
   }
 
