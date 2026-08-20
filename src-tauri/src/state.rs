@@ -48,6 +48,24 @@ pub struct AppState {
     ready: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
+/// Whether usage may be fetched at all right now.
+///
+/// The Keychain half of this is rule 12: the account provider reads the
+/// Keychain, so nothing may fetch on its own until the user has granted it
+/// once. Every automatic path asks this first; only `request_usage_access`
+/// skips it, because there the user is the one asking.
+pub fn may_fetch_usage(usage: &peekle_core::config::UsageConfig) -> bool {
+    use peekle_core::config::UsageProviderKind;
+
+    if !usage.enabled || usage.provider == UsageProviderKind::Off {
+        return false;
+    }
+    if usage.provider != UsageProviderKind::Account {
+        return true;
+    }
+    usage.keychain_granted && !usage.keychain_denied
+}
+
 /// Why the bars are empty before anything has been fetched.
 ///
 /// The first snapshot cannot arrive until the user grants Keychain access, so
@@ -93,6 +111,11 @@ impl AppState {
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Whether an automatic path may fetch usage. tech.md 6.4 and rule 12.
+    pub fn may_fetch_usage(&self) -> bool {
+        may_fetch_usage(&self.lock_config().usage)
     }
 
     pub fn enabled(&self) -> bool {

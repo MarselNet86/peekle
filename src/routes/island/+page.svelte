@@ -152,9 +152,14 @@
           {/each}
           <!-- The only control that raises the Keychain dialog, and only
                because the user pressed it. tech.md 6.4 and rule 12. -->
-          {#if usage.needsGrant}
+          {#if usage.connectLabel}
             <div class="grant">
-              <Button label="Grant usage access" variant="ghost" onclick={() => usage.grant()} />
+              <Button
+                label={usage.connecting ? 'Connecting' : usage.connectLabel}
+                variant="connect"
+                disabled={usage.connecting}
+                onclick={() => usage.connect()}
+              />
             </div>
           {/if}
         </div>
