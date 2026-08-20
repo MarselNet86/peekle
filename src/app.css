@@ -4,6 +4,10 @@
    feature folder defines its own color, radius or blur. */
 :root {
   --surface: rgba(12, 12, 14, 0.72);
+  /* A message from the agent sits on the island's own black, where --surface
+     has no edge at all. This one does. */
+  --bubble: rgba(255, 255, 255, 0.07);
+  --code: #7ee787;
   /* Exactly black so the island is indistinguishable from the bezel. */
   --notch: #000;
   --hairline: rgba(255, 255, 255, 0.08);
@@ -28,6 +32,8 @@
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);
   --color-accent: var(--accent);
+  --color-bubble: var(--bubble);
+  --color-code: var(--code);
   --color-brand: var(--brand);
   --color-warn: var(--warn);
   --color-orange: var(--orange);

@@ -53,19 +53,32 @@
   }
 
   // Opening a session lands on the last message: a messenger that opens on the
-  // first one reads as broken. A new message follows the view down only if the
-  // user was already there, because dragging them off what they are reading is
-  // worse than making them press the hint. tech.md 6.12.
+  // first one reads as broken. Standing at the bottom is a fact about one feed,
+  // so switching feeds forgets it; carrying it over opens the next session
+  // wherever the last one happened to be. tech.md 6.12.
+  let shown = $state('');
+
   $effect(() => {
-    void island.view;
+    const id = JSON.stringify(island.view);
+    const switched = id !== shown;
+    shown = id;
+
     void rows.length;
+    void cards.length;
     if (!scroller) return;
 
-    const wasAtBottom = atBottom;
+    const follow = switched || atBottom;
+    // Twice: once for the rows, once after the spring has finished growing the
+    // shape around them. A single frame lands halfway up a still opening feed.
     requestAnimationFrame(() => {
-      if (wasAtBottom) toBottom(false);
+      if (follow) toBottom(false);
       readScroll();
     });
+    const settle = setTimeout(() => {
+      if (follow) toBottom(false);
+      readScroll();
+    }, 260);
+    return () => clearTimeout(settle);
   });
   // The mark is all the user sees while the island rests, so it carries the
   // one bit worth acting on. tech.md 6.7.

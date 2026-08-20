@@ -71,6 +71,7 @@ test.describe('overlay routes', () => {
     for (const heading of [
       'Shape',
       'RestMark',
+      'Message formatting',
       'PromptInput',
       'OptionList',
       'MessageBlock',
