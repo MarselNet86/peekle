@@ -1,6 +1,7 @@
 //! Property based tests for the pure logic of the core crate.
 //! tech.md section 10 names these: usage window math and the label classifier.
 
+use peekle_core::island::{rest_rect, Rect};
 use peekle_core::labels::classify;
 use peekle_core::types::{clamp_pct, UsageWindow, UsageWindowStat};
 use proptest::prelude::*;
@@ -50,5 +51,45 @@ proptest! {
     fn window_stat_accepts_any_utilization(fraction in proptest::num::f32::ANY) {
         let stat = UsageWindowStat::new(UsageWindow::FiveHour, fraction * 100.0, None);
         prop_assert!((0.0..=100.0).contains(&stat.used_pct));
+    }
+}
+
+proptest! {
+    /// The resting mark is the only part of a collapsed island that takes a
+    /// click. A rectangle outside the window would take clicks where nothing
+    /// is drawn, which is the failure the user notices and cannot explain.
+    #[test]
+    fn the_rest_mark_never_leaves_the_window(
+        w in 1.0f64..4000.0,
+        h in 1.0f64..4000.0,
+        x in -4000.0f64..4000.0,
+        y in -4000.0f64..4000.0,
+        mark_w in proptest::num::f64::ANY,
+        mark_h in proptest::num::f64::ANY,
+    ) {
+        let window = Rect::new(x, y, w, h);
+        let Some(rect) = rest_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+
+        prop_assert!(rect.x >= window.x);
+        prop_assert!(rect.y >= window.y);
+        prop_assert!(rect.x + rect.width <= window.x + window.width + f64::EPSILON);
+        prop_assert!(rect.y + rect.height <= window.y + window.height + f64::EPSILON);
+    }
+
+    /// Every point the hotspot claims has to be a point the window covers,
+    /// otherwise Rust hands the mouse to a window that draws nothing there.
+    #[test]
+    fn every_point_of_the_mark_is_a_point_of_the_window(
+        mark_w in 1.0f64..2000.0,
+        mark_h in 1.0f64..2000.0,
+        px in -100.0f64..900.0,
+        py in -100.0f64..800.0,
+    ) {
+        let window = Rect::new(0.0, 0.0, 720.0, 560.0);
+        let Some(rect) = rest_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+
+        if rect.contains((px, py)) {
+            prop_assert!(window.contains((px, py)));
+        }
     }
 }
