@@ -136,7 +136,7 @@
     <div class="stage">
       <Shape {view} notch={NOTCH}>
         {#snippet rest()}
-          <RestMark status="waiting" onopen={() => {}} />
+          <RestMark status="waiting" pct={62} onopen={() => {}} />
         {/snippet}
         <Toast text="Claude needs your input" tone="Neutral" badge={3} />
       </Shape>
@@ -160,7 +160,16 @@
     <div class="row">
       {#each ['idle', 'working', 'waiting'] as const as status (status)}
         <div class="mark-stage">
-          <RestMark {status} onopen={() => {}} />
+          <RestMark {status} pct={12} onopen={() => {}} />
+        </div>
+      {/each}
+    </div>
+    <!-- Every threshold of section 9, plus the unknown that draws an empty
+         ring rather than a zero. tech.md R-3. -->
+    <div class="row">
+      {#each [null, 12, 62, 81, 96] as pct (String(pct))}
+        <div class="mark-stage">
+          <RestMark status="idle" {pct} onopen={() => {}} />
         </div>
       {/each}
     </div>
@@ -352,8 +361,8 @@
   /* The mark only ever sits on the island fill, so anything else here would
      lie about its contrast. */
   .mark-stage {
-    width: 80px;
-    height: 22px;
+    width: 96px;
+    height: 26px;
     background: var(--notch);
     border-radius: 0 0 10px 10px;
   }
