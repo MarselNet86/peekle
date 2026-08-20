@@ -5,6 +5,8 @@
   let { entry }: { entry: FeedEntry } = $props();
 
   const spoken = $derived(entry.kind === 'User' || entry.kind === 'Assistant');
+  // Collapsed like the terminal shows it, opened by a click. tech.md 6.12.
+  let open = $state(false);
   // Parsed into segments and rendered as elements. Never `{@html}`: this text
   // comes out of an agent turn into a window over the whole screen.
   const parts = $derived(spoken ? blocks(entry.text) : []);
@@ -36,12 +38,30 @@
     </div>
   </div>
 {:else}
-  <div class="row" data-kind={entry.kind}>
-    <span class="dot" data-state={entry.state}></span>
-    {#if entry.tool}
-      <span class="tool">{entry.tool}</span>
+  <div class="object" data-kind={entry.kind}>
+    <button
+      class="row"
+      type="button"
+      disabled={!entry.detail}
+      aria-expanded={open}
+      onclick={() => (open = !open)}
+    >
+      <span class="dot" data-state={entry.state}></span>
+      {#if entry.tool}
+        <span class="tool">{entry.tool}</span>
+      {/if}
+      <span class="text">{entry.text}</span>
+      {#if entry.detail}
+        <span class="chevron" class:open aria-hidden="true">
+          <svg viewBox="0 0 8 12" width="7" height="10">
+            <path d="M1.5 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+        </span>
+      {/if}
+    </button>
+    {#if open && entry.detail}
+      <pre class="detail">{entry.detail}</pre>
     {/if}
-    <span class="text">{entry.text}</span>
   </div>
 {/if}
 
@@ -130,9 +150,62 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
     height: var(--row);
     padding: 0 4px;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
     min-width: 0;
+    cursor: pointer;
+  }
+
+  .row:disabled {
+    cursor: default;
+  }
+
+  /* No focus rings anywhere in the island. tech.md 9. */
+  .row:focus,
+  .row:focus-visible {
+    outline: none;
+  }
+
+  .row:hover:not(:disabled) .text {
+    color: var(--text);
+  }
+
+  .chevron {
+    flex: none;
+    color: var(--text-dim);
+    display: flex;
+    transition: transform 120ms ease-out;
+  }
+
+  .chevron.open {
+    transform: rotate(90deg);
+  }
+
+  /* The body of an object, as the terminal prints it. */
+  .detail {
+    margin: 0 4px 6px 18px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--hairline);
+    color: var(--text-dim);
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Reasoning is a marker, so it stays out of the way until asked for. */
+  .object[data-kind='Thought'] .text {
+    font-style: italic;
   }
 
   .dot {

@@ -1,20 +1,19 @@
 <script lang="ts">
   import type { RestStatus } from '$lib/logic/rest';
   import { REST_SIDE } from '$lib/logic/shape';
-  import { clampPct, usageTone } from '$lib/logic/usage';
+  import UsageDial from './UsageDial.svelte';
 
   let { status, pct, onopen }: { status: RestStatus; pct: number | null; onopen: () => void } =
     $props();
 
   const known = $derived(pct !== null);
-  const value = $derived(known ? clampPct(pct as number) : 0);
-  const tone = $derived(usageTone(value));
+  const value = $derived(known ? Math.round(Math.min(100, Math.max(0, pct as number))) : 0);
   const labels: Record<RestStatus, string> = {
     idle: 'Peekle is running',
     working: 'Claude is working',
     waiting: 'Claude is waiting on you',
   };
-  const usageLabel = $derived(known ? `, ${Math.round(value)}% of the 5h window used` : '');
+  const usageLabel = $derived(known ? `, ${value}% of the 5h window used` : '');
 </script>
 
 <!-- The whole resting shape is the target. Its middle is behind the camera
@@ -52,16 +51,7 @@
     </svg>
   </span>
 
-  <!-- Never call this `dial` a `ring`: Tailwind owns that class name and paints
-       its own box-shadow over anything wearing it. Svelte scoping does not save
-       you, the element still carries the bare class. -->
-  <span class="dial" data-tone={known ? tone : undefined} style:--pct={value}>
-    <span class="track"></span>
-    {#if known}
-      <span class="fill"></span>
-    {/if}
-    <span class="hole"></span>
-  </span>
+  <UsageDial {pct} size={15} />
 </button>
 
 <style>
@@ -172,56 +162,6 @@
 
   .mark:hover .glyph {
     opacity: 1;
-  }
-
-  .dial {
-    position: relative;
-    width: 15px;
-    height: 15px;
-    color: var(--accent);
-  }
-
-  /* The same four thresholds UsageBar draws, because two readouts of one
-     number that disagree are worse than one of them missing. tech.md 9. */
-  .dial[data-tone='warn'] {
-    color: var(--warn);
-  }
-  .dial[data-tone='orange'] {
-    color: var(--orange);
-  }
-  .dial[data-tone='danger'] {
-    color: var(--danger);
-  }
-
-  .track,
-  .fill,
-  .hole {
-    position: absolute;
-    border-radius: 50%;
-  }
-
-  /* The empty dial. Dimmed rather than hairline: that token is meant for one
-     pixel separators and disappears at two pixels on pure black. */
-  .track {
-    inset: 0;
-    box-sizing: border-box;
-    border: 2px solid var(--text-dim);
-    opacity: 0.3;
-  }
-
-  /* The arc starts at twelve o'clock and runs clockwise. It is a full disc cut
-     back by the hole rather than a mask: masks are the one part of this that
-     the app webview renders differently from every browser we test in. */
-  .fill {
-    inset: 0;
-    background: conic-gradient(currentColor calc(var(--pct) * 1%), transparent 0);
-  }
-
-  /* The island fill is exactly black and fully opaque (tech.md 9), so punching
-     the middle out with it is the same thing as punching a hole. */
-  .hole {
-    inset: 2px;
-    background: var(--notch);
   }
 
   @keyframes breathe {

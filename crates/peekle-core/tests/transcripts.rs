@@ -5,7 +5,7 @@
 
 use peekle_core::sessions::{SessionRegistry, ENTRY_CAP, SESSION_CAP};
 use peekle_core::transcripts::{card_from_lines, scan};
-use peekle_core::types::{EntryKind, SessionStatus};
+use peekle_core::types::{EntryKind, EntryState, SessionStatus};
 
 const FIXTURE: &str = include_str!("../../../fixtures/transcripts/session.jsonl");
 
@@ -46,37 +46,6 @@ fn a_transcript_without_a_title_falls_back_to_the_first_turn() {
     let card = card_from_lines(lines.iter(), "fallback", 0).unwrap();
     assert!(card.title.starts_with('x'), "{}", card.title);
     assert!(!card.title.is_empty());
-}
-
-/// Thinking is the agent reasoning with itself and the transcript is the only
-/// place it is written down. It never reaches this surface. tech.md 6.11.
-#[test]
-fn only_the_spoken_turns_come_back() {
-    let card = card();
-
-    assert!(card.entries.iter().all(|e| e.tool.is_none()));
-    assert!(card
-        .entries
-        .iter()
-        .all(|e| matches!(e.kind, EntryKind::User | EntryKind::Assistant)));
-
-    let users = card
-        .entries
-        .iter()
-        .filter(|e| e.kind == EntryKind::User)
-        .count();
-    let assistants = card
-        .entries
-        .iter()
-        .filter(|e| e.kind == EntryKind::Assistant)
-        .count();
-
-    // The fixture holds six records with the user role, but five of them are
-    // tool results: Claude Code writes those back as user turns. Only one is
-    // something a person said. The assistant side is one text block among five
-    // thinking blocks and five tool calls.
-    assert_eq!(users, 1, "a tool result is not a turn");
-    assert_eq!(assistants, 1);
 }
 
 #[test]
@@ -231,4 +200,116 @@ fn an_injection_never_becomes_the_title() {
 
     assert_eq!(card.title, "fix the scroll");
     assert_eq!(card.entries.len(), 1);
+}
+
+/// The same objects the terminal shows, in the same shapes. tech.md 6.11.
+#[test]
+fn every_kind_of_object_comes_back() {
+    let card = card();
+    let count = |kind: EntryKind| card.entries.iter().filter(|e| e.kind == kind).count();
+
+    // The fixture holds six records with the user role, but five of them are
+    // tool results: Claude Code writes those back as user turns, and a result
+    // belongs to its call rather than to the conversation.
+    assert_eq!(count(EntryKind::User), 1, "a tool result is not a turn");
+    assert_eq!(count(EntryKind::Assistant), 1);
+    assert_eq!(count(EntryKind::Thought), 5);
+    assert_eq!(count(EntryKind::Tool), 5);
+}
+
+#[test]
+fn a_thought_is_a_marker_with_its_reasoning_behind_it() {
+    let card = card();
+    let thought = card
+        .entries
+        .iter()
+        .find(|e| e.kind == EntryKind::Thought)
+        .expect("the fixture thinks");
+
+    assert!(thought.text.starts_with("Thought for "), "{}", thought.text);
+    assert!(thought.text.ends_with('s'));
+    // The reasoning itself is often not in the file at all: Claude Code stores
+    // a signature and an empty string. The marker is what survives, and that is
+    // also all the terminal shows without an expansion. tech.md 6.11.
+    assert!(card
+        .entries
+        .iter()
+        .filter(|e| e.kind == EntryKind::Thought)
+        .all(|e| e.text.starts_with("Thought for ")));
+}
+
+#[test]
+fn reasoning_that_is_in_the_file_lands_behind_the_marker() {
+    let lines = [
+        r#"{"type":"assistant","sessionId":"s","timestamp":"2026-08-17T14:55:20.000Z","message":{"content":[{"type":"text","text":"go"}]}}"#,
+        r#"{"type":"assistant","sessionId":"s","timestamp":"2026-08-17T14:55:32.000Z","message":{"content":[{"type":"thinking","thinking":"weighing two options"}]}}"#,
+    ];
+    let card = card_from_lines(lines, "s", 0).unwrap();
+    let thought = card
+        .entries
+        .iter()
+        .find(|e| e.kind == EntryKind::Thought)
+        .unwrap();
+
+    assert_eq!(thought.text, "Thought for 12s");
+    assert_eq!(thought.detail.as_deref(), Some("weighing two options"));
+}
+
+#[test]
+fn a_tool_call_carries_its_name_its_input_and_its_result() {
+    let card = card();
+    let calls: Vec<_> = card
+        .entries
+        .iter()
+        .filter(|e| e.kind == EntryKind::Tool)
+        .collect();
+
+    assert!(calls.iter().all(|c| c.tool.is_some()));
+    assert!(
+        calls.iter().all(|c| c.detail.is_some()),
+        "the input is behind the row"
+    );
+    // Every call in this fixture reported back, so none is left running.
+    assert!(calls.iter().all(|c| c.state != EntryState::Running));
+}
+
+/// A call whose result never arrived is the one case that stays open, and
+/// saying it succeeded would be a claim nobody made. tech.md 6.3.
+#[test]
+fn a_call_without_a_result_stays_running() {
+    let lines = [
+        r#"{"type":"user","sessionId":"s","message":{"content":[{"type":"text","text":"go"}]}}"#,
+        r#"{"type":"assistant","sessionId":"s","message":{"content":[{"type":"tool_use","id":"a","name":"Bash","input":{"command":"cargo test"}}]}}"#,
+    ];
+    let card = card_from_lines(lines, "s", 0).unwrap();
+    let call = card
+        .entries
+        .iter()
+        .find(|e| e.kind == EntryKind::Tool)
+        .unwrap();
+
+    assert_eq!(call.state, EntryState::Running);
+    assert_eq!(call.text, "cargo test", "the collapsed row is the command");
+    assert_eq!(call.tool.as_deref(), Some("Bash"));
+}
+
+#[test]
+fn a_failed_result_marks_its_call_failed() {
+    let lines = [
+        r#"{"type":"assistant","sessionId":"s","message":{"content":[{"type":"tool_use","id":"a","name":"Bash","input":{"command":"exit 42"}}]}}"#,
+        r#"{"type":"user","sessionId":"s","message":{"content":[{"type":"tool_result","tool_use_id":"a","is_error":true,"content":"exit code 42"}]}}"#,
+    ];
+    let card = card_from_lines(lines, "s", 0).unwrap();
+    let call = card
+        .entries
+        .iter()
+        .find(|e| e.kind == EntryKind::Tool)
+        .unwrap();
+
+    assert_eq!(call.state, EntryState::Failed);
+    assert!(call
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("exit code 42"));
 }

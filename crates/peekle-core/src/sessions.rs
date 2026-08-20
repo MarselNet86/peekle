@@ -145,6 +145,9 @@ fn now_entry(
         kind,
         text,
         tool,
+        // The live path has the input already flattened into `text`. A full
+        // body arrives only from a transcript. tech.md 6.3.
+        detail: None,
         state,
         at,
     }
