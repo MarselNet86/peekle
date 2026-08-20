@@ -40,13 +40,15 @@
           stroke-linecap="round"
         />
       </g>
-      <path
-        class="spin"
-        d="M7 1.8L7 10.2"
-        stroke="currentColor"
-        stroke-width="2.2"
-        stroke-linecap="round"
-      />
+      <!-- Four glyphs, not one turning stroke. A console spinner replaces the
+           character: the vertical bar is tall, the dash is short and wide, and
+           the eye reads a swap rather than a rotation. tech.md 6.12. -->
+      <g class="spin">
+        <path class="frame f1" d="M7 1.9L7 10.1" />
+        <path class="frame f2" d="M4.3 10.1L9.7 1.9" />
+        <path class="frame f3" d="M3.1 6L10.9 6" />
+        <path class="frame f4" d="M4.3 1.9L9.7 10.1" />
+      </g>
     </svg>
   </span>
 
@@ -107,14 +109,18 @@
     opacity: 1;
   }
 
-  /* One stroke at a time, four frames, no in between: a console spinner does
-     not turn, it swaps characters. Half a turn in four steps lands the stroke
-     on `|`, `\`, `-` and `/`. Transform only, so nothing under the window is
-     repainted. tech.md 6.10 and 6.12. */
+  /* One glyph on screen at a time. Each frame owns a quarter of the cycle and
+     holds, so nothing fades and nothing turns: the character is replaced, the
+     way a console spinner does it. tech.md 6.12. */
   .spin {
     display: none;
-    transform-box: fill-box;
-    transform-origin: center;
+  }
+
+  .frame {
+    opacity: 0;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
   }
 
   .mark[data-status='working'] .sign {
@@ -123,15 +129,36 @@
 
   .mark[data-status='working'] .spin {
     display: block;
-    animation: tick 600ms steps(4, end) infinite;
   }
 
-  @keyframes tick {
-    from {
-      transform: rotate(0deg);
+  .mark[data-status='working'] .frame {
+    /* steps(1, end) holds each keyframe interval at its own value, so opacity
+       jumps rather than ramps. */
+    animation: flick 640ms steps(1, end) infinite;
+  }
+
+  /* Qualified to match the rule above: the `animation` shorthand resets the
+     delay, so a plainer selector here would lose and stack all four frames in
+     one phase. */
+  .mark[data-status='working'] .f2 {
+    animation-delay: 160ms;
+  }
+  .mark[data-status='working'] .f3 {
+    animation-delay: 320ms;
+  }
+  .mark[data-status='working'] .f4 {
+    animation-delay: 480ms;
+  }
+
+  @keyframes flick {
+    0% {
+      opacity: 1;
     }
-    to {
-      transform: rotate(180deg);
+    25% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
     }
   }
 
@@ -208,9 +235,16 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .mark[data-status='waiting'] .glyph,
-    .mark[data-status='working'] .spin {
+    .mark[data-status='waiting'] .glyph {
       animation: none;
+    }
+
+    /* Without motion the spinner would be four glyphs stacked, so one holds. */
+    .mark[data-status='working'] .frame {
+      animation: none;
+    }
+    .mark[data-status='working'] .f1 {
+      opacity: 1;
     }
   }
 </style>
