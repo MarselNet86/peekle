@@ -45,15 +45,17 @@ impl Rect {
     }
 }
 
-/// Where the resting mark sits on screen, given the window frame and the
-/// bounds the webview reported for the collapsed shape.
+/// Where the shape sits on screen, given the window frame and the bounds the
+/// webview reported for it.
 ///
 /// The shape is centred horizontally in the window and flush with its top
-/// edge, which is what the route lays out and what section 6.7 fixes. Bounds
-/// that never arrived, or that arrived unusable, yield nothing rather than a
-/// guessed rectangle: a wrong guess eats clicks next to the mark, and that is
-/// worse than a mark that is not clickable yet.
-pub fn rest_rect(window: Rect, bounds: (f64, f64)) -> Option<Rect> {
+/// edge, which is what the route lays out and what section 6.7 fixes. Collapsed
+/// this is the resting mark, the one place a resting island takes a click; open
+/// it is the area the pointer has to leave before the island puts itself away.
+/// Bounds that never arrived, or that arrived unusable, yield nothing rather
+/// than a guessed rectangle: a wrong guess eats clicks next to the mark, and
+/// that is worse than a mark that is not clickable yet.
+pub fn shape_rect(window: Rect, bounds: (f64, f64)) -> Option<Rect> {
     if !window.is_sane() {
         return None;
     }
@@ -88,7 +90,7 @@ mod tests {
 
     #[test]
     fn centres_the_mark_on_the_top_edge_of_the_window() {
-        let rect = rest_rect(WINDOW, (200.0, 50.0)).expect("sane bounds give a rect");
+        let rect = shape_rect(WINDOW, (200.0, 50.0)).expect("sane bounds give a rect");
         assert_eq!(rect, Rect::new(100.0 + 260.0, 0.0, 200.0, 50.0));
     }
 
@@ -103,13 +105,13 @@ mod tests {
             (f64::NAN, 50.0),
             (200.0, f64::INFINITY),
         ] {
-            assert_eq!(rest_rect(WINDOW, bounds), None, "{bounds:?}");
+            assert_eq!(shape_rect(WINDOW, bounds), None, "{bounds:?}");
         }
     }
 
     #[test]
     fn a_shape_wider_than_the_window_is_clipped_to_what_is_visible() {
-        let rect = rest_rect(WINDOW, (9000.0, 9000.0)).expect("clamped, not rejected");
+        let rect = shape_rect(WINDOW, (9000.0, 9000.0)).expect("clamped, not rejected");
         assert_eq!(rect, Rect::new(100.0, 0.0, 720.0, 560.0));
     }
 

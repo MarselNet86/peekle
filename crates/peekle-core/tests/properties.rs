@@ -1,7 +1,7 @@
 //! Property based tests for the pure logic of the core crate.
 //! tech.md section 10 names these: usage window math and the label classifier.
 
-use peekle_core::island::{rest_rect, Rect};
+use peekle_core::island::{shape_rect, Rect};
 use peekle_core::labels::classify;
 use peekle_core::types::{clamp_pct, UsageWindow, UsageWindowStat};
 use proptest::prelude::*;
@@ -68,7 +68,7 @@ proptest! {
         mark_h in proptest::num::f64::ANY,
     ) {
         let window = Rect::new(x, y, w, h);
-        let Some(rect) = rest_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+        let Some(rect) = shape_rect(window, (mark_w, mark_h)) else { return Ok(()) };
 
         prop_assert!(rect.x >= window.x);
         prop_assert!(rect.y >= window.y);
@@ -86,7 +86,7 @@ proptest! {
         py in -100.0f64..800.0,
     ) {
         let window = Rect::new(0.0, 0.0, 720.0, 560.0);
-        let Some(rect) = rest_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+        let Some(rect) = shape_rect(window, (mark_w, mark_h)) else { return Ok(()) };
 
         if rect.contains((px, py)) {
             prop_assert!(window.contains((px, py)));

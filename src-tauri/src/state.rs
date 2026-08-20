@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use peekle_core::config::Config;
 use peekle_core::types::{
@@ -25,13 +25,17 @@ pub struct AppState {
 
     enabled: AtomicBool,
     view: Mutex<IslandView>,
-    /// Bounds of the collapsed shape as the webview last measured them, in CSS
-    /// pixels. The resting mark is the only part of a collapsed island that
-    /// takes a click, and this is where its rectangle comes from. tech.md 6.7.
-    rest_bounds: Mutex<Option<(f64, f64)>>,
-    /// Whether the pointer is currently inside that rectangle. Held so the
+    /// Bounds of the shape as the webview last measured them, in CSS pixels.
+    /// Collapsed that rectangle is the resting mark, the one part of a resting
+    /// island that takes a click; open it is what the pointer has to leave
+    /// before the island puts itself away. tech.md 6.7.
+    shape_bounds: Mutex<Option<(f64, f64)>>,
+    /// Whether the pointer is currently inside the resting mark. Held so the
     /// tracker touches AppKit on the crossing only, not on every tick.
     over_rest: AtomicBool,
+    /// Since when the pointer has been off an open island, or None while it is
+    /// on it. tech.md 6.7.
+    outside_since: Mutex<Option<Instant>>,
     hotkey_ok: AtomicBool,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
@@ -53,8 +57,9 @@ impl AppState {
             usage_provider,
             enabled: AtomicBool::new(enabled),
             view: Mutex::new(IslandView::default()),
-            rest_bounds: Mutex::new(None),
+            shape_bounds: Mutex::new(None),
             over_rest: AtomicBool::new(false),
+            outside_since: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -90,18 +95,32 @@ impl AppState {
         true
     }
 
-    pub fn rest_bounds(&self) -> Option<(f64, f64)> {
-        *self.lock(&self.rest_bounds)
+    pub fn shape_bounds(&self) -> Option<(f64, f64)> {
+        *self.lock(&self.shape_bounds)
     }
 
-    pub fn set_rest_bounds(&self, bounds: (f64, f64)) {
-        *self.lock(&self.rest_bounds) = Some(bounds);
+    pub fn set_shape_bounds(&self, bounds: (f64, f64)) {
+        *self.lock(&self.shape_bounds) = Some(bounds);
     }
 
     /// Records where the pointer is and reports whether it crossed the edge.
     /// Only a crossing is worth an AppKit call.
     pub fn set_over_rest(&self, inside: bool) -> bool {
         self.over_rest.swap(inside, Ordering::SeqCst) != inside
+    }
+
+    /// The pointer is on the island, so any walking away starts over.
+    pub fn pointer_returned(&self) {
+        *self.lock(&self.outside_since) = None;
+    }
+
+    /// Whether the pointer has been off the island for at least `grace`. The
+    /// clock starts on the first tick that finds it outside, so an island that
+    /// opens under an idle pointer still gets its full grace period.
+    pub fn pointer_left_for(&self, grace: Duration, now: Instant) -> bool {
+        let mut since = self.lock(&self.outside_since);
+        let start = since.get_or_insert(now);
+        now.duration_since(*start) >= grace
     }
 
     pub fn sessions(&self) -> Vec<SessionCard> {
@@ -287,6 +306,54 @@ mod tests {
     use super::*;
     use peekle_core::types::{PromptKind, SessionRef, TaskLabel, TaskStatus};
     use peekle_usage::FakeUsage;
+
+    /// S12. An island the user opened has to close itself, because Escape only
+    /// reaches a panel that has already taken the keyboard.
+    #[test]
+    fn the_grace_period_starts_when_the_pointer_first_leaves() {
+        let state = state();
+        let now = Instant::now();
+        let grace = Duration::from_millis(800);
+
+        assert!(!state.pointer_left_for(grace, now), "the clock starts here");
+        assert!(!state.pointer_left_for(grace, now + Duration::from_millis(799)));
+        assert!(state.pointer_left_for(grace, now + grace));
+    }
+
+    #[test]
+    fn coming_back_puts_the_grace_period_back_to_the_start() {
+        let state = state();
+        let now = Instant::now();
+        let grace = Duration::from_millis(800);
+
+        assert!(!state.pointer_left_for(grace, now));
+        state.pointer_returned();
+
+        let later = now + Duration::from_secs(10);
+        assert!(!state.pointer_left_for(grace, later), "the clock restarted");
+        assert!(state.pointer_left_for(grace, later + grace));
+    }
+
+    /// Only a crossing is worth an AppKit call, and a crossing back has to
+    /// register too or the island keeps the mouse forever.
+    #[test]
+    fn the_mark_reports_a_crossing_and_only_a_crossing() {
+        let state = state();
+
+        assert!(state.set_over_rest(true));
+        assert!(!state.set_over_rest(true));
+        assert!(state.set_over_rest(false));
+        assert!(!state.set_over_rest(false));
+    }
+
+    #[test]
+    fn bounds_that_never_arrived_read_as_nothing_rather_than_zero() {
+        let state = state();
+        assert_eq!(state.shape_bounds(), None);
+
+        state.set_shape_bounds((185.0, 47.0));
+        assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+    }
 
     fn state() -> AppState {
         AppState::new(Config::default(), Arc::new(FakeUsage::default()))

@@ -12,7 +12,7 @@ pub mod types;
 
 pub use feed::{FixtureFeed, TaskFeed};
 pub use hooks::{HOOK_PATH_PREFIX, MANAGED_HOOK_EVENTS};
-pub use island::{rest_rect, Rect};
+pub use island::{shape_rect, Rect};
 pub use labels::classify;
 pub use pending::PendingRegistry;
 pub use sessions::{FeedEvent, SessionRegistry};
