@@ -8,7 +8,7 @@ import { render, screen } from '@testing-library/svelte';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { bars, reasonText, WINDOW_LABELS } from '$lib/features/usage/usage.svelte';
+import { bars, reasonText, WINDOW_LABELS, needsGrant } from '$lib/features/usage/usage.svelte';
 import UsageBar from '$lib/ui/UsageBar.svelte';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
@@ -101,5 +101,31 @@ describe('UsageBar', () => {
         unmount();
       }),
     );
+  });
+});
+
+describe('the grant control', () => {
+  const snapshot = (reason: UsageUnavailable | null): UsageSnapshot => ({
+    windows: [],
+    source: 'Unavailable',
+    reason,
+    fetched_at: 0,
+  });
+
+  /// The reasons the user can fix from where they are standing.
+  it('offers itself when the Keychain is the thing in the way', () => {
+    expect(needsGrant(snapshot('NotGranted'))).toBe(true);
+    expect(needsGrant(snapshot('Denied'))).toBe(true);
+  });
+
+  /// Offering a Keychain dialog for a switch in the config, or for a shape the
+  /// API stopped sending, sends the user to press something that cannot help.
+  it('stays out of the way when the Keychain is not the problem', () => {
+    expect(needsGrant(snapshot('Disabled'))).toBe(false);
+    expect(needsGrant(snapshot('Unsupported'))).toBe(false);
+    expect(needsGrant(snapshot('NotLoggedIn'))).toBe(false);
+    expect(needsGrant(snapshot('Network'))).toBe(false);
+    expect(needsGrant(snapshot(null))).toBe(false);
+    expect(needsGrant(null)).toBe(false);
   });
 });

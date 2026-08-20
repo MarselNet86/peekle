@@ -48,8 +48,32 @@ pub struct AppState {
     ready: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
+/// Why the bars are empty before anything has been fetched.
+///
+/// The first snapshot cannot arrive until the user grants Keychain access, so
+/// saying `Disabled` here would tell them usage is switched off when it is
+/// waiting on them. tech.md 6.4.
+fn initial_reason(usage: &peekle_core::config::UsageConfig) -> UsageUnavailable {
+    use peekle_core::config::UsageProviderKind;
+
+    if !usage.enabled || usage.provider == UsageProviderKind::Off {
+        return UsageUnavailable::Disabled;
+    }
+    if usage.provider != UsageProviderKind::Account {
+        return UsageUnavailable::Unsupported;
+    }
+    if usage.keychain_denied {
+        return UsageUnavailable::Denied;
+    }
+    if !usage.keychain_granted {
+        return UsageUnavailable::NotGranted;
+    }
+    UsageUnavailable::Unsupported
+}
+
 impl AppState {
     pub fn new(config: Config, usage_provider: Arc<dyn UsageProvider>) -> Self {
+        let usage_config = config.usage.clone();
         let enabled = config.behavior.enabled;
         Self {
             config: Mutex::new(config),
@@ -66,7 +90,7 @@ impl AppState {
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
             tasks: Mutex::new(Vec::new()),
-            usage: Mutex::new(unknown(UsageUnavailable::Disabled)),
+            usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
         }
     }
@@ -353,6 +377,40 @@ mod tests {
 
         state.set_shape_bounds((185.0, 47.0));
         assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+    }
+
+    /// S12 follow up. Before the user grants access there is nothing to fetch,
+    /// and telling them usage is off would send them looking for a switch that
+    /// is not the problem.
+    #[test]
+    fn the_first_reason_names_what_is_actually_missing() {
+        use peekle_core::config::{UsageConfig, UsageProviderKind};
+
+        let account = |granted: bool, denied: bool| UsageConfig {
+            enabled: true,
+            provider: UsageProviderKind::Account,
+            keychain_denied: denied,
+            keychain_granted: granted,
+        };
+
+        assert_eq!(
+            initial_reason(&account(false, false)),
+            UsageUnavailable::NotGranted
+        );
+        assert_eq!(
+            initial_reason(&account(false, true)),
+            UsageUnavailable::Denied
+        );
+        assert_eq!(
+            initial_reason(&account(true, false)),
+            UsageUnavailable::Unsupported
+        );
+
+        let off = UsageConfig {
+            enabled: false,
+            ..account(true, false)
+        };
+        assert_eq!(initial_reason(&off), UsageUnavailable::Disabled);
     }
 
     fn state() -> AppState {
