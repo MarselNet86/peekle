@@ -193,14 +193,13 @@ pub fn set_view(app: AppHandle, view: IslandView) {
 
 /// The webview reports the size of the shape it drew. Rust never resizes the
 /// window with it: letting the frontend drive the frame is exactly the stutter
-/// 6.7 forbids. What it does do is remember the collapsed size, because that
-/// rectangle is where the resting mark takes its click. tech.md 6.7.
+/// 6.7 forbids. What it does do is remember the size, because that rectangle is
+/// where a resting island takes its click and what an open one has to be walked
+/// away from. tech.md 6.7.
 #[tauri::command]
 pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     tracing::debug!(width, height, "island reported its bounds");
-    if state.view() == IslandView::Collapsed {
-        state.set_rest_bounds((width, height));
-    }
+    state.set_shape_bounds((width, height));
 }
 
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.

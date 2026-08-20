@@ -2,9 +2,9 @@
 //! decides when a window appears or disappears. tech.md section 8.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use peekle_core::island::rest_rect;
+use peekle_core::island::shape_rect;
 use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -80,37 +80,58 @@ pub fn track_pointer(app: &AppHandle) {
     });
 }
 
+/// How long the pointer has to be off an island the user opened before it puts
+/// itself away. Long enough to cross a gap by accident, short enough that the
+/// island does not sit on the screen after the user has moved on. tech.md 6.7.
+const DISMISS_AFTER: Duration = Duration::from_millis(800);
+
 fn update_hover(app: &AppHandle) {
     let state = app.state::<Arc<AppState>>().inner().clone();
 
-    // Every other view takes the mouse outright, and `set_view` has already
-    // said so. Touching the flag here would fight it.
-    if state.view() != IslandView::Collapsed {
-        state.set_over_rest(false);
-        return;
-    }
-
-    // No measurement yet means no hotspot. Guessing one would eat clicks next
-    // to a mark the user cannot even see. tech.md 6.7.
-    let Some(bounds) = state.rest_bounds() else {
+    // No measurement yet means no rectangle. Guessing one would eat clicks
+    // next to a mark the user cannot even see. tech.md 6.7.
+    let Some(bounds) = state.shape_bounds() else {
         return;
     };
     let Ok((frame, scale)) = panel::island_frame(app) else {
         return;
     };
-    let Some(rect) = rest_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
+    let Some(rect) = shape_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
         return;
     };
     let Ok(pointer) = app.cursor_position() else {
         return;
     };
-
     let inside = rect.contains((pointer.x, pointer.y));
-    if !state.set_over_rest(inside) {
+
+    if state.view() == IslandView::Collapsed {
+        state.pointer_returned();
+        if state.set_over_rest(inside) {
+            if let Err(err) = panel::set_takes_clicks(app, inside) {
+                tracing::error!(error = %err, "failed to switch cursor events for the mark");
+            }
+        }
         return;
     }
-    if let Err(err) = panel::set_takes_clicks(app, inside) {
-        tracing::error!(error = %err, "failed to switch cursor events for the rest mark");
+
+    // An open island already takes the mouse outright, and `set_view` said so.
+    state.set_over_rest(false);
+
+    // A request in flight closes on an answer, a dismissal or a timeout, never
+    // on the pointer wandering off: that is the resolve exactly once invariant
+    // of rule 10. A pill runs on its own clock.
+    if state.active_prompt().is_some() || state.view() == IslandView::Pill {
+        state.pointer_returned();
+        return;
+    }
+
+    if inside {
+        state.pointer_returned();
+        return;
+    }
+    if state.pointer_left_for(DISMISS_AFTER, Instant::now()) {
+        tracing::debug!("the pointer left the island, putting it away");
+        set_view(app, IslandView::Collapsed);
     }
 }
 
