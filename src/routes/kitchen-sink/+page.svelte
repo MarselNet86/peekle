@@ -7,6 +7,7 @@
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
+  import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -134,6 +135,9 @@
     </div>
     <div class="stage">
       <Shape {view} notch={NOTCH}>
+        {#snippet rest()}
+          <RestMark status="waiting" onopen={() => {}} />
+        {/snippet}
         <Toast text="Claude needs your input" tone="Neutral" badge={3} />
       </Shape>
     </div>
@@ -144,6 +148,19 @@
           <Shape view={candidate} notch={NOTCH}>
             <Toast text={name} tone="Neutral" />
           </Shape>
+        </div>
+      {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>RestMark</h2>
+    <!-- Drawn on the island fill, because that is the only surface it ever
+         appears on and any other background lies about the contrast. -->
+    <div class="row">
+      {#each ['idle', 'working', 'waiting'] as const as status (status)}
+        <div class="mark-stage">
+          <RestMark {status} onopen={() => {}} />
         </div>
       {/each}
     </div>
@@ -330,6 +347,15 @@
   .stage.small {
     width: 170px;
     height: 120px;
+  }
+
+  /* The mark only ever sits on the island fill, so anything else here would
+     lie about its contrast. */
+  .mark-stage {
+    width: 80px;
+    height: 22px;
+    background: var(--notch);
+    border-radius: 0 0 10px 10px;
   }
 
   .row {

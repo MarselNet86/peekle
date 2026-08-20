@@ -5,7 +5,12 @@
   import { shapeBounds, type Notch } from '$lib/logic/shape';
   import type { IslandView } from '$lib/types/generated/IslandView';
 
-  let { view, notch, children }: { view: IslandView; notch: Notch; children?: Snippet } = $props();
+  let {
+    view,
+    notch,
+    rest,
+    children,
+  }: { view: IslandView; notch: Notch; rest?: Snippet; children?: Snippet } = $props();
 
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
@@ -50,6 +55,9 @@
     ? `0 0 ${bounds.current.radius}px ${bounds.current.radius}px`
     : `${bounds.current.radius}px`}
 >
+  {#if collapsed && rest}
+    <div class="rest">{@render rest()}</div>
+  {/if}
   {#if children}
     <div class="content" class:shown={contentShown} style:padding-top="{notch.height}px">
       {@render children()}
@@ -62,16 +70,25 @@
     /* Exactly black and fully opaque. Any transparency or blur here gives away
        that this is a window on top of the system. tech.md 9 and 6.10. */
     background: var(--notch);
+    position: relative;
     margin: 0 auto;
     overflow: hidden;
     color: var(--text);
     box-sizing: border-box;
   }
 
-  /* Collapsed is the notch itself: same black, same place, nothing to see. */
+  /* Collapsed is the notch plus the resting drop. The bezel hides everything
+     above the cutout, so what shows is the strip carrying the mark. */
   .shape.collapsed {
-    opacity: 0;
     pointer-events: none;
+  }
+
+  /* The one part of a collapsed island that takes a click. Rust hands the
+     mouse over only while the pointer is inside it. tech.md 6.7. */
+  .rest {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
   }
 
   .content {
