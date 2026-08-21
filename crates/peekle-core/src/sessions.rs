@@ -268,9 +268,18 @@ impl SessionRegistry {
         push_entry(card, entry);
     }
 
+    /// Marks every queued reply of a session as undeliverable.
+    pub fn replies_failed(&mut self, session_id: &str, at: i64) {
+        self.mark_replies(session_id, EntryState::Failed, at);
+    }
+
     /// Marks every queued reply of a session as delivered. Called by the `Stop`
-    /// that carried them.
+    /// that carried them, or by the turn that took them as its prompt.
     pub fn replies_delivered(&mut self, session_id: &str, at: i64) {
+        self.mark_replies(session_id, EntryState::Ok, at);
+    }
+
+    fn mark_replies(&mut self, session_id: &str, state: EntryState, at: i64) {
         let Some(card) = self
             .cards
             .iter_mut()
@@ -280,7 +289,7 @@ impl SessionRegistry {
         };
         for entry in card.entries.iter_mut() {
             if entry.kind == EntryKind::User && entry.state == EntryState::Running {
-                entry.state = EntryState::Ok;
+                entry.state = state;
             }
         }
         card.updated_at = at;
