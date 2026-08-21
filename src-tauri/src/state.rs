@@ -178,6 +178,14 @@ impl AppState {
         sessions.cards().to_vec()
     }
 
+    /// Puts sessions that stopped reporting back to rest. tech.md 6.3.
+    pub fn rest_stale_work(&self, now: i64, after: i64) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions
+            .rest_stale_work(now, after)
+            .then(|| sessions.cards().to_vec())
+    }
+
     pub fn sessions(&self) -> Vec<SessionCard> {
         self.lock(&self.sessions).cards().to_vec()
     }
