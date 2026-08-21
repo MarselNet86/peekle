@@ -109,7 +109,10 @@
   const replyHint = $derived.by(() => {
     if (waiting) return 'Reply to Claude';
     if (current?.status === 'Ended') return 'This session has ended';
-    return 'Type now, it goes when Claude stops';
+    // A working session will stop and carry the text for free; a standing one
+    // gets started. Saying which one it is beats one vague promise for both.
+    // tech.md 6.5.
+    return current?.status === 'Working' ? 'Type now, it goes when Claude stops' : 'Send to Claude';
   });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 

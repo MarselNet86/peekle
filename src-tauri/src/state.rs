@@ -46,6 +46,9 @@ pub struct AppState {
     /// Replies typed while the agent was busy, waiting for its next `Stop`.
     /// tech.md 6.5.
     queued: Mutex<HashMap<String, Vec<String>>>,
+    /// Sessions Peekle is running a turn for right now. Two agents on one
+    /// transcript is a race for a file, not twice the speed. tech.md 6.5.
+    resuming: Mutex<std::collections::HashSet<String>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -111,6 +114,7 @@ impl AppState {
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
             queued: Mutex::new(HashMap::new()),
+            resuming: Mutex::new(std::collections::HashSet::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -243,6 +247,29 @@ impl AppState {
     pub fn take_queued(&self, session_id: &str) -> Option<String> {
         let queued = self.lock(&self.queued).remove(session_id)?;
         (!queued.is_empty()).then(|| queued.join("\n\n"))
+    }
+
+    /// Claims the right to run a turn for a session. False means one is
+    /// already running and the text belongs in the queue instead.
+    pub fn claim_resume(&self, session_id: &str) -> bool {
+        self.lock(&self.resuming).insert(session_id.to_string())
+    }
+
+    pub fn release_resume(&self, session_id: &str) {
+        self.lock(&self.resuming).remove(session_id);
+    }
+
+    pub fn is_resuming(&self, session_id: &str) -> bool {
+        self.lock(&self.resuming).contains(session_id)
+    }
+
+    /// Marks the queued replies of a session as undeliverable. Only the path
+    /// that could not start a turn calls this: a message that will never leave
+    /// says so rather than sitting dim forever. tech.md 6.5.
+    pub fn replies_failed(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.replies_failed(session_id, at);
+        sessions.cards().to_vec()
     }
 
     pub fn replies_delivered(&self, session_id: &str, at: i64) -> Vec<SessionCard> {

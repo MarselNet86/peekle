@@ -118,3 +118,20 @@ describe('an object with a body', () => {
     expect(screen.getByText('Thought for 12s')).toBeInTheDocument();
   });
 });
+
+describe('a reply on its way out', () => {
+  it('reads as queued until something carries it', () => {
+    const { container } = render(FeedRow, {
+      props: { entry: entry({ kind: 'User', tool: null, text: 'keep going', state: 'Running' }) },
+    });
+    expect(container.querySelector('.line')?.getAttribute('data-state')).toBe('Running');
+  });
+
+  /// A message nobody could deliver says so rather than sitting dim forever.
+  it('reads as undelivered when no turn could be started', () => {
+    const { container } = render(FeedRow, {
+      props: { entry: entry({ kind: 'User', tool: null, text: 'keep going', state: 'Failed' }) },
+    });
+    expect(container.querySelector('.line')?.getAttribute('data-state')).toBe('Failed');
+  });
+});

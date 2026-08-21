@@ -255,8 +255,89 @@ pub fn queue_reply(
         peekle_core::types::EntryState::Running,
         now_ms(),
     );
-    tracing::debug!(session_id, "reply queued for the next stop");
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
 
+    // A working session will stop, and its stop carries the queue for free. A
+    // standing one never will, so waiting for it means waiting forever.
+    // tech.md 6.5.
+    let working = card.status == peekle_core::types::SessionStatus::Working;
+    if working || state.is_resuming(&session_id) {
+        tracing::debug!(session_id, working, "reply queued for the next stop");
+        return;
+    }
+    start_turn(&app, state.inner().clone(), &card.session);
+}
+
+/// Starts the one turn Peekle is allowed to start: the text the user typed for
+/// a session nobody is working in. tech.md 2 and 6.5.
+fn start_turn(app: &AppHandle, state: Arc<AppState>, session: &peekle_core::types::SessionRef) {
+    let session_id = session.session_id.clone();
+    if !state.claim_resume(&session_id) {
+        return;
+    }
+    let Some(text) = state.take_queued(&session_id) else {
+        state.release_resume(&session_id);
+        return;
+    };
+
+    let Some(cli) = peekle_core::claude_path() else {
+        tracing::warn!("no claude binary to resume with");
+        fail_replies(app, &state, &session_id);
+        state.release_resume(&session_id);
+        return;
+    };
+
+    let cwd = session.cwd.clone();
+    let handle = app.clone();
+    let id = session_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let app = handle;
+        let session_id = id;
+        tracing::info!(session = %session_id, "starting a turn for a standing session");
+
+        let run = tauri::async_runtime::spawn_blocking({
+            let session_id = session_id.clone();
+            move || {
+                std::process::Command::new(cli)
+                    .current_dir(&cwd)
+                    .args(["--resume", &session_id, "-p", &text])
+                    // The island reports the run through its hooks, so the
+                    // output of the process itself is of no use to anybody.
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+            }
+        })
+        .await;
+
+        match run {
+            Ok(Ok(status)) if status.success() => {
+                tracing::debug!(session = %session_id, "the turn finished");
+            }
+            other => {
+                tracing::warn!(session = %session_id, ?other, "the turn did not run");
+                fail_replies(
+                    &app,
+                    &app.state::<Arc<AppState>>().inner().clone(),
+                    &session_id,
+                );
+            }
+        }
+        app.state::<Arc<AppState>>().release_resume(&session_id);
+    });
+
+    // The text is the prompt of a run that is starting, so it has left.
+    let cards = state.replies_delivered(&session_id, now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+}
+
+/// A message that will never leave says so rather than sitting dim forever.
+fn fail_replies(app: &AppHandle, state: &Arc<AppState>, session_id: &str) {
+    let cards = state.replies_failed(session_id, now_ms());
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }

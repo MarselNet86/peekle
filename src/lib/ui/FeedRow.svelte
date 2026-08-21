@@ -101,6 +101,13 @@
     opacity: 0.55;
   }
 
+  /* It will never leave, and a message that sits dim forever is worse than one
+     that says so. */
+  .line[data-kind='User'][data-state='Failed'] .bubble {
+    background: var(--danger);
+    opacity: 0.85;
+  }
+
   /* The agent's own ground. On pure black a translucent surface has no edge,
      and the message reads as loose text. tech.md 9. */
   .line[data-kind='Assistant'] .bubble {
