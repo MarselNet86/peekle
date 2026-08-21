@@ -126,6 +126,15 @@ fn update_hover(app: &AppHandle) {
     }
 
     if inside {
+        // Engaged, so the opening hold has done its job and ordinary leave
+        // rules take over. tech.md 6.7.
+        state.clear_hold();
+        state.pointer_returned();
+        return;
+    }
+    // Opened by a request and the ten seconds are not up: it stays, and the
+    // leave clock stays fresh so expiry gives the usual grace, not a snap.
+    if state.held_open(Instant::now()) {
         state.pointer_returned();
         return;
     }
@@ -219,7 +228,8 @@ const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
 /// pull the keys out from under them. Focus moves only when they click the
 /// field. tech.md 6.7 and 15.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
-    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let gate = state.ready_gate(panel::ISLAND);
 
     if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_OPEN, request) {
         tracing::warn!(error = %err, "failed to emit prompt-open");
@@ -227,7 +237,16 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(request.session.session_id.clone()));
+
+    // Shown, now the user decides whether it is worth their attention. Ten
+    // quiet seconds means it was not, and the island puts itself away with the
+    // request still pending. tech.md 6.7.
+    state.hold_open(Instant::now() + PROMPT_HOLD);
 }
+
+/// How long a request-opened island waits for the user before putting itself
+/// away. tech.md 6.7.
+const PROMPT_HOLD: Duration = Duration::from_secs(10);
 
 /// Tells the webview which outcome settled the request and collapses the
 /// island behind it.
@@ -235,14 +254,6 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
     let payload = serde_json::json!({ "prompt_id": prompt_id, "outcome": outcome });
     if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_CLOSE, payload) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
-    }
-
-    // An answer leaves the island open. The message the user sent is now in the
-    // feed and the agent is working on it, and both are the answer to "did that
-    // go through". A window that vanishes on submit asks that question instead.
-    // Everything else closes on the usual timer. tech.md 6.5 and 6.7.
-    if matches!(outcome, PromptOutcome::Answered(_)) {
-        return;
     }
 
     // Long enough to read as a request settling, short enough not to be a wait.
