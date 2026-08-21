@@ -93,9 +93,27 @@ async fn blocking(
         Err(status) => return status.into_response(),
     };
 
+    // Every blocking hook leaves a trace here, before any decision about it.
+    // Without this line a bypassed hook and a hook that never arrived look
+    // exactly alike in the log, which is a whole class of bug nobody can tell
+    // apart afterwards. tech.md 6.2.
+    let enabled = state.sink.is_enabled();
+    tracing::debug!(
+        session = payload
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        event = payload
+            .get("hook_event_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        enabled,
+        "blocking hook arrived"
+    );
+
     // Off short-circuits before any window work. The agent runs in its normal
     // mode and nothing is left pending.
-    if !state.sink.is_enabled() {
+    if !enabled {
         return empty();
     }
 
