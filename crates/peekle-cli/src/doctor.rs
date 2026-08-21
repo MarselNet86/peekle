@@ -65,17 +65,32 @@ pub fn overall(checks: &[Check]) -> Health {
 /// Peekle answers a blocking hook well before Claude Code gives up on it. The
 /// gap is the whole reason a slow answer still ends the turn cleanly, so it is
 /// checked rather than assumed. tech.md 6.1 and R-5.
+/// The shortest window a person can actually use.
+///
+/// The island opens when the agent stops. Noticing it, reading what it says and
+/// typing an answer does not happen in half a minute, and a window that closes
+/// first ends the turn normally: the answer then arrives at a hook that is no
+/// longer listening, which reads as the reply being ignored. tech.md R-5.
+const USABLE_WINDOW_SECS: u32 = 60;
+
 pub fn timeout_gap(prompt_timeout_secs: u32, hook_timeout_secs: u32) -> Check {
-    if prompt_timeout_secs < hook_timeout_secs {
-        return Check::ok(
+    if prompt_timeout_secs >= hook_timeout_secs {
+        return Check::fail(
             "timeout gap",
-            format!("{prompt_timeout_secs}s answer window inside a {hook_timeout_secs}s hook"),
+            format!("{prompt_timeout_secs}s answer window in a {hook_timeout_secs}s hook"),
+            "lower behavior.prompt_timeout_secs below the hook timeout",
         );
     }
-    Check::fail(
+    if prompt_timeout_secs < USABLE_WINDOW_SECS {
+        return Check::warn(
+            "timeout gap",
+            format!("{prompt_timeout_secs}s answer window, too short to answer in"),
+            "raise behavior.prompt_timeout_secs: the turn ends before you finish typing",
+        );
+    }
+    Check::ok(
         "timeout gap",
-        format!("{prompt_timeout_secs}s answer window in a {hook_timeout_secs}s hook"),
-        "lower behavior.prompt_timeout_secs below the hook timeout",
+        format!("{prompt_timeout_secs}s answer window inside a {hook_timeout_secs}s hook"),
     )
 }
 
@@ -100,6 +115,16 @@ pub fn stop_block_cap(raw: Option<&str>) -> Check {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The window that made the product look broken: eleven turns ended
+    /// normally because thirty seconds is not long enough to answer in.
+    #[test]
+    fn a_window_nobody_can_answer_in_is_a_warning() {
+        assert_eq!(timeout_gap(30, 900).health, Health::Warn);
+        assert_eq!(timeout_gap(59, 900).health, Health::Warn);
+        assert_eq!(timeout_gap(60, 900).health, Health::Ok);
+        assert!(timeout_gap(30, 900).detail.contains("too short"));
+    }
 
     #[test]
     fn the_gap_is_a_failure_when_peekle_would_answer_too_late() {
