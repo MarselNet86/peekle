@@ -495,3 +495,39 @@ fn a_very_long_closing_message_is_cut_on_a_character_boundary() {
     );
     assert_eq!(registry.cards()[0].entries[0].text.chars().count(), 2000);
 }
+
+/// S3 as of core v29. An answer is a message the user sent, so it lands in the
+/// feed; a reply that vanishes on submit reads as one that never went.
+#[test]
+fn an_answer_lands_in_the_feed_as_a_turn() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/Users/x/peekle".to_string(),
+        project: "peekle".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "  keep going  ", 10);
+    let entries = &registry.cards()[0].entries;
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].kind, EntryKind::User);
+    assert_eq!(
+        entries[0].text, "keep going",
+        "trimmed like every other turn"
+    );
+    assert_eq!(entries[0].state, EntryState::Ok);
+}
+
+#[test]
+fn an_empty_answer_is_not_a_turn() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "   ", 1);
+    assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
+}

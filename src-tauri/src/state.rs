@@ -204,6 +204,13 @@ impl AppState {
     }
 
     /// Records what the agent said last. tech.md S6.
+    /// What the user just sent, into the feed of the session it went to.
+    pub fn user_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.user_turn(session.clone(), text, at);
+        sessions.cards().to_vec()
+    }
+
     pub fn assistant_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.assistant_turn(session.clone(), text, at);

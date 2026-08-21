@@ -37,16 +37,30 @@ fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: Prom
         return;
     }
 
-    // The session is no longer waiting on anybody. Whether the agent picks the
-    // work back up is its business, so the status says idle rather than
-    // working. tech.md 6.3.
     if let Some(request) = state.active_prompt() {
         if request.id == prompt_id {
-            let cards = state.set_session_status(
-                &request.session,
-                peekle_core::types::SessionStatus::Idle,
-                now_ms(),
-            );
+            let at = now_ms();
+
+            // An answer is a message the user sent, so it lands in the feed the
+            // way a message does. A reply that vanishes on submit reads as one
+            // that never went. tech.md 6.5.
+            let answered = match &outcome {
+                PromptOutcome::Answered(answer) => answer.text.as_deref(),
+                _ => None,
+            };
+            if let Some(text) = answered {
+                state.user_turn(&request.session, text, at);
+            }
+
+            // Answering unblocks the hook, so the agent is running again by the
+            // time this returns. Saying idle would leave the island still while
+            // work is happening. tech.md 6.3.
+            let status = if answered.is_some() {
+                peekle_core::types::SessionStatus::Working
+            } else {
+                peekle_core::types::SessionStatus::Idle
+            };
+            let cards = state.set_session_status(&request.session, status, at);
             if let Err(err) = app.emit(events::SESSIONS, &cards) {
                 tracing::warn!(error = %err, "failed to emit sessions");
             }

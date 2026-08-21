@@ -252,7 +252,22 @@ impl SessionRegistry {
         push_entry(card, entry);
     }
 
-    /// Moves a session to a status. Returns false when the session is unknown,
+    /// What the user just sent, as a feed entry.
+    ///
+    /// The text left through `answer_prompt`, so the agent has it. Putting it
+    /// in the feed is what makes a chat a chat: a message that vanishes on
+    /// submit reads as one that never went. tech.md 6.5.
+    pub fn user_turn(&mut self, session: SessionRef, text: &str, at: i64) {
+        let trimmed = truncate(text, ASSISTANT_LIMIT);
+        if trimmed.is_empty() {
+            return;
+        }
+        let card = self.card_mut(session, at);
+        let entry = now_entry(EntryKind::User, trimmed, None, EntryState::Ok, at);
+        push_entry(card, entry);
+    }
+
+    /// Moves a status. Returns false when the session is unknown,
     /// which happens when Peekle started mid session.
     pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {
         let Some(card) = self
