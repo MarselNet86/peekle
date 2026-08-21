@@ -362,15 +362,6 @@
     padding-bottom: 4px;
   }
 
-  /* The bars sit under the session list, where the eye lands after reading
-     what is running. They never gate the island opening: it draws on the last
-     snapshot and a fresh one arrives as an event. tech.md 6.4. */
-  .usage {
-    flex: none;
-    border-top: 1px solid var(--hairline);
-    padding-top: 6px;
-  }
-
   .back {
     display: flex;
     align-items: center;
