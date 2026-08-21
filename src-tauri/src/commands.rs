@@ -118,9 +118,28 @@ fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
     );
 }
 
+/// Refreshes from whatever provider is configured. Runs off the async runtime
+/// because the account provider blocks on a network call, and usage must never
+/// hold up answering a hook. tech.md 6.4.
 #[tauri::command]
-pub fn refresh_usage(app: AppHandle, state: State<'_, Arc<AppState>>) -> UsageSnapshot {
-    let snapshot = state.usage_provider.snapshot();
+pub async fn refresh_usage(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<UsageSnapshot, ()> {
+    let state = state.inner().clone();
+    Ok(fetch_usage(&app, &state).await)
+}
+
+async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
+    let provider = Arc::clone(&state.usage_provider);
+    let snapshot = match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
+        Ok(snapshot) => snapshot,
+        Err(err) => {
+            tracing::warn!(error = %err, "the usage provider panicked");
+            return state.usage();
+        }
+    };
+
     state.set_usage(snapshot.clone());
     if let Err(err) = app.emit(events::USAGE, &snapshot) {
         tracing::warn!(error = %err, "failed to emit usage");
@@ -128,11 +147,36 @@ pub fn refresh_usage(app: AppHandle, state: State<'_, Arc<AppState>>) -> UsageSn
     snapshot
 }
 
-/// Only ever called from a user action. Never from startup, never from the
-/// background poll. tech.md 6.4 and rule 12.
+/// The only path allowed to raise the Keychain dialog. Never called from
+/// startup and never from the background poll. tech.md 6.4 and rule 12.
+///
+/// A grant is remembered so the poll may start; a refusal is remembered so
+/// nothing asks again until the user clears it by hand.
 #[tauri::command]
-pub fn request_usage_access(app: AppHandle, state: State<'_, Arc<AppState>>) -> UsageSnapshot {
-    refresh_usage(app, state)
+pub async fn request_usage_access(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<UsageSnapshot, ()> {
+    let state = state.inner().clone();
+    let snapshot = fetch_usage(&app, &state).await;
+
+    {
+        let mut config = state.lock_config();
+        match snapshot.reason {
+            Some(peekle_core::types::UsageUnavailable::Denied) => {
+                config.usage.keychain_denied = true;
+            }
+            // Anything that is not a refusal means the read itself went
+            // through, so the dialog will not come back.
+            _ => {
+                config.usage.keychain_denied = false;
+                config.usage.keychain_granted = true;
+            }
+        }
+    }
+    state.save_config();
+
+    Ok(snapshot)
 }
 
 #[tauri::command]

@@ -241,6 +241,17 @@ impl AppState {
         self.lock(&self.config)
     }
 
+    /// Writes the config back. A failure is reported and swallowed: losing a
+    /// remembered Keychain answer is worse than nothing, but not worth taking
+    /// the overlay down for.
+    pub fn save_config(&self) {
+        let config = self.lock_config().clone();
+        match peekle_core::config::config_path().and_then(|path| config.save(&path)) {
+            Ok(()) => {}
+            Err(err) => tracing::warn!(error = %err, "could not write the config"),
+        }
+    }
+
     /// A poisoned lock means an earlier holder panicked. The data is still
     /// sound, and refusing to answer would hang a live agent, so recover.
     fn lock<'a, T>(&self, target: &'a Mutex<T>) -> std::sync::MutexGuard<'a, T> {

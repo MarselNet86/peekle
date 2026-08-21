@@ -25,7 +25,7 @@ Stage 1 is in and most of stage 2 with it.
 | Hook server          | Every endpoint of tech.md 6.2 answers                          |
 | Hotkey               | Working, ⌥⇧Q toggles the bypass                                |
 | CLI                  | init, uninstall, doctor, status. `off` is not built            |
-| Usage bars           | Fake provider only, the account provider is S7                 |
+| Usage bars           | Working from the account, dashes with a reason when it cannot  |
 | Packaging, first run | Not started, S10 and S11                                       |
 
 ## Requirements
