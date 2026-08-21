@@ -9,6 +9,7 @@
 //! replaced by one from a file.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde_json::Value;
 use ulid::Ulid;
@@ -393,4 +394,28 @@ fn transcript_files(root: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
             Some((file.path(), modified))
         })
         .collect()
+}
+
+/// The transcript of one session, the same path `scan` reads. `/` and `.` in
+/// the cwd both become dashes, which is how Claude Code names the directory.
+pub fn transcript_path(root: &Path, cwd: &str, session_id: &str) -> PathBuf {
+    let key: String = cwd
+        .chars()
+        .map(|c| if c == '/' || c == '.' { '-' } else { c })
+        .collect();
+    root.join(key).join(format!("{session_id}.jsonl"))
+}
+
+/// Whether a live client wrote this session's transcript within `window`.
+///
+/// The registry's status is Peekle's bookkeeping, not a fact about the world:
+/// a session open in an IDE sends no hooks and reads as idle while its client
+/// is writing this very file. The file cannot lie. No file, or no readable
+/// mtime, reads as standing: there is nobody to race. tech.md 6.5.
+pub fn client_is_live(root: &Path, cwd: &str, session_id: &str, window: Duration) -> bool {
+    std::fs::metadata(transcript_path(root, cwd, session_id))
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| std::time::SystemTime::now().duration_since(modified).ok())
+        .is_some_and(|age| age < window)
 }

@@ -260,11 +260,28 @@ pub fn queue_reply(
     }
 
     // A working session will stop, and its stop carries the queue for free. A
-    // standing one never will, so waiting for it means waiting forever.
-    // tech.md 6.5.
+    // standing one never will, so waiting for it means waiting forever. The
+    // registry alone cannot tell those apart: a session open in an IDE sends
+    // no hooks, reads as idle, and is being written by its own client right
+    // now. The transcript's mtime is the signal that cannot lie. tech.md 6.5.
+    const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
+
     let working = card.status == peekle_core::types::SessionStatus::Working;
-    if working || state.is_resuming(&session_id) {
-        tracing::debug!(session_id, working, "reply queued for the next stop");
+    let live_client = peekle_core::transcripts::default_root().is_some_and(|root| {
+        peekle_core::transcripts::client_is_live(
+            &root,
+            &card.session.cwd,
+            &session_id,
+            LIVE_CLIENT_WINDOW,
+        )
+    });
+    if working || live_client || state.is_resuming(&session_id) {
+        tracing::debug!(
+            session_id,
+            working,
+            live_client,
+            "reply queued for the next stop"
+        );
         return;
     }
     start_turn(&app, state.inner().clone(), &card.session);

@@ -313,3 +313,26 @@ fn a_failed_result_marks_its_call_failed() {
         .unwrap_or_default()
         .contains("exit code 42"));
 }
+
+/// The guard that keeps Peekle from racing a live IDE client for a transcript.
+#[test]
+fn a_freshly_written_transcript_means_a_live_client() {
+    use peekle_core::transcripts::{client_is_live, transcript_path};
+    use std::time::Duration;
+
+    let root = std::env::temp_dir().join(format!("peekle-live-{}", ulid::Ulid::generate()));
+    let cwd = "/Users/x.y/proj";
+    let path = transcript_path(&root, cwd, "s1");
+    assert!(path.ends_with("-Users-x-y-proj/s1.jsonl"), "{path:?}");
+
+    // No file: nobody to race.
+    assert!(!client_is_live(&root, cwd, "s1", Duration::from_secs(90)));
+
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "{}").unwrap();
+    assert!(client_is_live(&root, cwd, "s1", Duration::from_secs(90)));
+    // A window of zero puts any write in the past.
+    assert!(!client_is_live(&root, cwd, "s1", Duration::ZERO));
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
