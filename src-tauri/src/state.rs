@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use peekle_core::config::Config;
 use peekle_core::types::{
@@ -25,6 +25,20 @@ pub struct AppState {
 
     enabled: AtomicBool,
     view: Mutex<IslandView>,
+    /// Bounds of the shape as the webview last measured them, in CSS pixels.
+    /// Collapsed that rectangle is the resting mark, the one part of a resting
+    /// island that takes a click; open it is what the pointer has to leave
+    /// before the island puts itself away. tech.md 6.7.
+    shape_bounds: Mutex<Option<(f64, f64)>>,
+    /// Whether the pointer is currently inside the resting mark. Held so the
+    /// tracker touches AppKit on the crossing only, not on every tick.
+    over_rest: AtomicBool,
+    /// Since when the pointer has been off an open island, or None while it is
+    /// on it. tech.md 6.7.
+    outside_since: Mutex<Option<Instant>>,
+    /// Until when an island opened by a request holds itself on screen with the
+    /// pointer elsewhere. tech.md 6.7.
+    hold_until: Mutex<Option<Instant>>,
     hotkey_ok: AtomicBool,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
@@ -32,13 +46,61 @@ pub struct AppState {
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
     sessions: Mutex<SessionRegistry>,
+    /// Replies typed while the agent was busy, waiting for its next `Stop`.
+    /// tech.md 6.5.
+    queued: Mutex<HashMap<String, Vec<String>>>,
+    /// Sessions Peekle is running a turn for right now. Two agents on one
+    /// transcript is a race for a file, not twice the speed. tech.md 6.5.
+    resuming: Mutex<std::collections::HashSet<String>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
+/// Whether usage may be fetched at all right now.
+///
+/// The Keychain half of this is rule 12: the account provider reads the
+/// Keychain, so nothing may fetch on its own until the user has granted it
+/// once. Every automatic path asks this first; only `request_usage_access`
+/// skips it, because there the user is the one asking.
+pub fn may_fetch_usage(usage: &peekle_core::config::UsageConfig) -> bool {
+    use peekle_core::config::UsageProviderKind;
+
+    if !usage.enabled || usage.provider == UsageProviderKind::Off {
+        return false;
+    }
+    if usage.provider != UsageProviderKind::Account {
+        return true;
+    }
+    usage.keychain_granted && !usage.keychain_denied
+}
+
+/// Why the bars are empty before anything has been fetched.
+///
+/// The first snapshot cannot arrive until the user grants Keychain access, so
+/// saying `Disabled` here would tell them usage is switched off when it is
+/// waiting on them. tech.md 6.4.
+fn initial_reason(usage: &peekle_core::config::UsageConfig) -> UsageUnavailable {
+    use peekle_core::config::UsageProviderKind;
+
+    if !usage.enabled || usage.provider == UsageProviderKind::Off {
+        return UsageUnavailable::Disabled;
+    }
+    if usage.provider != UsageProviderKind::Account {
+        return UsageUnavailable::Unsupported;
+    }
+    if usage.keychain_denied {
+        return UsageUnavailable::Denied;
+    }
+    if !usage.keychain_granted {
+        return UsageUnavailable::NotGranted;
+    }
+    UsageUnavailable::Unsupported
+}
+
 impl AppState {
     pub fn new(config: Config, usage_provider: Arc<dyn UsageProvider>) -> Self {
+        let usage_config = config.usage.clone();
         let enabled = config.behavior.enabled;
         Self {
             config: Mutex::new(config),
@@ -46,15 +108,26 @@ impl AppState {
             usage_provider,
             enabled: AtomicBool::new(enabled),
             view: Mutex::new(IslandView::default()),
+            shape_bounds: Mutex::new(None),
+            over_rest: AtomicBool::new(false),
+            outside_since: Mutex::new(None),
+            hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
+            queued: Mutex::new(HashMap::new()),
+            resuming: Mutex::new(std::collections::HashSet::new()),
             tasks: Mutex::new(Vec::new()),
-            usage: Mutex::new(unknown(UsageUnavailable::Disabled)),
+            usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Whether an automatic path may fetch usage. tech.md 6.4 and rule 12.
+    pub fn may_fetch_usage(&self) -> bool {
+        may_fetch_usage(&self.lock_config().usage)
     }
 
     pub fn enabled(&self) -> bool {
@@ -79,6 +152,72 @@ impl AppState {
         }
         *view = next;
         true
+    }
+
+    pub fn shape_bounds(&self) -> Option<(f64, f64)> {
+        *self.lock(&self.shape_bounds)
+    }
+
+    pub fn set_shape_bounds(&self, bounds: (f64, f64)) {
+        *self.lock(&self.shape_bounds) = Some(bounds);
+    }
+
+    /// Records where the pointer is and reports whether it crossed the edge.
+    /// Only a crossing is worth an AppKit call.
+    pub fn set_over_rest(&self, inside: bool) -> bool {
+        self.over_rest.swap(inside, Ordering::SeqCst) != inside
+    }
+
+    /// Keeps a request-opened island up until `until`, pointer or no pointer.
+    pub fn hold_open(&self, until: Instant) {
+        *self.lock(&self.hold_until) = Some(until);
+    }
+
+    /// Whether the hold is still running. An expired hold clears itself.
+    pub fn held_open(&self, now: Instant) -> bool {
+        let mut hold = self.lock(&self.hold_until);
+        match *hold {
+            Some(until) if now < until => true,
+            _ => {
+                *hold = None;
+                false
+            }
+        }
+    }
+
+    /// The user engaged, so the hold has done its job.
+    pub fn clear_hold(&self) {
+        *self.lock(&self.hold_until) = None;
+    }
+
+    /// The pointer is on the island, so any walking away starts over.
+    pub fn pointer_returned(&self) {
+        *self.lock(&self.outside_since) = None;
+    }
+
+    /// Whether the pointer has been off the island for at least `grace`. The
+    /// clock starts on the first tick that finds it outside, so an island that
+    /// opens under an idle pointer still gets its full grace period.
+    pub fn pointer_left_for(&self, grace: Duration, now: Instant) -> bool {
+        let mut since = self.lock(&self.outside_since);
+        let start = since.get_or_insert(now);
+        now.duration_since(*start) >= grace
+    }
+
+    /// Adds past dialogues the hooks never saw. A live session is never
+    /// overwritten by a file. tech.md 6.11.
+    pub fn seed_sessions(&self, cards: Vec<SessionCard>) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.seed(cards);
+        sessions.cards().to_vec()
+    }
+
+    /// Puts sessions that stopped reporting back to rest. tech.md 6.3.
+    pub fn rest_stale_work(&self, now: i64, after: i64) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions
+            .rest_stale_work(now, after)
+            .then(|| sessions.cards().to_vec())
     }
 
     pub fn sessions(&self) -> Vec<SessionCard> {
@@ -107,6 +246,64 @@ impl AppState {
     }
 
     /// Records what the agent said last. tech.md S6.
+    /// What the user just sent, into the feed of the session it went to.
+    pub fn user_turn(
+        &self,
+        session: &SessionRef,
+        text: &str,
+        state: peekle_core::types::EntryState,
+        at: i64,
+    ) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.user_turn(session.clone(), text, state, at);
+        sessions.cards().to_vec()
+    }
+
+    /// Queues a reply for the next `Stop` of a session. tech.md 6.5.
+    pub fn queue_reply(&self, session_id: &str, text: &str) {
+        self.lock(&self.queued)
+            .entry(session_id.to_string())
+            .or_default()
+            .push(text.to_string());
+    }
+
+    /// Takes everything queued for a session, joined the way the user wrote it.
+    /// Empty means nothing was waiting, and the caller opens the island as
+    /// usual.
+    pub fn take_queued(&self, session_id: &str) -> Option<String> {
+        let queued = self.lock(&self.queued).remove(session_id)?;
+        (!queued.is_empty()).then(|| queued.join("\n\n"))
+    }
+
+    /// Claims the right to run a turn for a session. False means one is
+    /// already running and the text belongs in the queue instead.
+    pub fn claim_resume(&self, session_id: &str) -> bool {
+        self.lock(&self.resuming).insert(session_id.to_string())
+    }
+
+    pub fn release_resume(&self, session_id: &str) {
+        self.lock(&self.resuming).remove(session_id);
+    }
+
+    pub fn is_resuming(&self, session_id: &str) -> bool {
+        self.lock(&self.resuming).contains(session_id)
+    }
+
+    /// Marks the queued replies of a session as undeliverable. Only the path
+    /// that could not start a turn calls this: a message that will never leave
+    /// says so rather than sitting dim forever. tech.md 6.5.
+    pub fn replies_failed(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.replies_failed(session_id, at);
+        sessions.cards().to_vec()
+    }
+
+    pub fn replies_delivered(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.replies_delivered(session_id, at);
+        sessions.cards().to_vec()
+    }
+
     pub fn assistant_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.assistant_turn(session.clone(), text, at);
@@ -264,6 +461,115 @@ mod tests {
     use super::*;
     use peekle_core::types::{PromptKind, SessionRef, TaskLabel, TaskStatus};
     use peekle_usage::FakeUsage;
+
+    /// S12. An island the user opened has to close itself, because Escape only
+    /// reaches a panel that has already taken the keyboard.
+    #[test]
+    fn the_grace_period_starts_when_the_pointer_first_leaves() {
+        let state = state();
+        let now = Instant::now();
+        let grace = Duration::from_millis(800);
+
+        assert!(!state.pointer_left_for(grace, now), "the clock starts here");
+        assert!(!state.pointer_left_for(grace, now + Duration::from_millis(799)));
+        assert!(state.pointer_left_for(grace, now + grace));
+    }
+
+    #[test]
+    fn coming_back_puts_the_grace_period_back_to_the_start() {
+        let state = state();
+        let now = Instant::now();
+        let grace = Duration::from_millis(800);
+
+        assert!(!state.pointer_left_for(grace, now));
+        state.pointer_returned();
+
+        let later = now + Duration::from_secs(10);
+        assert!(!state.pointer_left_for(grace, later), "the clock restarted");
+        assert!(state.pointer_left_for(grace, later + grace));
+    }
+
+    /// Only a crossing is worth an AppKit call, and a crossing back has to
+    /// register too or the island keeps the mouse forever.
+    #[test]
+    fn the_mark_reports_a_crossing_and_only_a_crossing() {
+        let state = state();
+
+        assert!(state.set_over_rest(true));
+        assert!(!state.set_over_rest(true));
+        assert!(state.set_over_rest(false));
+        assert!(!state.set_over_rest(false));
+    }
+
+    #[test]
+    fn bounds_that_never_arrived_read_as_nothing_rather_than_zero() {
+        let state = state();
+        assert_eq!(state.shape_bounds(), None);
+
+        state.set_shape_bounds((185.0, 47.0));
+        assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+    }
+
+    /// S12 follow up. Before the user grants access there is nothing to fetch,
+    /// and telling them usage is off would send them looking for a switch that
+    /// is not the problem.
+    #[test]
+    fn the_first_reason_names_what_is_actually_missing() {
+        use peekle_core::config::{UsageConfig, UsageProviderKind};
+
+        let account = |granted: bool, denied: bool| UsageConfig {
+            enabled: true,
+            provider: UsageProviderKind::Account,
+            keychain_denied: denied,
+            keychain_granted: granted,
+        };
+
+        assert_eq!(
+            initial_reason(&account(false, false)),
+            UsageUnavailable::NotGranted
+        );
+        assert_eq!(
+            initial_reason(&account(false, true)),
+            UsageUnavailable::Denied
+        );
+        assert_eq!(
+            initial_reason(&account(true, false)),
+            UsageUnavailable::Unsupported
+        );
+
+        let off = UsageConfig {
+            enabled: false,
+            ..account(true, false)
+        };
+        assert_eq!(initial_reason(&off), UsageUnavailable::Disabled);
+    }
+
+    /// v36. A request-opened island holds itself up for ten seconds, and
+    /// engagement or expiry both end the hold exactly once.
+    #[test]
+    fn the_opening_hold_runs_out_and_clears_itself() {
+        let state = state();
+        let now = Instant::now();
+
+        assert!(!state.held_open(now), "nothing held yet");
+        state.hold_open(now + Duration::from_secs(10));
+        assert!(state.held_open(now + Duration::from_secs(9)));
+        assert!(!state.held_open(now + Duration::from_secs(10)), "expired");
+        assert!(
+            !state.held_open(now + Duration::from_secs(5)),
+            "an expired hold cleared itself rather than coming back"
+        );
+    }
+
+    #[test]
+    fn engaging_ends_the_hold_early() {
+        let state = state();
+        let now = Instant::now();
+
+        state.hold_open(now + Duration::from_secs(10));
+        state.clear_hold();
+        assert!(!state.held_open(now + Duration::from_secs(1)));
+    }
 
     fn state() -> AppState {
         AppState::new(Config::default(), Arc::new(FakeUsage::default()))

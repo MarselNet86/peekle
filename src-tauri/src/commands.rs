@@ -37,16 +37,35 @@ fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: Prom
         return;
     }
 
-    // The session is no longer waiting on anybody. Whether the agent picks the
-    // work back up is its business, so the status says idle rather than
-    // working. tech.md 6.3.
     if let Some(request) = state.active_prompt() {
         if request.id == prompt_id {
-            let cards = state.set_session_status(
-                &request.session,
-                peekle_core::types::SessionStatus::Idle,
-                now_ms(),
-            );
+            let at = now_ms();
+
+            // An answer is a message the user sent, so it lands in the feed the
+            // way a message does. A reply that vanishes on submit reads as one
+            // that never went. tech.md 6.5.
+            let answered = match &outcome {
+                PromptOutcome::Answered(answer) => answer.text.as_deref(),
+                _ => None,
+            };
+            if let Some(text) = answered {
+                state.user_turn(
+                    &request.session,
+                    text,
+                    peekle_core::types::EntryState::Ok,
+                    at,
+                );
+            }
+
+            // Answering unblocks the hook, so the agent is running again by the
+            // time this returns. Saying idle would leave the island still while
+            // work is happening. tech.md 6.3.
+            let status = if answered.is_some() {
+                peekle_core::types::SessionStatus::Working
+            } else {
+                peekle_core::types::SessionStatus::Idle
+            };
+            let cards = state.set_session_status(&request.session, status, at);
             if let Err(err) = app.emit(events::SESSIONS, &cards) {
                 tracing::warn!(error = %err, "failed to emit sessions");
             }
@@ -130,7 +149,7 @@ pub async fn refresh_usage(
     Ok(fetch_usage(&app, &state).await)
 }
 
-async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
+pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
     let provider = Arc::clone(&state.usage_provider);
     let snapshot = match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
         Ok(snapshot) => snapshot,
@@ -140,6 +159,14 @@ async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
         }
     };
 
+    // The outcome, not the token. Without this line a failing account leaves
+    // nothing behind but `could not reach the API` on the bars.
+    tracing::debug!(
+        source = ?snapshot.source,
+        reason = ?snapshot.reason,
+        windows = snapshot.windows.len(),
+        "usage snapshot"
+    );
     state.set_usage(snapshot.clone());
     if let Err(err) = app.emit(events::USAGE, &snapshot) {
         tracing::warn!(error = %err, "failed to emit usage");
@@ -161,13 +188,17 @@ pub async fn request_usage_access(
     let snapshot = fetch_usage(&app, &state).await;
 
     {
+        use peekle_core::types::UsageUnavailable;
+
         let mut config = state.lock_config();
         match snapshot.reason {
-            Some(peekle_core::types::UsageUnavailable::Denied) => {
-                config.usage.keychain_denied = true;
-            }
-            // Anything that is not a refusal means the read itself went
-            // through, so the dialog will not come back.
+            Some(UsageUnavailable::Denied) => config.usage.keychain_denied = true,
+            // A network failure says nothing about the Keychain: the read may
+            // never have happened. Recording a grant on it would start the
+            // background poll on a permission nobody confirmed.
+            Some(UsageUnavailable::Network) => {}
+            // Everything else means the read itself went through, entry there
+            // or not, so the dialog will not come back.
             _ => {
                 config.usage.keychain_denied = false;
                 config.usage.keychain_granted = true;
@@ -191,12 +222,153 @@ pub fn set_view(app: AppHandle, view: IslandView) {
     windows::set_view(&app, view);
 }
 
-/// The webview reports the size of the shape it drew. Rust records it for
-/// `doctor` and for tests and changes nothing: the window never resizes, and
-/// letting the frontend drive the frame is exactly the stutter 6.7 forbids.
+/// Holds a reply until the agent stops.
+///
+/// Not a send: there is no send. The text leaves as the body of the next
+/// blocking hook of this session, which is the only channel there is, and the
+/// entry stays `Running` in the feed until that happens. tech.md 6.5.
 #[tauri::command]
-pub fn island_bounds(width: f64, height: f64) {
+pub fn queue_reply(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    text: String,
+) {
+    let text = text.trim();
+    if text.is_empty() {
+        return;
+    }
+
+    let Some(card) = state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+    else {
+        tracing::warn!(session_id, "queued a reply for a session nobody knows");
+        return;
+    };
+
+    state.queue_reply(&session_id, text);
+    let cards = state.user_turn(
+        &card.session,
+        text,
+        peekle_core::types::EntryState::Running,
+        now_ms(),
+    );
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+
+    // A working session will stop, and its stop carries the queue for free. A
+    // standing one never will, so waiting for it means waiting forever. The
+    // registry alone cannot tell those apart: a session open in an IDE sends
+    // no hooks, reads as idle, and is being written by its own client right
+    // now. The transcript's mtime is the signal that cannot lie. tech.md 6.5.
+    const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
+
+    let working = card.status == peekle_core::types::SessionStatus::Working;
+    let live_client = peekle_core::transcripts::default_root().is_some_and(|root| {
+        peekle_core::transcripts::client_is_live(
+            &root,
+            &card.session.cwd,
+            &session_id,
+            LIVE_CLIENT_WINDOW,
+        )
+    });
+    if working || live_client || state.is_resuming(&session_id) {
+        tracing::debug!(
+            session_id,
+            working,
+            live_client,
+            "reply queued for the next stop"
+        );
+        return;
+    }
+    start_turn(&app, state.inner().clone(), &card.session);
+}
+
+/// Starts the one turn Peekle is allowed to start: the text the user typed for
+/// a session nobody is working in. tech.md 2 and 6.5.
+fn start_turn(app: &AppHandle, state: Arc<AppState>, session: &peekle_core::types::SessionRef) {
+    let session_id = session.session_id.clone();
+    if !state.claim_resume(&session_id) {
+        return;
+    }
+    let Some(text) = state.take_queued(&session_id) else {
+        state.release_resume(&session_id);
+        return;
+    };
+
+    let Some(cli) = peekle_core::claude_path() else {
+        tracing::warn!("no claude binary to resume with");
+        fail_replies(app, &state, &session_id);
+        state.release_resume(&session_id);
+        return;
+    };
+
+    let cwd = session.cwd.clone();
+    let handle = app.clone();
+    let id = session_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let app = handle;
+        let session_id = id;
+        tracing::info!(session = %session_id, "starting a turn for a standing session");
+
+        let run = tauri::async_runtime::spawn_blocking({
+            let session_id = session_id.clone();
+            move || {
+                std::process::Command::new(cli)
+                    .current_dir(&cwd)
+                    .args(["--resume", &session_id, "-p", &text])
+                    // The island reports the run through its hooks, so the
+                    // output of the process itself is of no use to anybody.
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+            }
+        })
+        .await;
+
+        match run {
+            Ok(Ok(status)) if status.success() => {
+                tracing::debug!(session = %session_id, "the turn finished");
+            }
+            other => {
+                tracing::warn!(session = %session_id, ?other, "the turn did not run");
+                fail_replies(
+                    &app,
+                    &app.state::<Arc<AppState>>().inner().clone(),
+                    &session_id,
+                );
+            }
+        }
+        app.state::<Arc<AppState>>().release_resume(&session_id);
+    });
+
+    // The text is the prompt of a run that is starting, so it has left.
+    let cards = state.replies_delivered(&session_id, now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+}
+
+/// A message that will never leave says so rather than sitting dim forever.
+fn fail_replies(app: &AppHandle, state: &Arc<AppState>, session_id: &str) {
+    let cards = state.replies_failed(session_id, now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+}
+
+/// The webview reports the size of the shape it drew. Rust never resizes the
+/// window with it: letting the frontend drive the frame is exactly the stutter
+/// 6.7 forbids. What it does do is remember the size, because that rectangle is
+/// where a resting island takes its click and what an open one has to be walked
+/// away from. tech.md 6.7.
+#[tauri::command]
+pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     tracing::debug!(width, height, "island reported its bounds");
+    state.set_shape_bounds((width, height));
 }
 
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.

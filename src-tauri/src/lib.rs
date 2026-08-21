@@ -87,6 +87,17 @@ pub fn run() {
                 windows::open_island(&handle).await;
             });
 
+            // The resting mark is the only clickable part of a collapsed
+            // island, and nothing but a poll can tell when the pointer reaches
+            // it. tech.md 6.7.
+            windows::track_pointer(app.handle());
+
+            // Past dialogues live in Claude Code's own transcripts. Reading
+            // them is the only way an island opened on a fresh start shows
+            // anything at all. tech.md 6.11.
+            backfill_sessions(app.handle(), Arc::clone(&state));
+            rest_stale_sessions(app.handle(), Arc::clone(&state));
+
             hotkey::install(app.handle(), &toggle);
 
             poll_usage(app.handle(), Arc::clone(&state));
@@ -123,6 +134,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::window_ready,
             commands::set_view,
             commands::island_bounds,
+            commands::queue_reply,
             commands::dev_emit_prompt,
         ]
     }
@@ -139,6 +151,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::window_ready,
             commands::set_view,
             commands::island_bounds,
+            commands::queue_reply,
         ]
     }
 }
@@ -172,39 +185,100 @@ fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
 /// It never starts before the user has granted Keychain access. Reading the
 /// Keychain is what raises the dialog, and rule 12 forbids this app from
 /// raising it on its own: only `request_usage_access` may.
+/// Puts a session that stopped reporting back to rest.
+///
+/// Nothing else can: `Working` arrives on a hook and leaves on a hook, so an
+/// agent that died takes the island's spinner with it forever. tech.md 6.3.
+fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    const TICK: std::time::Duration = std::time::Duration::from_secs(60);
+    /// Longer than any single tool call has a right to be silent for.
+    const STALE_AFTER_MS: i64 = 10 * 60 * 1000;
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(TICK);
+        loop {
+            ticker.tick().await;
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or_default();
+
+            let Some(cards) = state.rest_stale_work(now, STALE_AFTER_MS) else {
+                continue;
+            };
+            tracing::debug!("a session stopped reporting, putting it back to idle");
+            if let Err(err) = handle.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit rested sessions");
+            }
+        }
+    });
+}
+
+/// Reads past sessions off disk and hands them to the registry.
+///
+/// Off the main thread and off the async runtime: it opens files, and nothing
+/// about a hook may wait on a directory scan. Failure is silence, because a
+/// missing history is not a reason to say anything to the user.
+fn backfill_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(root) = peekle_core::transcripts::default_root() else {
+            return;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or_default();
+
+        let Ok(cards) = tauri::async_runtime::spawn_blocking(move || {
+            peekle_core::transcripts::scan(&root, now)
+        })
+        .await
+        else {
+            return;
+        };
+        if cards.is_empty() {
+            return;
+        }
+
+        let found = cards.len();
+        let cards = state.seed_sessions(cards);
+        tracing::debug!(
+            found,
+            total = cards.len(),
+            "backfilled sessions from transcripts"
+        );
+
+        if let Err(err) = handle.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit backfilled sessions");
+        }
+    });
+}
+
 fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
     const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+    /// While the network is down, come back sooner. A user who lost wifi in a
+    /// tunnel should not stare at dashes for five minutes after it returns.
+    const RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(EVERY).await;
-
-            let (enabled, granted, denied) = {
-                let config = state.lock_config();
-                (
-                    config.usage.enabled,
-                    config.usage.keychain_granted,
-                    config.usage.keychain_denied,
-                )
-            };
-            if !enabled || !granted || denied {
-                continue;
-            }
-
-            // The provider blocks on a network call, so it never runs on the
-            // async runtime: a slow answer must not hold up a hook.
-            let provider = Arc::clone(&state.usage_provider);
-            let Ok(snapshot) =
-                tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await
-            else {
-                continue;
+            // Fetch first and sleep after, so a granted account has numbers a
+            // second after launch rather than five minutes into the session.
+            let wait = if state.may_fetch_usage() {
+                let snapshot = commands::fetch_usage(&handle, &state).await;
+                match snapshot.reason {
+                    Some(peekle_core::types::UsageUnavailable::Network) => RETRY,
+                    _ => EVERY,
+                }
+            } else {
+                EVERY
             };
 
-            state.set_usage(snapshot.clone());
-            if let Err(err) = handle.emit(events::USAGE, &snapshot) {
-                tracing::warn!(error = %err, "failed to emit usage");
-            }
+            tokio::time::sleep(wait).await;
         }
     });
 }

@@ -5,6 +5,7 @@
  */
 
 import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -15,6 +16,7 @@ const entry = (over: Partial<FeedEntry> = {}): FeedEntry => ({
   kind: 'Tool',
   text: 'cargo test --workspace',
   tool: 'Bash',
+  detail: null,
   state: 'Running',
   at: 0,
   ...over,
@@ -42,14 +44,15 @@ describe('FeedRow', () => {
     }
   });
 
-  it('leaves the tool name out of a turn that is not a tool call', () => {
+  it("draws the user's own turn as a message rather than a row", () => {
     const { container } = render(FeedRow, {
       props: { entry: entry({ kind: 'User', tool: null, text: 'ship it', state: 'Ok' }) },
     });
 
     expect(container.querySelector('.tool')).toBeNull();
     expect(screen.getByText('ship it')).toBeInTheDocument();
-    expect(container.querySelector('.row')?.getAttribute('data-kind')).toBe('User');
+    expect(container.querySelector('.line')?.getAttribute('data-kind')).toBe('User');
+    expect(container.querySelector('.bubble')).toBeInstanceOf(HTMLElement);
   });
 
   it('renders a preview that is not ASCII without mangling it', () => {
@@ -59,20 +62,76 @@ describe('FeedRow', () => {
 });
 
 describe('what the agent said last', () => {
-  it('gets room to be read instead of one clipped line', () => {
+  it('carries the whole answer, because the feed scrolls now', () => {
     const long = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join('\n');
     const { container } = render(FeedRow, {
       props: { entry: entry({ kind: 'Assistant', tool: null, text: long, state: 'Ok' }) },
     });
 
-    expect(container.querySelector('.row')).toHaveClass('block');
-    // MessageBlock clamps to six lines and opens on a click, so the whole
-    // message is in the DOM rather than truncated away.
+    expect(container.querySelector('.line')?.getAttribute('data-kind')).toBe('Assistant');
+    // Every line is in the DOM. Clipping it to one row with an ellipsis was
+    // the reason the dialogue could not be read. tech.md 6.12.
+    expect(container.textContent).toContain('line 1');
     expect(container.textContent).toContain('line 12');
   });
 
-  it('keeps a tool call on its single line', () => {
+  it('keeps a tool call on its single quiet line', () => {
     const { container } = render(FeedRow, { props: { entry: entry() } });
-    expect(container.querySelector('.row')).not.toHaveClass('block');
+    expect(container.querySelector('.line')).toBeNull();
+    expect(container.querySelector('.row')).toBeInstanceOf(HTMLElement);
+  });
+});
+
+describe('an object with a body', () => {
+  const call = entry({
+    kind: 'Tool',
+    tool: 'Bash',
+    text: 'cargo test',
+    detail: '{\n  "command": "cargo test"\n}\n\nok. 54 passed',
+  });
+
+  /// The terminal shows a collapsed line and opens it on demand. tech.md 6.12.
+  it('keeps its body hidden until it is asked for', async () => {
+    const { container } = render(FeedRow, { props: { entry: call } });
+
+    expect(container.querySelector('.detail')).toBeNull();
+    await userEvent.click(screen.getByRole('button'));
+    expect(container.querySelector('.detail')?.textContent).toContain('ok. 54 passed');
+
+    await userEvent.click(screen.getByRole('button'));
+    expect(container.querySelector('.detail')).toBeNull();
+  });
+
+  it('offers nothing to open when there is no body', () => {
+    render(FeedRow, { props: { entry: entry({ detail: null }) } });
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  it('draws a thought as its own marker', () => {
+    const { container } = render(FeedRow, {
+      props: {
+        entry: entry({ kind: 'Thought', tool: null, text: 'Thought for 12s', detail: 'weighing' }),
+      },
+    });
+
+    expect(container.querySelector('.object')?.getAttribute('data-kind')).toBe('Thought');
+    expect(screen.getByText('Thought for 12s')).toBeInTheDocument();
+  });
+});
+
+describe('a reply on its way out', () => {
+  it('reads as queued until something carries it', () => {
+    const { container } = render(FeedRow, {
+      props: { entry: entry({ kind: 'User', tool: null, text: 'keep going', state: 'Running' }) },
+    });
+    expect(container.querySelector('.line')?.getAttribute('data-state')).toBe('Running');
+  });
+
+  /// A message nobody could deliver says so rather than sitting dim forever.
+  it('reads as undelivered when no turn could be started', () => {
+    const { container } = render(FeedRow, {
+      props: { entry: entry({ kind: 'User', tool: null, text: 'keep going', state: 'Failed' }) },
+    });
+    expect(container.querySelector('.line')?.getAttribute('data-state')).toBe('Failed');
   });
 });

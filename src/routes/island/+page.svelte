@@ -3,16 +3,20 @@
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
-  import { backToList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
+  import { openList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
-  import { feedWindow } from '$lib/logic/feed';
+  import { scrollState } from '$lib/logic/feed';
+  import { clickPutsAway, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
+  import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
+  import UsageDial from '$lib/ui/UsageDial.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
@@ -28,14 +32,86 @@
     const id = sessionOf(island.view);
     return id ? feed.card(id) : undefined;
   });
-  const rows = $derived(feedWindow(current?.entries ?? []));
+  const rows = $derived(current?.entries ?? []);
   const listing = $derived(island.view === 'Sessions');
-  const cards = $derived(feedWindow(feed.sessions));
+  const cards = $derived(feed.sessions);
+
+  // The feed scrolls for real, so where it stands is a fact about the DOM
+  // rather than about the number of rows. tech.md 6.12.
+  let scroller = $state<HTMLElement | null>(null);
+  let atBottom = $state(true);
+  let showHint = $state(false);
+
+  function readScroll() {
+    if (!scroller) return;
+    const state = scrollState(scroller.scrollTop, scroller.clientHeight, scroller.scrollHeight);
+    atBottom = state.atBottom;
+    showHint = state.showHint;
+  }
+
+  function toBottom(smooth = true) {
+    if (!scroller) return;
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  // Opening a session lands on the last message: a messenger that opens on the
+  // first one reads as broken. Standing at the bottom is a fact about one feed,
+  // so switching feeds forgets it; carrying it over opens the next session
+  // wherever the last one happened to be. tech.md 6.12.
+  let shown = $state('');
+
+  $effect(() => {
+    const id = JSON.stringify(island.view);
+    const switched = id !== shown;
+    shown = id;
+
+    void rows.length;
+    void cards.length;
+    if (!scroller) return;
+
+    const follow = switched || atBottom;
+    // Twice: once for the rows, once after the spring has finished growing the
+    // shape around them. A single frame lands halfway up a still opening feed.
+    requestAnimationFrame(() => {
+      if (follow) toBottom(false);
+      readScroll();
+    });
+    const settle = setTimeout(() => {
+      if (follow) toBottom(false);
+      readScroll();
+    }, 260);
+    return () => clearTimeout(settle);
+  });
+  // The mark is all the user sees while the island rests, so it carries the
+  // one bit worth acting on. tech.md 6.7.
+  const resting = $derived(restStatus(feed.sessions));
+
+  // A request that is still waiting is the reason to come back, so the mark
+  // opens its session rather than the list. tech.md 6.7.
+  function reopen() {
+    const waiting = island.prompt?.session.session_id;
+    if (waiting) openSession(waiting);
+    else openList();
+  }
+  // The ring on the mark and the 5h bar inside read the same number, so they
+  // come from the same place. tech.md 6.7.
+  const hourWindow = $derived(usage.bars[0]?.pct ?? null);
 
   // The field is live only while a session is actually waiting on an answer.
   // Outside that there is nowhere to deliver the text, and a field that looks
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
   const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
+
+  // The field never goes dark. An ended session is a standing session and
+  // resume continues it; Ended itself is unreliable anyway, since a resumed
+  // run shares the id and its SessionEnd marks the card while a live client
+  // keeps writing. tech.md 6.5.
+  const replyHint = $derived.by(() => {
+    if (waiting) return 'Reply to Claude';
+    // A working session will stop and carry the text for free; a standing one
+    // gets started. Saying which one it is beats one vague promise for both.
+    return current?.status === 'Working' ? 'Type now, it goes when Claude stops' : 'Send to Claude';
+  });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
   function answerPermission(kind: 'allow' | 'deny') {
@@ -50,6 +126,13 @@
     if (!island.prompt) reply = '';
   });
 
+  // Queued text has left the field the moment it is in the feed.
+  function send(text: string) {
+    if (!current) return;
+    island.answer(text, current.session.session_id);
+    reply = '';
+  }
+
   $effect(() => {
     const stop = Promise.all([island.start(), feed.start(), usage.start()]);
     // Rust holds the panel back until this lands, so the island never appears
@@ -58,6 +141,23 @@
     return () => {
       void stop.then((offs) => offs.forEach((off) => off()));
     };
+  });
+
+  // An open island takes the mouse on the whole 720 by 560 window, so a click
+  // beside the shape is already lost to whatever is underneath. Spending it on
+  // putting the island away is the one useful thing left to do with it.
+  //
+  // A pending request does not stop it: collapsing is not resolving, the hook
+  // stays pending, and the mark keeps pulsing until it is answered. tech.md 6.7.
+  $effect(() => {
+    if (island.view === 'Collapsed') return;
+
+    const dismiss = (event: MouseEvent) => {
+      if (clickPutsAway(island.view, event.target)) commands.setView('Collapsed');
+    };
+
+    window.addEventListener('click', dismiss);
+    return () => window.removeEventListener('click', dismiss);
   });
 
   // Rust records what the shape actually measured and changes nothing with it:
@@ -92,44 +192,80 @@
   });
 </script>
 
+<!-- The windows are the same fact in both views: how much of the hour is gone
+     is as much a part of reading a dialogue as of picking one. tech.md S7. -->
+{#snippet usage_bars()}
+  <div class="usage">
+    {#if usage.connectLabel}
+      <Button
+        label={usage.connecting ? 'Connecting' : usage.connectLabel}
+        variant="connect"
+        disabled={usage.connecting}
+        wide
+        onclick={() => usage.connect()}
+      />
+    {:else}
+      {#each usage.bars as bar (bar.label)}
+        <UsageBar label={bar.label} pct={bar.pct} resetsAt={bar.resetsAt} reason={usage.reason} />
+      {/each}
+    {/if}
+  </div>
+{/snippet}
+
 <div class="island" bind:this={host}>
   <Shape view={island.view} notch={island.notch}>
+    {#snippet rest()}
+      <RestMark status={resting} pct={hourWindow} onopen={() => reopen()} />
+    {/snippet}
+
     {#if island.view === 'Pill' && island.toast}
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
       <div class="feed">
-        <div class="rows">
-          {#each cards.visible as card (card.session.session_id)}
+        <div class="rows" bind:this={scroller} onscroll={readScroll}>
+          {#each cards as card (card.session.session_id)}
             <SessionRow {card} onopen={() => openSession(card.session.session_id)} />
           {/each}
+          <!-- An empty list opened from the mark says so. Collapsing on the
+               click the user just made reads as a broken island. tech.md S12. -->
+          {#if cards.length === 0}
+            <p class="empty">No sessions yet. Start Claude Code and it shows up here.</p>
+          {/if}
         </div>
-        <ScrollHint visible={cards.showScrollHint} />
+        <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
-        <div class="usage">
-          {#each usage.bars as bar (bar.label)}
-            <UsageBar
-              label={bar.label}
-              pct={bar.pct}
-              resetsAt={bar.resetsAt}
-              reason={usage.reason}
-            />
-          {/each}
-        </div>
+        {@render usage_bars()}
       </div>
     {:else if current}
       <div class="feed">
-        <button class="back" onclick={() => backToList()} aria-label="Back to the session list">
-          <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
-            <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-          </svg>
-          <span>{current.session.project}</span>
-        </button>
-        <div class="rows">
-          {#each rows.visible as entry (entry.id)}
+        <div class="head">
+          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+            <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+              <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <span>{current.session.project}</span>
+          </button>
+          <!-- The windows in miniature. The full bars stay in the list, where
+               there is room for them. tech.md 6.12. -->
+          <div class="dials">
+            <UsageDial pct={usage.bars[0]?.pct ?? null} label="5h" size={13} />
+            <UsageDial pct={usage.bars[1]?.pct ?? null} label="7d" size={13} />
+          </div>
+        </div>
+        <div class="rows" bind:this={scroller} onscroll={readScroll}>
+          {#each rows as entry (entry.id)}
             <FeedRow {entry} />
           {/each}
+          <!-- The agent is mid turn, so the dialogue says so instead of sitting
+               still and reading as broken. tech.md 6.12. -->
+          {#if current.status === 'Working'}
+            <TypingLine />
+          {/if}
         </div>
-        <ScrollHint visible={rows.showScrollHint && !waiting} />
+        <ScrollHint visible={showHint} onclick={() => toBottom()} />
+        {#if usage.connectLabel}
+          {@render usage_bars()}
+        {/if}
 
         {#if permission}
           <div class="reply">
@@ -139,23 +275,30 @@
               ondeny={() => answerPermission('deny')}
             />
           </div>
-        {:else if waiting}
+        {:else}
+          <!-- The field is always here and only sometimes live. Typed text
+               reaches the agent one way, as the body of a blocking hook's
+               reply, so outside that there is nowhere to deliver it; hiding the
+               field made the island look broken, and a field that lies about
+               delivery would be worse. tech.md 6.5. -->
           <div class="reply">
             <PromptInput
               bind:value={reply}
-              placeholder="Reply to Claude"
-              onsubmit={(text) => island.answer(text)}
+              placeholder={replyHint}
+              onsubmit={send}
               onescape={() => island.dismiss()}
             />
-            <div class="choices">
-              {#each island.prompt?.options ?? [] as option (option.id)}
-                <Button
-                  label={option.label}
-                  variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
-                  onclick={() => island.choose(option.id)}
-                />
-              {/each}
-            </div>
+            {#if waiting}
+              <div class="choices">
+                {#each island.prompt?.options ?? [] as option (option.id)}
+                  <Button
+                    label={option.label}
+                    variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
+                    onclick={() => island.choose(option.id)}
+                  />
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -178,10 +321,14 @@
     box-sizing: border-box;
   }
 
+  /* The feed scrolls natively. Every row is in the markup: a window of six
+     was the reason the chevron did nothing. tech.md 6.12. */
   .rows {
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
   }
 
   /* The bars sit under the session list, where the eye lands after reading
@@ -191,6 +338,28 @@
     flex: none;
     border-top: 1px solid var(--hairline);
     padding-top: 6px;
+  }
+
+  .empty {
+    margin: 0;
+    padding: 10px 2px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+  }
+
+  .dials {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 4px;
   }
 
   .back {

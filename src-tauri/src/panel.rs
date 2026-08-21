@@ -2,6 +2,7 @@
 //! flag below is spelled out there, including the traps that produce no error
 //! when you get them wrong.
 
+use peekle_core::island::Rect;
 use tauri::{AppHandle, LogicalPosition, Manager, WebviewWindow};
 use tauri_nspanel::{
     tauri_panel, CollectionBehavior, ManagerExt, Panel, PanelLevel, StyleMask, WebviewWindowExt,
@@ -168,6 +169,27 @@ fn active_screen(app: &AppHandle) -> Option<((f64, f64), (f64, f64))> {
     let origin = monitor.position().to_logical::<f64>(scale);
     let size = monitor.size().to_logical::<f64>(scale);
     Some(((origin.x, origin.y), (size.width, size.height)))
+}
+
+/// The island frame in physical pixels, with the scale the webview draws at.
+///
+/// Physical on purpose: the pointer arrives from Tauri in physical pixels and
+/// displays can differ in scale, so converting one of them into the logical
+/// space of the other is where an off by a factor of two would hide.
+pub fn island_frame(app: &AppHandle) -> Result<(Rect, f64), PanelError> {
+    let window = window(app, ISLAND)?;
+    let position = window.outer_position()?;
+    let size = window.outer_size()?;
+
+    Ok((
+        Rect::new(
+            f64::from(position.x),
+            f64::from(position.y),
+            f64::from(size.width),
+            f64::from(size.height),
+        ),
+        window.scale_factor()?,
+    ))
 }
 
 fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, PanelError> {

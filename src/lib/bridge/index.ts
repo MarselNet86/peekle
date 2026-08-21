@@ -52,6 +52,7 @@ export const commands = {
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
+  queueReply: (sessionId: string, text: string) => call<void>('queue_reply', { sessionId, text }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

@@ -11,7 +11,12 @@ export function openSession(sessionId: string) {
   commands.setView({ Session: sessionId });
 }
 
-export function backToList() {
+/**
+ * The one entry point into the list: the back chevron of an open session, and
+ * the resting mark. Rust answers on `peekle://view`, so nothing here assumes
+ * the island opened. tech.md 6.5.
+ */
+export function openList() {
   commands.setView('Sessions');
 }
 

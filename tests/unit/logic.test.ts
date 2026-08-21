@@ -7,17 +7,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { clampPct, resetCountdown, usageTone } from '$lib/logic/usage';
-import { feedWindow, MAX_VISIBLE_ROWS } from '$lib/logic/feed';
-import type { TaskItem } from '$lib/types/generated/TaskItem';
-
-const task = (i: number): TaskItem => ({
-  id: String(i),
-  title: `task ${i}`,
-  label: 'Code',
-  status: 'Pending',
-  session_id: 's',
-  updated_at: i,
-});
+import { scrollState } from '$lib/logic/feed';
 
 describe('usage math', () => {
   it('lands in 0..100 for any number the headers can produce', () => {
@@ -80,34 +70,40 @@ describe('usage math', () => {
   });
 });
 
-describe('feed window', () => {
-  it('never renders more than six rows and hints exactly when it clips', () => {
+describe('feed scrolling', () => {
+  it('hints exactly while something is below the fold', () => {
     fc.assert(
-      fc.property(fc.nat({ max: 200 }), (count) => {
-        const tasks = Array.from({ length: count }, (_, i) => task(i));
-        const view = feedWindow(tasks);
+      fc.property(
+        fc.double({ min: 0, max: 4000, noNaN: true }),
+        fc.double({ min: 1, max: 800, noNaN: true }),
+        fc.double({ min: 0, max: 8000, noNaN: true }),
+        (top, clientHeight, extra) => {
+          const scrollHeight = clientHeight + extra;
+          const state = scrollState(top, clientHeight, scrollHeight);
 
-        expect(view.visible.length).toBeLessThanOrEqual(MAX_VISIBLE_ROWS);
-        expect(view.visible.length).toBe(Math.min(count, MAX_VISIBLE_ROWS));
-        // The tail, so the newest row is always on screen.
-        if (count > 0) expect(view.visible[view.visible.length - 1]).toEqual(tasks[count - 1]);
-        expect(view.showScrollHint).toBe(count > MAX_VISIBLE_ROWS);
-        expect(view.showList).toBe(count > 0);
-      }),
+          // The two are the same fact stated twice, so they can never disagree.
+          expect(state.showHint).toBe(!state.atBottom);
+          const below = scrollHeight - top - clientHeight;
+          expect(state.atBottom).toBe(below <= 1);
+        },
+      ),
     );
   });
 
-  it('clamps a configured limit above six back down to six', () => {
-    fc.assert(
-      fc.property(fc.integer({ min: -20, max: 400 }), (limit) => {
-        const tasks = Array.from({ length: 40 }, (_, i) => task(i));
-        expect(feedWindow(tasks, limit).visible.length).toBeLessThanOrEqual(MAX_VISIBLE_ROWS);
-      }),
-    );
+  it('reads a feed shorter than its box as being at the bottom', () => {
+    expect(scrollState(0, 400, 400)).toEqual({ atBottom: true, showHint: false });
+    expect(scrollState(0, 400, 120)).toEqual({ atBottom: true, showHint: false });
   });
 
-  it('hides the list when there is nothing to show', () => {
-    expect(feedWindow([]).showList).toBe(false);
-    expect(feedWindow([]).showScrollHint).toBe(false);
+  it('reads a feed scrolled to the very end as being at the bottom', () => {
+    expect(scrollState(600, 400, 1000).atBottom).toBe(true);
+    // Half a pixel of rounding on a scaled display is still the bottom.
+    expect(scrollState(599.5, 400, 1000).atBottom).toBe(true);
+    expect(scrollState(560, 400, 1000).atBottom).toBe(false);
+  });
+
+  it('survives the numbers a detached element reports', () => {
+    expect(scrollState(NaN, NaN, NaN)).toEqual({ atBottom: true, showHint: false });
+    expect(scrollState(-10, 0, 0)).toEqual({ atBottom: true, showHint: false });
   });
 });
