@@ -36,6 +36,9 @@ pub struct AppState {
     /// Since when the pointer has been off an open island, or None while it is
     /// on it. tech.md 6.7.
     outside_since: Mutex<Option<Instant>>,
+    /// Until when an island opened by a request holds itself on screen with the
+    /// pointer elsewhere. tech.md 6.7.
+    hold_until: Mutex<Option<Instant>>,
     hotkey_ok: AtomicBool,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
@@ -108,6 +111,7 @@ impl AppState {
             shape_bounds: Mutex::new(None),
             over_rest: AtomicBool::new(false),
             outside_since: Mutex::new(None),
+            hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -162,6 +166,28 @@ impl AppState {
     /// Only a crossing is worth an AppKit call.
     pub fn set_over_rest(&self, inside: bool) -> bool {
         self.over_rest.swap(inside, Ordering::SeqCst) != inside
+    }
+
+    /// Keeps a request-opened island up until `until`, pointer or no pointer.
+    pub fn hold_open(&self, until: Instant) {
+        *self.lock(&self.hold_until) = Some(until);
+    }
+
+    /// Whether the hold is still running. An expired hold clears itself.
+    pub fn held_open(&self, now: Instant) -> bool {
+        let mut hold = self.lock(&self.hold_until);
+        match *hold {
+            Some(until) if now < until => true,
+            _ => {
+                *hold = None;
+                false
+            }
+        }
+    }
+
+    /// The user engaged, so the hold has done its job.
+    pub fn clear_hold(&self) {
+        *self.lock(&self.hold_until) = None;
     }
 
     /// The pointer is on the island, so any walking away starts over.
@@ -516,6 +542,33 @@ mod tests {
             ..account(true, false)
         };
         assert_eq!(initial_reason(&off), UsageUnavailable::Disabled);
+    }
+
+    /// v36. A request-opened island holds itself up for ten seconds, and
+    /// engagement or expiry both end the hold exactly once.
+    #[test]
+    fn the_opening_hold_runs_out_and_clears_itself() {
+        let state = state();
+        let now = Instant::now();
+
+        assert!(!state.held_open(now), "nothing held yet");
+        state.hold_open(now + Duration::from_secs(10));
+        assert!(state.held_open(now + Duration::from_secs(9)));
+        assert!(!state.held_open(now + Duration::from_secs(10)), "expired");
+        assert!(
+            !state.held_open(now + Duration::from_secs(5)),
+            "an expired hold cleared itself rather than coming back"
+        );
+    }
+
+    #[test]
+    fn engaging_ends_the_hold_early() {
+        let state = state();
+        let now = Instant::now();
+
+        state.hold_open(now + Duration::from_secs(10));
+        state.clear_hold();
+        assert!(!state.held_open(now + Duration::from_secs(1)));
     }
 
     fn state() -> AppState {
