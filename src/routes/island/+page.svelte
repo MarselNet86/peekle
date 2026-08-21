@@ -101,6 +101,20 @@
   // Outside that there is nowhere to deliver the text, and a field that looks
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
   const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
+
+  // Why the field is off, in the field itself. A disabled box with no
+  // explanation reads as a bug rather than as a state. tech.md 6.5.
+  const replyHint = $derived.by(() => {
+    if (waiting) return 'Reply to Claude';
+    switch (current?.status) {
+      case 'Working':
+        return 'Claude is working, reply when it stops';
+      case 'Ended':
+        return 'This session has ended';
+      default:
+        return 'Nothing is waiting on you here';
+    }
+  });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
   function answerPermission(kind: 'allow' | 'deny') {
@@ -257,23 +271,31 @@
               ondeny={() => answerPermission('deny')}
             />
           </div>
-        {:else if waiting}
+        {:else}
+          <!-- The field is always here and only sometimes live. Typed text
+               reaches the agent one way, as the body of a blocking hook's
+               reply, so outside that there is nowhere to deliver it; hiding the
+               field made the island look broken, and a field that lies about
+               delivery would be worse. tech.md 6.5. -->
           <div class="reply">
             <PromptInput
               bind:value={reply}
-              placeholder="Reply to Claude"
+              disabled={!waiting}
+              placeholder={replyHint}
               onsubmit={(text) => island.answer(text)}
               onescape={() => island.dismiss()}
             />
-            <div class="choices">
-              {#each island.prompt?.options ?? [] as option (option.id)}
-                <Button
-                  label={option.label}
-                  variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
-                  onclick={() => island.choose(option.id)}
-                />
-              {/each}
-            </div>
+            {#if waiting}
+              <div class="choices">
+                {#each island.prompt?.options ?? [] as option (option.id)}
+                  <Button
+                    label={option.label}
+                    variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
+                    onclick={() => island.choose(option.id)}
+                  />
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
