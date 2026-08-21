@@ -531,3 +531,60 @@ fn an_empty_answer_is_not_a_turn() {
     registry.user_turn(session.clone(), "   ", 1);
     assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
 }
+
+/// A session whose agent died would otherwise spin forever: `Working` arrives
+/// on a hook and leaves on a hook, and a dead agent sends neither.
+#[test]
+fn a_session_that_stopped_reporting_goes_back_to_rest() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+    registry.ensure(session.clone(), 0);
+    registry.set_status("s", peekle_core::types::SessionStatus::Working, 1_000);
+
+    let after = 600_000;
+    assert!(
+        !registry.rest_stale_work(1_000 + after - 1, after),
+        "not yet"
+    );
+    assert_eq!(
+        registry.cards()[0].status,
+        peekle_core::types::SessionStatus::Working
+    );
+
+    assert!(registry.rest_stale_work(1_000 + after, after));
+    assert_eq!(
+        registry.cards()[0].status,
+        peekle_core::types::SessionStatus::Idle
+    );
+    assert!(
+        !registry.rest_stale_work(9_999_999, after),
+        "nothing left to rest"
+    );
+}
+
+#[test]
+fn resting_leaves_every_other_status_alone() {
+    use peekle_core::types::SessionStatus;
+
+    for status in [
+        SessionStatus::WaitingOnUser,
+        SessionStatus::Idle,
+        SessionStatus::Ended,
+    ] {
+        let mut registry = SessionRegistry::new();
+        let session = peekle_core::types::SessionRef {
+            session_id: "s".to_string(),
+            cwd: "/tmp".to_string(),
+            project: "tmp".to_string(),
+        };
+        registry.ensure(session, 0);
+        registry.set_status("s", status, 0);
+
+        assert!(!registry.rest_stale_work(i64::MAX / 2, 1), "{status:?}");
+        assert_eq!(registry.cards()[0].status, status);
+    }
+}

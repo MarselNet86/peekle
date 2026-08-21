@@ -267,6 +267,25 @@ impl SessionRegistry {
         push_entry(card, entry);
     }
 
+    /// Puts a session that stopped reporting back to rest.
+    ///
+    /// `Working` is set by an event and cleared by an event, so a session whose
+    /// agent died, whose terminal was closed, or which never had an agent at
+    /// all, stays working forever: the mark spins and the reply field stays
+    /// dark with nothing on the way. The window is generous on purpose. A long
+    /// build reports nothing between `PreToolUse` and `PostToolUse`, and
+    /// calling that dead would be worse than waiting. tech.md 6.3.
+    pub fn rest_stale_work(&mut self, now: i64, after: i64) -> bool {
+        let mut changed = false;
+        for card in self.cards.iter_mut() {
+            if card.status == SessionStatus::Working && now - card.updated_at >= after {
+                card.status = SessionStatus::Idle;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     /// Moves a status. Returns false when the session is unknown,
     /// which happens when Peekle started mid session.
     pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {

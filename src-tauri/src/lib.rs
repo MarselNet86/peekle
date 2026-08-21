@@ -96,6 +96,7 @@ pub fn run() {
             // them is the only way an island opened on a fresh start shows
             // anything at all. tech.md 6.11.
             backfill_sessions(app.handle(), Arc::clone(&state));
+            rest_stale_sessions(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
 
@@ -182,6 +183,37 @@ fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
 /// It never starts before the user has granted Keychain access. Reading the
 /// Keychain is what raises the dialog, and rule 12 forbids this app from
 /// raising it on its own: only `request_usage_access` may.
+/// Puts a session that stopped reporting back to rest.
+///
+/// Nothing else can: `Working` arrives on a hook and leaves on a hook, so an
+/// agent that died takes the island's spinner with it forever. tech.md 6.3.
+fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    const TICK: std::time::Duration = std::time::Duration::from_secs(60);
+    /// Longer than any single tool call has a right to be silent for.
+    const STALE_AFTER_MS: i64 = 10 * 60 * 1000;
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(TICK);
+        loop {
+            ticker.tick().await;
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or_default();
+
+            let Some(cards) = state.rest_stale_work(now, STALE_AFTER_MS) else {
+                continue;
+            };
+            tracing::debug!("a session stopped reporting, putting it back to idle");
+            if let Err(err) = handle.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit rested sessions");
+            }
+        }
+    });
+}
+
 /// Reads past sessions off disk and hands them to the registry.
 ///
 /// Off the main thread and off the async runtime: it opens files, and nothing
