@@ -1,25 +1,32 @@
-/** Feed windowing. Pure, so the property tests can hammer it. */
+/** Feed scrolling. Pure, so the property tests can hammer it. */
 
 /** tech.md 6.8 caps this at 6 no matter what the config says. */
 export const MAX_VISIBLE_ROWS = 6;
 
-export interface FeedWindow<T> {
-  visible: T[];
-  /** Shown exactly when something is scrolled out of view. */
-  showScrollHint: boolean;
-  /** The list disappears entirely when there is nothing to show. */
-  showList: boolean;
+export interface ScrollState {
+  /** Nothing below the fold, so a new message may follow the view down. */
+  atBottom: boolean;
+  /** The hint shows exactly while there is something below to reach. */
+  showHint: boolean;
 }
 
 /**
- * The last rows of a list, capped. The tail rather than the head: the newest
- * activity is the reason the island opened.
+ * Where a scroll container stands.
+ *
+ * A pixel of slack: browsers report fractional heights on scaled displays, and
+ * an exact comparison leaves the hint lit at the very bottom of every feed.
  */
-export function feedWindow<T>(rows: T[], limit = MAX_VISIBLE_ROWS): FeedWindow<T> {
-  const capped = Math.min(Math.max(Math.trunc(limit) || 0, 0), MAX_VISIBLE_ROWS);
-  return {
-    visible: rows.slice(Math.max(rows.length - capped, 0)),
-    showScrollHint: rows.length > capped,
-    showList: rows.length > 0,
-  };
+export function scrollState(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+): ScrollState {
+  const sane = (value: number) => (Number.isFinite(value) ? Math.max(value, 0) : 0);
+  const top = sane(scrollTop);
+  const visible = sane(clientHeight);
+  const total = sane(scrollHeight);
+
+  const below = total - top - visible;
+  const atBottom = below <= 1;
+  return { atBottom, showHint: !atBottom };
 }

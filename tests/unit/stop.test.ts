@@ -5,10 +5,25 @@
 
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { commands } from '$lib/bridge';
+import { createIsland } from '$lib/features/island/island.svelte';
 import Button from '$lib/ui/Button.svelte';
 import PromptInput from '$lib/ui/PromptInput.svelte';
+
+vi.mock('$lib/bridge', async (original) => {
+  const real = await original<typeof import('$lib/bridge')>();
+  return {
+    ...real,
+    commands: { ...real.commands, queueReply: vi.fn(), answerPrompt: vi.fn() },
+  };
+});
+
+beforeEach(() => {
+  vi.mocked(commands.queueReply).mockClear();
+  vi.mocked(commands.answerPrompt).mockClear();
+});
 
 describe('the reply field', () => {
   it('sends the typed text on Enter', async () => {
@@ -83,5 +98,31 @@ describe('the choice buttons', () => {
 
     expect(button?.hasAttribute('autofocus')).toBe(false);
     expect(document.activeElement).not.toBe(button);
+  });
+});
+
+describe('writing while the agent is busy', () => {
+  /// A terminal takes typing whenever you do it and hands it over at the turn
+  /// boundary. The island does the same, and says so. tech.md 6.5.
+  it('queues the text for the session instead of answering nothing', () => {
+    const island = createIsland('');
+    island.answer('keep going', 's1');
+
+    expect(commands.queueReply).toHaveBeenCalledExactlyOnceWith('s1', 'keep going');
+    expect(commands.answerPrompt).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing at all when it does not know which session', () => {
+    const island = createIsland('');
+    island.answer('keep going');
+
+    expect(commands.queueReply).not.toHaveBeenCalled();
+  });
+
+  it('never queues whitespace', () => {
+    const island = createIsland('');
+    island.answer('   \n  ', 's1');
+
+    expect(commands.queueReply).not.toHaveBeenCalled();
   });
 });

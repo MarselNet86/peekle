@@ -13,6 +13,13 @@ name = "peekle_lib"
 # the two of them cost half a gigabyte of build output for nothing.
 crate-type = ["rlib"]
 
+# The app binary is not called `peekle`, and that is deliberate. `peekle` is the
+# CLI, and two crates in one workspace producing the same binary name write to
+# the same path in target/: whichever built last silently wins. tech.md 5.
+[[bin]]
+name = "peekle-app"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

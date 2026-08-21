@@ -6,7 +6,15 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { FALLBACK_NOTCH, readNotch, shapeBounds, WINDOW } from '$lib/logic/shape';
+import {
+  FALLBACK_NOTCH,
+  readNotch,
+  REST_DROP,
+  REST_PILL,
+  REST_SIDE,
+  shapeBounds,
+  WINDOW,
+} from '$lib/logic/shape';
 import type { IslandView } from '$lib/types/generated/IslandView';
 
 const views: fc.Arbitrary<IslandView> = fc.oneof(
@@ -57,12 +65,14 @@ describe('shape bounds', () => {
     );
   });
 
-  it('collapses to the notch itself, never wider', () => {
+  it('rests around the notch it was measured from, never adrift of it', () => {
     fc.assert(
       fc.property(fc.double({ min: 1, max: 400, noNaN: true }), (width) => {
         const bounds = shapeBounds('Collapsed', { width, height: 32 });
-        expect(bounds.width).toBeCloseTo(width);
-        expect(bounds.radius).toBe(0);
+        // Wider than the cutout on purpose: the overhangs are the only pixels
+        // a resting island has to draw on. tech.md 6.7.
+        expect(bounds.width).toBeCloseTo(width + 2 * REST_SIDE);
+        expect(bounds.height).toBeCloseTo(32 + REST_DROP);
       }),
     );
   });
@@ -113,9 +123,13 @@ describe('a display with no notch', () => {
     expect(without.radius).toBeGreaterThan(0);
   });
 
-  it('collapses to nothing at all, so an external monitor stays clean', () => {
+  it('rests as a small pill rather than a bar across the menu bar', () => {
     const bounds = shapeBounds('Collapsed', { width: 185, height: 0 });
-    expect(bounds.height).toBe(0);
+    expect(bounds).toEqual({
+      width: REST_PILL.width,
+      height: REST_PILL.height,
+      radius: REST_PILL.height / 2,
+    });
   });
 
   it('keeps every open view inside the window on any screen', () => {

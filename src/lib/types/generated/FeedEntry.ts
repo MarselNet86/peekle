@@ -14,7 +14,12 @@ text: string,
 /**
  * Tool name, set for `EntryKind::Tool`.
  */
-tool: string | null, state: EntryState, 
+tool: string | null, 
+/**
+ * The body behind an expansion: the input and output of a tool call, or
+ * the reasoning behind a `Thought`. tech.md 6.3.
+ */
+detail: string | null, state: EntryState, 
 /**
  * unix ms
  */

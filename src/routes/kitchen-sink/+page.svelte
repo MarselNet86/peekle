@@ -7,12 +7,15 @@
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
+  import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
+  import UsageDial from '$lib/ui/UsageDial.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
   import type { SessionCard } from '$lib/types/generated/SessionCard';
@@ -58,11 +61,31 @@
   const NOTCH = { width: 200, height: 32 };
 
   // Every EntryState, including the one only the Stop sweep can produce.
+  // Everything a message can carry: inline code, bold, and a fenced block.
+  const formatted: FeedEntry = {
+    id: 'k0',
+    kind: 'Assistant',
+    detail: null,
+    text: 'Ran `cargo test` and it is **green**.\n\n```rust\nlet ok = true;\n```',
+    tool: null,
+    state: 'Ok',
+    at: 0,
+  };
+
   const entries: FeedEntry[] = [
-    { id: 'e0', kind: 'User', text: 'ship the feed slice', tool: null, state: 'Ok', at: 0 },
+    {
+      id: 'e0',
+      kind: 'User',
+      detail: null,
+      text: 'ship the feed slice',
+      tool: null,
+      state: 'Ok',
+      at: 0,
+    },
     {
       id: 'e1',
       kind: 'Tool',
+      detail: null,
       text: 'cargo test --workspace',
       tool: 'Bash',
       state: 'Running',
@@ -71,15 +94,17 @@
     {
       id: 'e2',
       kind: 'Tool',
+      detail: null,
       text: 'crates/peekle-core/src/sessions.rs',
       tool: 'Read',
       state: 'Ok',
       at: 2,
     },
-    { id: 'e3', kind: 'Tool', text: 'exit 42', tool: 'Bash', state: 'Failed', at: 3 },
+    { id: 'e3', kind: 'Tool', detail: null, text: 'exit 42', tool: 'Bash', state: 'Failed', at: 3 },
     {
       id: 'e4',
       kind: 'Assistant',
+      detail: null,
       text: 'The sweep closes the row at the turn boundary.',
       tool: null,
       state: 'Ok',
@@ -134,6 +159,9 @@
     </div>
     <div class="stage">
       <Shape {view} notch={NOTCH}>
+        {#snippet rest()}
+          <RestMark status="waiting" pct={62} onopen={() => {}} />
+        {/snippet}
         <Toast text="Claude needs your input" tone="Neutral" badge={3} />
       </Shape>
     </div>
@@ -147,6 +175,82 @@
         </div>
       {/each}
     </div>
+  </section>
+
+  <section>
+    <h2>RestMark</h2>
+    <!-- Drawn on the island fill, because that is the only surface it ever
+         appears on and any other background lies about the contrast. -->
+    <div class="row">
+      {#each ['idle', 'working', 'waiting'] as const as status (status)}
+        <div class="mark-stage">
+          <RestMark {status} pct={12} onopen={() => {}} />
+        </div>
+      {/each}
+    </div>
+    <!-- Every threshold of section 9, plus the unknown that draws an empty
+         ring rather than a zero. tech.md R-3. -->
+    <div class="row">
+      {#each [null, 12, 62, 81, 96] as pct (String(pct))}
+        <div class="mark-stage">
+          <RestMark status="idle" {pct} onopen={() => {}} />
+        </div>
+      {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>Message formatting</h2>
+    <!-- The three things a turn actually uses, on the island's own black. -->
+    <div class="stage messages">
+      <FeedRow entry={formatted} />
+      <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
+    </div>
+  </section>
+
+  <section>
+    <h2>UsageDial</h2>
+    <div class="stage messages dials">
+      <UsageDial pct={null} label="5h" />
+      <UsageDial pct={18} label="5h" />
+      <UsageDial pct={64} label="5h" />
+      <UsageDial pct={82} label="7d" />
+      <UsageDial pct={97} label="7d" />
+    </div>
+  </section>
+
+  <section>
+    <h2>Objects with a body</h2>
+    <!-- A tool call and a thought, collapsed as the terminal shows them. -->
+    <div class="stage messages">
+      <FeedRow
+        entry={{
+          id: 'o0',
+          kind: 'Tool',
+          tool: 'Bash',
+          text: 'cargo test --workspace',
+          detail: '{\n  "command": "cargo test --workspace"\n}\n\ntest result: ok. 54 passed',
+          state: 'Ok',
+          at: 0,
+        }}
+      />
+      <FeedRow
+        entry={{
+          id: 'o1',
+          kind: 'Thought',
+          tool: null,
+          text: 'Thought for 12s',
+          detail: 'weighing two options',
+          state: 'Ok',
+          at: 0,
+        }}
+      />
+    </div>
+  </section>
+
+  <section>
+    <h2>TypingLine</h2>
+    <div class="stage messages"><TypingLine /></div>
   </section>
 
   <section>
@@ -219,6 +323,9 @@
     <h2>Button</h2>
     <div class="frame choices">
       <Button label="Continue" variant="primary" />
+      <Button label="Connect" variant="connect" />
+      <Button label="Connecting" variant="connect" disabled />
+      <Button label="Connect" variant="connect" wide />
       <Button label="Finish" />
       <Button label="Finish" disabled />
     </div>
@@ -330,6 +437,27 @@
   .stage.small {
     width: 170px;
     height: 120px;
+  }
+
+  /* The mark only ever sits on the island fill, so anything else here would
+     lie about its contrast. */
+  .dials {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .messages {
+    background: var(--notch);
+    padding: 10px;
+    height: auto;
+  }
+
+  .mark-stage {
+    width: 96px;
+    height: 26px;
+    background: var(--notch);
+    border-radius: 0 0 10px 10px;
   }
 
   .row {

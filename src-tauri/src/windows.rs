@@ -2,8 +2,9 @@
 //! decides when a window appears or disappears. tech.md section 8.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use peekle_core::island::shape_rect;
 use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -53,6 +54,96 @@ pub fn send_notch(app: &AppHandle) {
     }
 }
 
+/// How often Rust asks where the pointer is while the island rests.
+///
+/// The webview cannot answer this: a window that ignores the cursor never sees
+/// a `mousemove`, so the only way to know the pointer reached the resting mark
+/// is to look. Ten times a second is under the threshold where a user notices
+/// the mark lighting up late, and the tick costs a rectangle test.
+const HOVER_TICK: Duration = Duration::from_millis(100);
+
+/// Hands the mouse to the island while the pointer is over the resting mark
+/// and takes it back the moment it leaves.
+///
+/// A collapsed island is a transparent 720 by 560 rectangle. Letting it keep
+/// the mouse would swallow every click in the top third of the screen, and
+/// letting it never take the mouse would make the mark impossible to press.
+/// tech.md 6.7.
+pub fn track_pointer(app: &AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(HOVER_TICK);
+        loop {
+            ticker.tick().await;
+            on_main(&handle, "hover", update_hover);
+        }
+    });
+}
+
+/// How long the pointer has to be off an island the user opened before it puts
+/// itself away. Long enough to cross a gap by accident, short enough that the
+/// island does not sit on the screen after the user has moved on. tech.md 6.7.
+const DISMISS_AFTER: Duration = Duration::from_millis(800);
+
+fn update_hover(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+
+    // No measurement yet means no rectangle. Guessing one would eat clicks
+    // next to a mark the user cannot even see. tech.md 6.7.
+    let Some(bounds) = state.shape_bounds() else {
+        return;
+    };
+    let Ok((frame, scale)) = panel::island_frame(app) else {
+        return;
+    };
+    let Some(rect) = shape_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
+        return;
+    };
+    let Ok(pointer) = app.cursor_position() else {
+        return;
+    };
+    let inside = rect.contains((pointer.x, pointer.y));
+
+    if state.view() == IslandView::Collapsed {
+        state.pointer_returned();
+        if state.set_over_rest(inside) {
+            if let Err(err) = panel::set_takes_clicks(app, inside) {
+                tracing::error!(error = %err, "failed to switch cursor events for the mark");
+            }
+        }
+        return;
+    }
+
+    // An open island already takes the mouse outright, and `set_view` said so.
+    state.set_over_rest(false);
+
+    // A pill runs on its own clock. A request in flight does not stop this:
+    // hiding the shape resolves nothing, the hook stays pending, and the mark
+    // pulses until it is answered. tech.md 6.7.
+    if state.view() == IslandView::Pill {
+        state.pointer_returned();
+        return;
+    }
+
+    if inside {
+        // Engaged, so the opening hold has done its job and ordinary leave
+        // rules take over. tech.md 6.7.
+        state.clear_hold();
+        state.pointer_returned();
+        return;
+    }
+    // Opened by a request and the ten seconds are not up: it stays, and the
+    // leave clock stays fresh so expiry gives the usual grace, not a snap.
+    if state.held_open(Instant::now()) {
+        state.pointer_returned();
+        return;
+    }
+    if state.pointer_left_for(DISMISS_AFTER, Instant::now()) {
+        tracing::debug!("the pointer left the island, putting it away");
+        set_view(app, IslandView::Collapsed);
+    }
+}
+
 /// The one way the island changes shape. Stores the intent, tells the webview
 /// to redraw, and switches mouse handling to match. A view that has not moved
 /// does nothing at all.
@@ -68,6 +159,13 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
 
     let takes_clicks = view.takes_clicks();
     let opening = !matches!(view, IslandView::Collapsed);
+
+    // An island that opens on a stale snapshot draws it and refreshes behind
+    // itself. It never waits: a slow network must not delay the shape.
+    // tech.md 6.4.
+    if opening {
+        refresh_stale_usage(app, &state);
+    }
 
     on_main(app, "view", move |handle| {
         if let Err(err) = panel::set_takes_clicks(handle, takes_clicks) {
@@ -89,6 +187,36 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
     });
 }
 
+/// How old a snapshot may be when the island opens before it is worth asking
+/// again. tech.md 6.4.
+const STALE_AFTER_MS: i64 = 60_000;
+
+/// Asks for fresh numbers behind an opening island, and only if the last ones
+/// are old. Silent when usage may not be fetched at all: rule 12 keeps every
+/// automatic path off the Keychain until the user has granted it once.
+fn refresh_stale_usage(app: &AppHandle, state: &Arc<AppState>) {
+    if !state.may_fetch_usage() {
+        return;
+    }
+    let age = now_ms() - state.usage().fetched_at;
+    if age < STALE_AFTER_MS {
+        return;
+    }
+
+    let app = app.clone();
+    let state = Arc::clone(state);
+    tauri::async_runtime::spawn(async move {
+        crate::commands::fetch_usage(&app, &state).await;
+    });
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
+}
+
 /// How long the shape holds after an answer before collapsing. tech.md S3.
 const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
 
@@ -100,7 +228,8 @@ const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
 /// pull the keys out from under them. Focus moves only when they click the
 /// field. tech.md 6.7 and 15.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
-    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let gate = state.ready_gate(panel::ISLAND);
 
     if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_OPEN, request) {
         tracing::warn!(error = %err, "failed to emit prompt-open");
@@ -108,7 +237,16 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(request.session.session_id.clone()));
+
+    // Shown, now the user decides whether it is worth their attention. Ten
+    // quiet seconds means it was not, and the island puts itself away with the
+    // request still pending. tech.md 6.7.
+    state.hold_open(Instant::now() + PROMPT_HOLD);
 }
+
+/// How long a request-opened island waits for the user before putting itself
+/// away. tech.md 6.7.
+const PROMPT_HOLD: Duration = Duration::from_secs(10);
 
 /// Tells the webview which outcome settled the request and collapses the
 /// island behind it.
@@ -118,7 +256,7 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
 
-    // Long enough to read as an answer landing, short enough not to be a wait.
+    // Long enough to read as a request settling, short enough not to be a wait.
     // Skipped when another prompt is already queued behind this one: collapsing
     // and reopening in the same breath reads as a glitch.
     let handle = app.clone();

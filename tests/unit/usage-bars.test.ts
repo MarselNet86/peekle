@@ -8,7 +8,7 @@ import { render, screen } from '@testing-library/svelte';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { bars, reasonText, WINDOW_LABELS } from '$lib/features/usage/usage.svelte';
+import { bars, reasonText, WINDOW_LABELS, connectLabel } from '$lib/features/usage/usage.svelte';
 import UsageBar from '$lib/ui/UsageBar.svelte';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
@@ -101,5 +101,32 @@ describe('UsageBar', () => {
         unmount();
       }),
     );
+  });
+});
+
+describe('the grant control', () => {
+  const snapshot = (reason: UsageUnavailable | null): UsageSnapshot => ({
+    windows: [],
+    source: 'Unavailable',
+    reason,
+    fetched_at: 0,
+  });
+
+  /// A first run and a dropped session are one press apart from working, and
+  /// the copy is the only thing that differs.
+  it('says connect on a first run and reconnect on a session that dropped', () => {
+    expect(connectLabel(snapshot('NotGranted'))).toBe('Connect');
+    expect(connectLabel(snapshot('Denied'))).toBe('Connect');
+    expect(connectLabel(snapshot('NotLoggedIn'))).toBe('Reconnect');
+    expect(connectLabel(snapshot('Network'))).toBe('Reconnect');
+  });
+
+  /// A switch in the config and a body that changed shape are not fixed by a
+  /// Keychain dialog.
+  it('stays out of the way when pressing it could not help', () => {
+    expect(connectLabel(snapshot('Disabled'))).toBeNull();
+    expect(connectLabel(snapshot('Unsupported'))).toBeNull();
+    expect(connectLabel(snapshot(null))).toBeNull();
+    expect(connectLabel(null)).toBeNull();
   });
 });

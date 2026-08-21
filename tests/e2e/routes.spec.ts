@@ -24,9 +24,26 @@ test.describe('overlay routes', () => {
     page.on('pageerror', (error) => errors.push(error.message));
 
     await page.goto('/island/');
-    // No event has arrived, so the shape is there but collapsed and invisible.
+    // No event has arrived, so the island rests: the mark and nothing else.
     await expect(page.locator('.shape')).toHaveAttribute('data-view', 'Collapsed');
-    await expect(page.locator('.shape')).toHaveCSS('opacity', '0');
+    await expect(page.locator('.rest')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  /// S12 acceptance, as far as a browser can carry it: the mark is on screen
+  /// and it is a control. Whether the panel then takes the click is native and
+  /// belongs to the checklist of section 15.
+  test('a resting island shows a mark that opens the session list', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await page.goto('/island/');
+    const mark = page.getByRole('button', { name: /Open the session list/ });
+
+    await expect(mark).toBeVisible();
+    // Outside the app shell there is no Tauri to answer, so the intent goes
+    // nowhere. What matters here is that pressing it is not an error.
+    await mark.click();
     expect(errors).toEqual([]);
   });
 
@@ -53,6 +70,11 @@ test.describe('overlay routes', () => {
 
     for (const heading of [
       'Shape',
+      'RestMark',
+      'Message formatting',
+      'UsageDial',
+      'Objects with a body',
+      'TypingLine',
       'PromptInput',
       'OptionList',
       'MessageBlock',

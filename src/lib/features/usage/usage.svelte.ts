@@ -6,7 +6,7 @@
  * answer to a hook.
  */
 
-import { events } from '$lib/bridge';
+import { commands, events } from '$lib/bridge';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 import type { UsageWindow } from '$lib/types/generated/UsageWindow';
@@ -49,13 +49,59 @@ export function bars(
   });
 }
 
+/**
+ * The label on the connect control, or null when there is nothing pressing it
+ * would fix.
+ *
+ * `Disabled` is a config switch and `Unsupported` is the API changing shape:
+ * offering a button for either sends the user to press something that cannot
+ * help. The other four are all one press away from working again, which is why
+ * a dropped session and a first run share the same control. tech.md 6.4.
+ */
+export function connectLabel(snapshot: UsageSnapshot | null): string | null {
+  switch (snapshot?.reason) {
+    case 'NotGranted':
+    case 'Denied':
+      return 'Connect';
+    case 'NotLoggedIn':
+    case 'Network':
+      return 'Reconnect';
+    default:
+      return null;
+  }
+}
+
 export function createUsage() {
   let snapshot = $state<UsageSnapshot | null>(null);
+  let connecting = $state(false);
 
   async function start(): Promise<() => void> {
-    return events.onUsage((next) => {
+    const off = await events.onUsage((next) => {
       snapshot = next;
     });
+
+    // A late mount must not drop what Rust already knows, and before the first
+    // poll that is the only thing there is to show.
+    const state = await commands.getState();
+    if (state && !snapshot) snapshot = state.usage;
+    return off;
+  }
+
+  /**
+   * The one path allowed to raise the Keychain dialog, and it exists only
+   * because the user pressed something. tech.md 6.4 and rule 12.
+   *
+   * The same press covers a first connect and a session that dropped: both end
+   * with reading the Keychain again and asking the endpoint again.
+   */
+  async function connect() {
+    connecting = true;
+    try {
+      const next = await commands.requestUsageAccess();
+      if (next) snapshot = next;
+    } finally {
+      connecting = false;
+    }
   }
 
   return {
@@ -68,6 +114,13 @@ export function createUsage() {
     get reason() {
       return reasonText(snapshot);
     },
+    get connectLabel() {
+      return connectLabel(snapshot);
+    },
+    get connecting() {
+      return connecting;
+    },
+    connect,
     start,
   };
 }

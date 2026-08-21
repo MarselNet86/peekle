@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used)]
 //! The one test that talks to the network and to the Keychain.
 //!
-//! Ignored by default: it costs a token, it can raise a Keychain dialog, and
-//! CI has neither an account nor a Keychain. Run it by hand after touching
-//! anything in 6.4, which is the only way to find out that the undocumented
-//! headers of R-3 have changed.
+//! Ignored by default: it can raise a Keychain dialog, and CI has neither an
+//! account nor a Keychain. It costs nothing to run otherwise, the endpoint
+//! only reads. Run it by hand after touching anything in 6.4, which is the
+//! only way to find out that the undocumented body of R-3 has changed.
 //!
 //!     cargo test -p peekle-usage --test live_account -- --ignored --nocapture
 
@@ -12,7 +12,7 @@ use peekle_core::types::{UsageSource, UsageWindow};
 use peekle_usage::{AccountUsage, SecurityToolStore, UsageProvider};
 
 #[test]
-#[ignore = "hits the live API with the user's own token"]
+#[ignore = "reads the live account with the user's own token"]
 fn the_live_account_still_reports_both_windows() {
     let provider = AccountUsage::new(Box::new(SecurityToolStore::for_current_user()), "0.1.0");
     let snapshot = provider.snapshot();
@@ -31,7 +31,7 @@ fn the_live_account_still_reports_both_windows() {
     assert_eq!(
         snapshot.source,
         UsageSource::Account,
-        "the headers of 6.4 stopped arriving, so R-3 came true: {:?}",
+        "the body of 6.4 stopped arriving, so R-3 came true: {:?}",
         snapshot.reason
     );
     assert_eq!(snapshot.windows.len(), 2);

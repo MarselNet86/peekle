@@ -495,3 +495,128 @@ fn a_very_long_closing_message_is_cut_on_a_character_boundary() {
     );
     assert_eq!(registry.cards()[0].entries[0].text.chars().count(), 2000);
 }
+
+/// S3 as of core v29. An answer is a message the user sent, so it lands in the
+/// feed; a reply that vanishes on submit reads as one that never went.
+#[test]
+fn an_answer_lands_in_the_feed_as_a_turn() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/Users/x/peekle".to_string(),
+        project: "peekle".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "  keep going  ", EntryState::Ok, 10);
+    let entries = &registry.cards()[0].entries;
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].kind, EntryKind::User);
+    assert_eq!(
+        entries[0].text, "keep going",
+        "trimmed like every other turn"
+    );
+    assert_eq!(entries[0].state, EntryState::Ok);
+}
+
+#[test]
+fn an_empty_answer_is_not_a_turn() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "   ", EntryState::Ok, 1);
+    assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
+}
+
+/// A session whose agent died would otherwise spin forever: `Working` arrives
+/// on a hook and leaves on a hook, and a dead agent sends neither.
+#[test]
+fn a_session_that_stopped_reporting_goes_back_to_rest() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+    registry.ensure(session.clone(), 0);
+    registry.set_status("s", peekle_core::types::SessionStatus::Working, 1_000);
+
+    let after = 600_000;
+    assert!(
+        !registry.rest_stale_work(1_000 + after - 1, after),
+        "not yet"
+    );
+    assert_eq!(
+        registry.cards()[0].status,
+        peekle_core::types::SessionStatus::Working
+    );
+
+    assert!(registry.rest_stale_work(1_000 + after, after));
+    assert_eq!(
+        registry.cards()[0].status,
+        peekle_core::types::SessionStatus::Idle
+    );
+    assert!(
+        !registry.rest_stale_work(9_999_999, after),
+        "nothing left to rest"
+    );
+}
+
+#[test]
+fn resting_leaves_every_other_status_alone() {
+    use peekle_core::types::SessionStatus;
+
+    for status in [
+        SessionStatus::WaitingOnUser,
+        SessionStatus::Idle,
+        SessionStatus::Ended,
+    ] {
+        let mut registry = SessionRegistry::new();
+        let session = peekle_core::types::SessionRef {
+            session_id: "s".to_string(),
+            cwd: "/tmp".to_string(),
+            project: "tmp".to_string(),
+        };
+        registry.ensure(session, 0);
+        registry.set_status("s", status, 0);
+
+        assert!(!registry.rest_stale_work(i64::MAX / 2, 1), "{status:?}");
+        assert_eq!(registry.cards()[0].status, status);
+    }
+}
+
+/// A reply typed while the agent was busy waits in the feed rather than
+/// pretending it went. tech.md 6.5.
+#[test]
+fn a_queued_reply_stays_running_until_a_stop_carries_it() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "keep going", EntryState::Running, 1);
+    registry.user_turn(session.clone(), "and push", EntryState::Running, 2);
+    assert!(registry.cards()[0]
+        .entries
+        .iter()
+        .all(|e| e.state == EntryState::Running));
+
+    registry.replies_delivered("s", 3);
+    assert!(registry.cards()[0]
+        .entries
+        .iter()
+        .all(|e| e.state == EntryState::Ok));
+}
+
+#[test]
+fn delivering_leaves_a_session_it_never_heard_of_alone() {
+    let mut registry = SessionRegistry::new();
+    registry.replies_delivered("nobody", 1);
+    assert!(registry.cards().is_empty());
+}

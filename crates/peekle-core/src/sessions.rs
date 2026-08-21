@@ -145,6 +145,9 @@ fn now_entry(
         kind,
         text,
         tool,
+        // The live path has the input already flattened into `text`. A full
+        // body arrives only from a transcript. tech.md 6.3.
+        detail: None,
         state,
         at,
     }
@@ -249,7 +252,69 @@ impl SessionRegistry {
         push_entry(card, entry);
     }
 
-    /// Moves a session to a status. Returns false when the session is unknown,
+    /// What the user just sent, as a feed entry.
+    ///
+    /// Putting it in the feed is what makes a chat a chat: a message that
+    /// vanishes on submit reads as one that never went. `Running` means queued
+    /// and not delivered yet, and only the `Stop` that carries it away turns it
+    /// into `Ok`. tech.md 6.5.
+    pub fn user_turn(&mut self, session: SessionRef, text: &str, state: EntryState, at: i64) {
+        let trimmed = truncate(text, ASSISTANT_LIMIT);
+        if trimmed.is_empty() {
+            return;
+        }
+        let card = self.card_mut(session, at);
+        let entry = now_entry(EntryKind::User, trimmed, None, state, at);
+        push_entry(card, entry);
+    }
+
+    /// Marks every queued reply of a session as undeliverable.
+    pub fn replies_failed(&mut self, session_id: &str, at: i64) {
+        self.mark_replies(session_id, EntryState::Failed, at);
+    }
+
+    /// Marks every queued reply of a session as delivered. Called by the `Stop`
+    /// that carried them, or by the turn that took them as its prompt.
+    pub fn replies_delivered(&mut self, session_id: &str, at: i64) {
+        self.mark_replies(session_id, EntryState::Ok, at);
+    }
+
+    fn mark_replies(&mut self, session_id: &str, state: EntryState, at: i64) {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return;
+        };
+        for entry in card.entries.iter_mut() {
+            if entry.kind == EntryKind::User && entry.state == EntryState::Running {
+                entry.state = state;
+            }
+        }
+        card.updated_at = at;
+    }
+
+    /// Puts a session that stopped reporting back to rest.
+    ///
+    /// `Working` is set by an event and cleared by an event, so a session whose
+    /// agent died, whose terminal was closed, or which never had an agent at
+    /// all, stays working forever: the mark spins and the reply field stays
+    /// dark with nothing on the way. The window is generous on purpose. A long
+    /// build reports nothing between `PreToolUse` and `PostToolUse`, and
+    /// calling that dead would be worse than waiting. tech.md 6.3.
+    pub fn rest_stale_work(&mut self, now: i64, after: i64) -> bool {
+        let mut changed = false;
+        for card in self.cards.iter_mut() {
+            if card.status == SessionStatus::Working && now - card.updated_at >= after {
+                card.status = SessionStatus::Idle;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// Moves a status. Returns false when the session is unknown,
     /// which happens when Peekle started mid session.
     pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {
         let Some(card) = self
@@ -342,6 +407,29 @@ impl SessionRegistry {
             .unwrap_or(0);
         self.cards[index].updated_at = at;
         &mut self.cards[index]
+    }
+
+    /// Adds cards the hooks have not seen, leaving everything they have seen
+    /// alone.
+    ///
+    /// History fills the gaps and never overwrites the present: a card that
+    /// arrived over a hook carries a live status and a live feed, and a file on
+    /// disk knows neither. Freshest first afterwards, and the same cap as every
+    /// other path in. tech.md 6.11.
+    pub fn seed(&mut self, cards: Vec<SessionCard>) {
+        for card in cards {
+            let known = self
+                .cards
+                .iter()
+                .any(|c| c.session.session_id == card.session.session_id);
+            if !known {
+                self.cards.push(card);
+            }
+        }
+
+        self.cards
+            .sort_by_key(|card| std::cmp::Reverse(card.updated_at));
+        self.evict_sessions();
     }
 
     /// Moves a session to the front. The list is ordered by activity, not by
