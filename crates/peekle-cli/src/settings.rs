@@ -193,20 +193,24 @@ fn matcher_entry(event: &str, handler: Value) -> Value {
 /// tech.md 6.1, the matcher column.
 fn matcher_for(event: &str) -> Option<&'static str> {
     match event {
-        "PermissionRequest" => Some("*"),
+        "PermissionRequest" | "PreToolUse" | "PostToolUse" => Some("*"),
         "Notification" => Some("permission_prompt|idle_prompt|agent_needs_input|agent_completed"),
-        "PostToolUse" => Some("TodoWrite"),
         _ => None,
     }
 }
 
-/// tech.md 6.1, the endpoint column.
+/// tech.md 6.1, the endpoint column, literally.
+///
+/// Every feed event goes to `/feed`. It went to `/session` and to a `/tasks`
+/// that the router has never had, so every tool call in the product's life was
+/// posted to a handler that drops it or to a 404: the live feed was dead while
+/// its tests passed against the router directly.
 fn endpoint_for(event: &str) -> &'static str {
     match event {
         "Stop" => "stop",
         "PermissionRequest" => "permission",
         "Notification" => "notification",
-        "PostToolUse" | "TaskCreated" | "TaskCompleted" => "tasks",
+        "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => "feed",
         _ => "session",
     }
 }
@@ -223,6 +227,41 @@ fn timeout_for(event: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every managed event, pinned to the endpoint and matcher of the table in
+    /// tech.md 6.1. The mapping drifted from that table and nothing noticed,
+    /// because every other test posts to the router directly and never reads
+    /// what `init` actually wrote. This one reads it.
+    #[test]
+    fn every_event_lands_on_the_endpoint_the_contract_names() {
+        for (event, endpoint, matcher) in [
+            ("Stop", "stop", None),
+            ("PermissionRequest", "permission", Some("*")),
+            ("UserPromptSubmit", "feed", None),
+            ("PreToolUse", "feed", Some("*")),
+            ("PostToolUse", "feed", Some("*")),
+            (
+                "Notification",
+                "notification",
+                Some("permission_prompt|idle_prompt|agent_needs_input|agent_completed"),
+            ),
+            ("SessionStart", "session", None),
+            ("SessionEnd", "session", None),
+        ] {
+            assert_eq!(endpoint_for(event), endpoint, "{event}");
+            assert_eq!(matcher_for(event), matcher, "{event}");
+        }
+    }
+
+    /// A route that does not exist answers 404, and a hook posting into one is
+    /// invisible in every log the user can reach.
+    #[test]
+    fn no_event_is_sent_to_a_route_the_server_does_not_serve() {
+        const SERVED: &[&str] = &["stop", "permission", "notification", "feed", "session"];
+        for event in peekle_core::MANAGED_HOOK_EVENTS {
+            assert!(SERVED.contains(&endpoint_for(event)), "{event}");
+        }
+    }
 
     const PORT: u16 = 47821;
     const TOKEN: &str = "0123456789abcdef0123456789abcdef";
