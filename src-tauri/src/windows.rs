@@ -237,7 +237,15 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
 
-    // Long enough to read as an answer landing, short enough not to be a wait.
+    // An answer leaves the island open. The message the user sent is now in the
+    // feed and the agent is working on it, and both are the answer to "did that
+    // go through". A window that vanishes on submit asks that question instead.
+    // Everything else closes on the usual timer. tech.md 6.5 and 6.7.
+    if matches!(outcome, PromptOutcome::Answered(_)) {
+        return;
+    }
+
+    // Long enough to read as a request settling, short enough not to be a wait.
     // Skipped when another prompt is already queued behind this one: collapsing
     // and reopening in the same breath reads as a glitch.
     let handle = app.clone();
