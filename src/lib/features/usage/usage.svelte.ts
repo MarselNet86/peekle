@@ -1,0 +1,73 @@
+/**
+ * Usage state. tech.md 6.4.
+ *
+ * The island never waits on this. It opens on the last snapshot and a fresh
+ * one arrives as an event, because a slow network call must not delay the
+ * answer to a hook.
+ */
+
+import { events } from '$lib/bridge';
+import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
+import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
+import type { UsageWindow } from '$lib/types/generated/UsageWindow';
+
+/** Why the bars are empty, in words rather than in an enum name. */
+const REASONS: Record<UsageUnavailable, string> = {
+  Disabled: 'usage is off in the config',
+  NotGranted: 'needs Keychain access',
+  Denied: 'Keychain access was denied',
+  NotLoggedIn: 'log in with the Claude Code CLI',
+  Network: 'could not reach the API',
+  Unsupported: 'the API stopped reporting it',
+};
+
+export const WINDOW_LABELS: Record<UsageWindow, string> = {
+  FiveHour: '5h',
+  SevenDay: 'Week',
+};
+
+export function reasonText(snapshot: UsageSnapshot | null): string {
+  if (!snapshot?.reason) return 'unavailable';
+  return REASONS[snapshot.reason] ?? 'unavailable';
+}
+
+/** The two bars to draw, in the order of 6.3, dashes included. */
+export function bars(
+  snapshot: UsageSnapshot | null,
+): { label: string; pct: number | null; resetsAt: number | null }[] {
+  const order: UsageWindow[] = ['FiveHour', 'SevenDay'];
+
+  return order.map((window) => {
+    const stat = snapshot?.windows.find((w) => w.window === window);
+    return {
+      label: WINDOW_LABELS[window],
+      // No stat means dashes. A number assembled from a missing header would
+      // be a guess, and the headers are undocumented. tech.md R-3.
+      pct: stat ? stat.used_pct : null,
+      resetsAt: stat?.resets_at ?? null,
+    };
+  });
+}
+
+export function createUsage() {
+  let snapshot = $state<UsageSnapshot | null>(null);
+
+  async function start(): Promise<() => void> {
+    return events.onUsage((next) => {
+      snapshot = next;
+    });
+  }
+
+  return {
+    get snapshot() {
+      return snapshot;
+    },
+    get bars() {
+      return bars(snapshot);
+    },
+    get reason() {
+      return reasonText(snapshot);
+    },
+    start,
+  };
+}
