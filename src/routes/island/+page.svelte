@@ -102,16 +102,14 @@
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
   const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
 
-  // A session that will never stop again cannot take a queue, and that is the
-  // only case the field goes dark. tech.md 6.5.
-  const canWrite = $derived(current !== undefined && current.status !== 'Ended');
-
+  // The field never goes dark. An ended session is a standing session and
+  // resume continues it; Ended itself is unreliable anyway, since a resumed
+  // run shares the id and its SessionEnd marks the card while a live client
+  // keeps writing. tech.md 6.5.
   const replyHint = $derived.by(() => {
     if (waiting) return 'Reply to Claude';
-    if (current?.status === 'Ended') return 'This session has ended';
     // A working session will stop and carry the text for free; a standing one
     // gets started. Saying which one it is beats one vague promise for both.
-    // tech.md 6.5.
     return current?.status === 'Working' ? 'Type now, it goes when Claude stops' : 'Send to Claude';
   });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
@@ -286,7 +284,6 @@
           <div class="reply">
             <PromptInput
               bind:value={reply}
-              disabled={!canWrite}
               placeholder={replyHint}
               onsubmit={send}
               onescape={() => island.dismiss()}
