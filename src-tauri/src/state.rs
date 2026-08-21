@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use peekle_core::config::Config;
+use peekle_core::sessions::SessionOverrides;
 use peekle_core::types::{
     IslandView, PeekleState, PromptRequest, SessionCard, SessionRef, SessionStatus, TaskItem,
     UsageSnapshot, UsageUnavailable,
@@ -73,6 +74,15 @@ pub fn may_fetch_usage(usage: &peekle_core::config::UsageConfig) -> bool {
         return true;
     }
     usage.keychain_granted && !usage.keychain_denied
+}
+
+/// State, not config: `config.toml` belongs to `peekle init` and to the user,
+/// and mixing their edits with ours would be a race for one file. tech.md 6.8.
+fn overrides_path() -> Option<std::path::PathBuf> {
+    peekle_core::config::config_path()
+        .ok()?
+        .parent()
+        .map(|dir| dir.join("sessions.json"))
 }
 
 /// Why the bars are empty before anything has been fetched.
@@ -210,6 +220,71 @@ impl AppState {
         let mut sessions = self.lock(&self.sessions);
         sessions.seed(cards);
         sessions.cards().to_vec()
+    }
+
+    /// Renames a session and remembers it. False means nobody knows the id.
+    pub fn rename_session(&self, session_id: &str, title: &str) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        if !sessions.rename(session_id, title) {
+            return None;
+        }
+        let cards = sessions.cards();
+        let overrides = sessions.overrides().clone();
+        drop(sessions);
+
+        self.save_overrides(&overrides);
+        Some(cards)
+    }
+
+    /// Puts a session away and remembers it. The transcript stays where it is:
+    /// those files belong to Claude Code. tech.md 11.
+    pub fn hide_session(&self, session_id: &str) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.hide(session_id);
+        let cards = sessions.cards();
+        let overrides = sessions.overrides().clone();
+        drop(sessions);
+
+        self.save_overrides(&overrides);
+        cards
+    }
+
+    /// Loads what the user said about sessions, once, at startup.
+    pub fn restore_sessions(&self) {
+        let Some(path) = overrides_path() else {
+            return;
+        };
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        match serde_json::from_str::<SessionOverrides>(&raw) {
+            Ok(overrides) => {
+                tracing::debug!(
+                    titles = overrides.titles.len(),
+                    hidden = overrides.hidden.len(),
+                    "restored what the user said about sessions"
+                );
+                self.lock(&self.sessions).restore(overrides);
+            }
+            // A broken file must not stop the overlay from starting. The user
+            // loses their titles, not their agent.
+            Err(err) => tracing::warn!(error = %err, "could not read sessions.json"),
+        }
+    }
+
+    fn save_overrides(&self, overrides: &SessionOverrides) {
+        let Some(path) = overrides_path() else {
+            return;
+        };
+        let Ok(raw) = serde_json::to_string_pretty(overrides) else {
+            return;
+        };
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(err) = std::fs::write(&path, raw) {
+            tracing::warn!(error = %err, "could not write sessions.json");
+        }
     }
 
     /// Puts sessions that stopped reporting back to rest. tech.md 6.3.

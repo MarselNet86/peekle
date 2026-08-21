@@ -61,7 +61,7 @@ describe('SessionRow', () => {
     const onopen = vi.fn();
     render(SessionRow, { props: { card: card('Working'), onopen } });
 
-    await userEvent.click(screen.getByRole('button'));
+    await userEvent.click(screen.getByRole('button', { name: /Refactor the panel code/ }));
     expect(onopen).toHaveBeenCalledOnce();
   });
 
@@ -69,9 +69,43 @@ describe('SessionRow', () => {
     const onopen = vi.fn();
     render(SessionRow, { props: { card: card('Working'), onopen } });
 
-    const row = screen.getByRole('button');
+    const row = screen.getByRole('button', { name: /Refactor the panel code/ });
     row.focus();
     await userEvent.keyboard('{Enter}');
     expect(onopen).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a row as a picker row', () => {
+  it('says how long ago the session moved', () => {
+    const now = 10 * 24 * 3600_000;
+    render(SessionRow, {
+      props: { card: card('Idle', { updated_at: now - 50 * 60_000 }), now },
+    });
+    expect(screen.getByText('50m')).toBeInTheDocument();
+  });
+
+  /// The pencil opens the name in place: Enter keeps it, Escape leaves it.
+  it('renames on Enter and leaves the name alone on Escape', async () => {
+    const onrename = vi.fn();
+    render(SessionRow, { props: { card: card('Idle'), onrename } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rename this session' }));
+    const field = screen.getByRole('textbox', { name: 'Rename this session' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Panel work{Enter}');
+    expect(onrename).toHaveBeenCalledExactlyOnceWith('Panel work');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rename this session' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Rename this session' }), 'x{Escape}');
+    expect(onrename).toHaveBeenCalledOnce();
+  });
+
+  it('puts the session away on the bin', async () => {
+    const onhide = vi.fn();
+    render(SessionRow, { props: { card: card('Idle'), onhide } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove this session' }));
+    expect(onhide).toHaveBeenCalledOnce();
   });
 });

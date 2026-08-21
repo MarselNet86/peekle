@@ -53,6 +53,9 @@ export const commands = {
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
   queueReply: (sessionId: string, text: string) => call<void>('queue_reply', { sessionId, text }),
+  renameSession: (sessionId: string, title: string) =>
+    call<void>('rename_session', { sessionId, title }),
+  hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

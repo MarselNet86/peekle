@@ -20,6 +20,23 @@ export function openList() {
   commands.setView('Sessions');
 }
 
+/**
+ * The title the user typed, over the one the hooks derived. An empty title
+ * hands the name back to the hooks. tech.md 6.5.
+ */
+export function renameSession(sessionId: string, title: string) {
+  commands.renameSession(sessionId, title.trim());
+}
+
+/**
+ * Puts a session away in the island. The transcript is untouched: it belongs
+ * to Claude Code, and the session stays where the user can still find it
+ * there. tech.md 11.
+ */
+export function hideSession(sessionId: string) {
+  commands.hideSession(sessionId);
+}
+
 /** The session id a view is showing, or undefined for every other view. */
 export function sessionOf(view: IslandView): string | undefined {
   return typeof view === 'object' ? view.Session : undefined;
