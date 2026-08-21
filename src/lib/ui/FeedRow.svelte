@@ -16,7 +16,7 @@
      they carry their whole text, and the user's own turn is the green one. A
      tool call stays a single quiet line. tech.md 9 and 6.12. -->
 {#if spoken}
-  <div class="line" data-kind={entry.kind}>
+  <div class="line" data-kind={entry.kind} data-state={entry.state}>
     <div class="bubble">
       {#each parts as block, index (index)}
         {#if block.kind === 'code'}
@@ -93,6 +93,12 @@
     background: var(--brand);
     color: var(--notch);
     border-bottom-right-radius: 4px;
+  }
+
+  /* Queued, not delivered. It leaves on the next stop of this session, and
+     until then saying so quietly beats pretending it went. tech.md 6.5. */
+  .line[data-kind='User'][data-state='Running'] .bubble {
+    opacity: 0.55;
   }
 
   /* The agent's own ground. On pure black a translucent surface has no edge,

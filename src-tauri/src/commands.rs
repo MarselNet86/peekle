@@ -49,7 +49,12 @@ fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: Prom
                 _ => None,
             };
             if let Some(text) = answered {
-                state.user_turn(&request.session, text, at);
+                state.user_turn(
+                    &request.session,
+                    text,
+                    peekle_core::types::EntryState::Ok,
+                    at,
+                );
             }
 
             // Answering unblocks the hook, so the agent is running again by the
@@ -215,6 +220,46 @@ pub fn set_usage_enabled(state: State<'_, Arc<AppState>>, enabled: bool) {
 #[tauri::command]
 pub fn set_view(app: AppHandle, view: IslandView) {
     windows::set_view(&app, view);
+}
+
+/// Holds a reply until the agent stops.
+///
+/// Not a send: there is no send. The text leaves as the body of the next
+/// blocking hook of this session, which is the only channel there is, and the
+/// entry stays `Running` in the feed until that happens. tech.md 6.5.
+#[tauri::command]
+pub fn queue_reply(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    text: String,
+) {
+    let text = text.trim();
+    if text.is_empty() {
+        return;
+    }
+
+    let Some(card) = state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+    else {
+        tracing::warn!(session_id, "queued a reply for a session nobody knows");
+        return;
+    };
+
+    state.queue_reply(&session_id, text);
+    let cards = state.user_turn(
+        &card.session,
+        text,
+        peekle_core::types::EntryState::Running,
+        now_ms(),
+    );
+    tracing::debug!(session_id, "reply queued for the next stop");
+
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
 }
 
 /// The webview reports the size of the shape it drew. Rust never resizes the

@@ -507,7 +507,7 @@ fn an_answer_lands_in_the_feed_as_a_turn() {
         project: "peekle".to_string(),
     };
 
-    registry.user_turn(session.clone(), "  keep going  ", 10);
+    registry.user_turn(session.clone(), "  keep going  ", EntryState::Ok, 10);
     let entries = &registry.cards()[0].entries;
 
     assert_eq!(entries.len(), 1);
@@ -528,7 +528,7 @@ fn an_empty_answer_is_not_a_turn() {
         project: "tmp".to_string(),
     };
 
-    registry.user_turn(session.clone(), "   ", 1);
+    registry.user_turn(session.clone(), "   ", EntryState::Ok, 1);
     assert!(registry.cards().is_empty() || registry.cards()[0].entries.is_empty());
 }
 
@@ -587,4 +587,36 @@ fn resting_leaves_every_other_status_alone() {
         assert!(!registry.rest_stale_work(i64::MAX / 2, 1), "{status:?}");
         assert_eq!(registry.cards()[0].status, status);
     }
+}
+
+/// A reply typed while the agent was busy waits in the feed rather than
+/// pretending it went. tech.md 6.5.
+#[test]
+fn a_queued_reply_stays_running_until_a_stop_carries_it() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+    };
+
+    registry.user_turn(session.clone(), "keep going", EntryState::Running, 1);
+    registry.user_turn(session.clone(), "and push", EntryState::Running, 2);
+    assert!(registry.cards()[0]
+        .entries
+        .iter()
+        .all(|e| e.state == EntryState::Running));
+
+    registry.replies_delivered("s", 3);
+    assert!(registry.cards()[0]
+        .entries
+        .iter()
+        .all(|e| e.state == EntryState::Ok));
+}
+
+#[test]
+fn delivering_leaves_a_session_it_never_heard_of_alone() {
+    let mut registry = SessionRegistry::new();
+    registry.replies_delivered("nobody", 1);
+    assert!(registry.cards().is_empty());
 }

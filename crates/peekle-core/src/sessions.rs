@@ -254,17 +254,36 @@ impl SessionRegistry {
 
     /// What the user just sent, as a feed entry.
     ///
-    /// The text left through `answer_prompt`, so the agent has it. Putting it
-    /// in the feed is what makes a chat a chat: a message that vanishes on
-    /// submit reads as one that never went. tech.md 6.5.
-    pub fn user_turn(&mut self, session: SessionRef, text: &str, at: i64) {
+    /// Putting it in the feed is what makes a chat a chat: a message that
+    /// vanishes on submit reads as one that never went. `Running` means queued
+    /// and not delivered yet, and only the `Stop` that carries it away turns it
+    /// into `Ok`. tech.md 6.5.
+    pub fn user_turn(&mut self, session: SessionRef, text: &str, state: EntryState, at: i64) {
         let trimmed = truncate(text, ASSISTANT_LIMIT);
         if trimmed.is_empty() {
             return;
         }
         let card = self.card_mut(session, at);
-        let entry = now_entry(EntryKind::User, trimmed, None, EntryState::Ok, at);
+        let entry = now_entry(EntryKind::User, trimmed, None, state, at);
         push_entry(card, entry);
+    }
+
+    /// Marks every queued reply of a session as delivered. Called by the `Stop`
+    /// that carried them.
+    pub fn replies_delivered(&mut self, session_id: &str, at: i64) {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return;
+        };
+        for entry in card.entries.iter_mut() {
+            if entry.kind == EntryKind::User && entry.state == EntryState::Running {
+                entry.state = EntryState::Ok;
+            }
+        }
+        card.updated_at = at;
     }
 
     /// Puts a session that stopped reporting back to rest.

@@ -102,18 +102,14 @@
   // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
   const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
 
-  // Why the field is off, in the field itself. A disabled box with no
-  // explanation reads as a bug rather than as a state. tech.md 6.5.
+  // A session that will never stop again cannot take a queue, and that is the
+  // only case the field goes dark. tech.md 6.5.
+  const canWrite = $derived(current !== undefined && current.status !== 'Ended');
+
   const replyHint = $derived.by(() => {
     if (waiting) return 'Reply to Claude';
-    switch (current?.status) {
-      case 'Working':
-        return 'Claude is working, reply when it stops';
-      case 'Ended':
-        return 'This session has ended';
-      default:
-        return 'Nothing is waiting on you here';
-    }
+    if (current?.status === 'Ended') return 'This session has ended';
+    return 'Type now, it goes when Claude stops';
   });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
@@ -128,6 +124,13 @@
   $effect(() => {
     if (!island.prompt) reply = '';
   });
+
+  // Queued text has left the field the moment it is in the feed.
+  function send(text: string) {
+    if (!current) return;
+    island.answer(text, current.session.session_id);
+    reply = '';
+  }
 
   $effect(() => {
     const stop = Promise.all([island.start(), feed.start(), usage.start()]);
@@ -280,9 +283,9 @@
           <div class="reply">
             <PromptInput
               bind:value={reply}
-              disabled={!waiting}
+              disabled={!canWrite}
               placeholder={replyHint}
-              onsubmit={(text) => island.answer(text)}
+              onsubmit={send}
               onescape={() => island.dismiss()}
             />
             {#if waiting}
