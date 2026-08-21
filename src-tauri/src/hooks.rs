@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use peekle_core::labels::classify;
 use peekle_core::types::{
-    PromptKind, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest,
-    ToastTone,
+    PromptAnswer, PromptKind, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus,
+    ToastRequest, ToastTone,
 };
 use peekle_core::FeedEvent;
 use peekle_server::HookSink;
@@ -53,6 +53,31 @@ impl HookSink for AppSink {
         // Register before any window work: the channel has to exist before
         // anything can resolve it.
         let receiver = self.state.pending.register(request.id.clone());
+
+        // Something typed while the agent was busy. This is the turn boundary
+        // it was waiting for, so it leaves now and the island stays down: the
+        // user already said what they wanted. tech.md 6.5.
+        if request.kind == PromptKind::Stop {
+            if let Some(text) = self.state.take_queued(&request.session.session_id) {
+                let at = now_ms();
+                self.state.end_turn(&request.session.session_id, at);
+                let cards = self
+                    .state
+                    .replies_delivered(&request.session.session_id, at);
+                self.emit_sessions(cards);
+
+                self.state.pending.resolve(
+                    &request.id,
+                    PromptOutcome::Answered(PromptAnswer {
+                        prompt_id: request.id.clone(),
+                        choice: None,
+                        text: Some(text),
+                    }),
+                );
+                tracing::debug!(session = %request.session.session_id, "a queued reply left on this stop");
+                return receiver;
+            }
+        }
 
         // A Stop means the turn is over, so nothing can still be in flight.
         // Whatever is still Running never reported success: PostToolUse does

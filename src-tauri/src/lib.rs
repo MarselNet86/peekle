@@ -134,6 +134,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::window_ready,
             commands::set_view,
             commands::island_bounds,
+            commands::queue_reply,
             commands::dev_emit_prompt,
         ]
     }
@@ -150,6 +151,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::window_ready,
             commands::set_view,
             commands::island_bounds,
+            commands::queue_reply,
         ]
     }
 }

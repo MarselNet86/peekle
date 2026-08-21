@@ -35,17 +35,24 @@ export function createIsland(search = '') {
   }
 
   /**
-   * The typed text reaches the agent one way only: as the body of the blocking
-   * hook's response. There is no send command and there will not be one, so
-   * answering outside a live request is not something to fake. tech.md 6.5.
+   * The typed text reaches the agent one way only: as the body of a blocking
+   * hook's response. There is no send command and there will not be one.
+   *
+   * With a request open it answers that request. Without one it queues for the
+   * next stop of that session, which is what a terminal does with anything
+   * typed while the agent is busy. tech.md 6.5.
    */
-  function answer(text: string) {
-    const open = prompt;
-    if (!open) return;
+  function answer(text: string, sessionId?: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    prompt = null;
-    commands.answerPrompt({ prompt_id: open.id, choice: null, text: trimmed });
+
+    const open = prompt;
+    if (open) {
+      prompt = null;
+      commands.answerPrompt({ prompt_id: open.id, choice: null, text: trimmed });
+      return;
+    }
+    if (sessionId) commands.queueReply(sessionId, trimmed);
   }
 
   function choose(choiceId: string) {

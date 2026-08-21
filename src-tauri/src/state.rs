@@ -43,6 +43,9 @@ pub struct AppState {
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
     sessions: Mutex<SessionRegistry>,
+    /// Replies typed while the agent was busy, waiting for its next `Stop`.
+    /// tech.md 6.5.
+    queued: Mutex<HashMap<String, Vec<String>>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -107,6 +110,7 @@ impl AppState {
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
+            queued: Mutex::new(HashMap::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -213,9 +217,37 @@ impl AppState {
 
     /// Records what the agent said last. tech.md S6.
     /// What the user just sent, into the feed of the session it went to.
-    pub fn user_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
+    pub fn user_turn(
+        &self,
+        session: &SessionRef,
+        text: &str,
+        state: peekle_core::types::EntryState,
+        at: i64,
+    ) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
-        sessions.user_turn(session.clone(), text, at);
+        sessions.user_turn(session.clone(), text, state, at);
+        sessions.cards().to_vec()
+    }
+
+    /// Queues a reply for the next `Stop` of a session. tech.md 6.5.
+    pub fn queue_reply(&self, session_id: &str, text: &str) {
+        self.lock(&self.queued)
+            .entry(session_id.to_string())
+            .or_default()
+            .push(text.to_string());
+    }
+
+    /// Takes everything queued for a session, joined the way the user wrote it.
+    /// Empty means nothing was waiting, and the caller opens the island as
+    /// usual.
+    pub fn take_queued(&self, session_id: &str) -> Option<String> {
+        let queued = self.lock(&self.queued).remove(session_id)?;
+        (!queued.is_empty()).then(|| queued.join("\n\n"))
+    }
+
+    pub fn replies_delivered(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.replies_delivered(session_id, at);
         sessions.cards().to_vec()
     }
 
