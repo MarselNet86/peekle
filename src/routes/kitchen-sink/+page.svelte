@@ -10,6 +10,7 @@
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import TypingLine from '$lib/ui/TypingLine.svelte';
+  import SearchField from '$lib/ui/SearchField.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
@@ -143,6 +144,7 @@
   let text = $state('');
   let selected = $state('allow_once');
   let collapsed = $state(true);
+  let search = $state('');
 </script>
 
 <div class="sink">
@@ -206,6 +208,11 @@
       <FeedRow entry={formatted} />
       <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
     </div>
+  </section>
+
+  <section>
+    <h2>SearchField</h2>
+    <div class="frame"><SearchField bind:value={search} /></div>
   </section>
 
   <section>

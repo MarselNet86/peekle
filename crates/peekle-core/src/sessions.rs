@@ -5,8 +5,9 @@
 //! never reads a transcript file, because that file is written asynchronously
 //! and lags the live turn. tech.md section 8.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ulid::Ulid;
 
@@ -58,6 +59,15 @@ pub enum FeedEvent {
 }
 
 impl FeedEvent {
+    /// The session this event belongs to.
+    pub fn session_id(&self) -> &str {
+        match self {
+            FeedEvent::UserTurn { session, .. } => &session.session_id,
+            FeedEvent::ToolStarted { session, .. } => &session.session_id,
+            FeedEvent::ToolFinished { session_id, .. } => session_id,
+        }
+    }
+
     pub fn from_payload(payload: &Value) -> Option<Self> {
         let event = str_at(payload, "hook_event_name")?;
 
@@ -153,10 +163,27 @@ fn now_entry(
     }
 }
 
+/// What the user said about a session, on top of what the hooks say.
+///
+/// Kept beside the cards rather than written into them: hooks and the
+/// transcript backfill rebuild a card on every event, and a title written into
+/// one would be gone by the next `PreToolUse`. tech.md 6.3.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct SessionOverrides {
+    /// Titles the user typed, by session id.
+    #[serde(default)]
+    pub titles: HashMap<String, String>,
+    /// Sessions the user put away. They never come back, including from the
+    /// backfill, and their transcript is untouched. tech.md 11.
+    #[serde(default)]
+    pub hidden: HashSet<String>,
+}
+
 /// Owns every session card and the feed inside it.
 #[derive(Debug, Default)]
 pub struct SessionRegistry {
     cards: Vec<SessionCard>,
+    overrides: SessionOverrides,
     /// `tool_use_id` to the session and entry it opened. Deliberately outside
     /// `PeekleState`: `FeedEntry::id` stays a ulid and the frontend never sees
     /// this map. tech.md 6.3.
@@ -168,11 +195,73 @@ impl SessionRegistry {
         Self::default()
     }
 
-    pub fn cards(&self) -> &[SessionCard] {
-        &self.cards
+    /// Loads what the user said about sessions.
+    pub fn restore(&mut self, overrides: SessionOverrides) {
+        self.overrides = overrides;
+        self.cards
+            .retain(|c| !self.overrides.hidden.contains(&c.session.session_id));
+    }
+
+    pub fn overrides(&self) -> &SessionOverrides {
+        &self.overrides
+    }
+
+    /// Renames a session, or drops the override when the title is empty.
+    /// Returns false when nobody knows the session, so the caller can say so
+    /// rather than storing a title for a card that does not exist.
+    pub fn rename(&mut self, session_id: &str, title: &str) -> bool {
+        let title = truncate(title, TITLE_LIMIT);
+        let known = self
+            .cards
+            .iter()
+            .any(|c| c.session.session_id == session_id);
+        if !known {
+            return false;
+        }
+
+        if title.is_empty() {
+            self.overrides.titles.remove(session_id);
+        } else {
+            self.overrides.titles.insert(session_id.to_string(), title);
+        }
+        true
+    }
+
+    /// Puts a session away for good. The transcript is not touched: those
+    /// files belong to Claude Code and Peekle only reads them. tech.md 11.
+    pub fn hide(&mut self, session_id: &str) {
+        self.overrides.hidden.insert(session_id.to_string());
+        self.cards.retain(|c| c.session.session_id != session_id);
+    }
+
+    /// The cards as the user sees them: their titles over the hooks' titles,
+    /// and nothing they put away.
+    ///
+    /// Applied on the way out rather than written in. A title written into a
+    /// card would destroy the one the hooks derived, and clearing the override
+    /// could then never hand it back. tech.md 6.3.
+    pub fn cards(&self) -> Vec<SessionCard> {
+        self.cards
+            .iter()
+            .filter(|card| !self.overrides.hidden.contains(&card.session.session_id))
+            .map(
+                |card| match self.overrides.titles.get(&card.session.session_id) {
+                    Some(title) => SessionCard {
+                        title: title.clone(),
+                        ..card.clone()
+                    },
+                    None => card.clone(),
+                },
+            )
+            .collect()
     }
 
     pub fn apply(&mut self, event: FeedEvent, at: i64) {
+        // A session the user put away stays away, however loudly its own hooks
+        // keep arriving. tech.md 6.3.
+        if self.overrides.hidden.contains(event.session_id()) {
+            return;
+        }
         match event {
             FeedEvent::UserTurn { session, text } => {
                 let entry = now_entry(
@@ -418,6 +507,11 @@ impl SessionRegistry {
     /// other path in. tech.md 6.11.
     pub fn seed(&mut self, cards: Vec<SessionCard>) {
         for card in cards {
+            // Put away means put away, including by the backfill that would
+            // otherwise raise it again on every launch. tech.md 6.3.
+            if self.overrides.hidden.contains(&card.session.session_id) {
+                continue;
+            }
             let known = self
                 .cards
                 .iter()

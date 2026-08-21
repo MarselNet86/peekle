@@ -95,6 +95,11 @@ pub fn run() {
             // Past dialogues live in Claude Code's own transcripts. Reading
             // them is the only way an island opened on a fresh start shows
             // anything at all. tech.md 6.11.
+            // What the user called their sessions, before anything fills the
+            // registry: the backfill must not raise what they put away.
+            // tech.md 6.8.
+            state.restore_sessions();
+
             backfill_sessions(app.handle(), Arc::clone(&state));
             rest_stale_sessions(app.handle(), Arc::clone(&state));
 
@@ -135,6 +140,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::set_view,
             commands::island_bounds,
             commands::queue_reply,
+            commands::rename_session,
+            commands::hide_session,
             commands::dev_emit_prompt,
         ]
     }
@@ -152,6 +159,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::set_view,
             commands::island_bounds,
             commands::queue_reply,
+            commands::rename_session,
+            commands::hide_session,
         ]
     }
 }

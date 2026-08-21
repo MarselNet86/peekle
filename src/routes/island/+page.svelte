@@ -3,9 +3,16 @@
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
-  import { openList, openSession, sessionOf } from '$lib/features/sessions/sessions.svelte';
+  import {
+    hideSession,
+    openList,
+    openSession,
+    renameSession,
+    sessionOf,
+  } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { scrollState } from '$lib/logic/feed';
+  import { searchSessions } from '$lib/logic/sessions';
   import { clickPutsAway, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -13,6 +20,7 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
+  import SearchField from '$lib/ui/SearchField.svelte';
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
@@ -34,7 +42,8 @@
   });
   const rows = $derived(current?.entries ?? []);
   const listing = $derived(island.view === 'Sessions');
-  const cards = $derived(feed.sessions);
+  let query = $state('');
+  const cards = $derived(searchSessions(feed.sessions, query));
 
   // The feed scrolls for real, so where it stands is a fact about the DOM
   // rather than about the number of rows. tech.md 6.12.
@@ -222,14 +231,27 @@
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
       <div class="feed">
+        <!-- Only once there is a list worth searching. tech.md S14. -->
+        {#if feed.sessions.length > 3}
+          <div class="search"><SearchField bind:value={query} /></div>
+        {/if}
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each cards as card (card.session.session_id)}
-            <SessionRow {card} onopen={() => openSession(card.session.session_id)} />
+            <SessionRow
+              {card}
+              onopen={() => openSession(card.session.session_id)}
+              onrename={(title) => renameSession(card.session.session_id, title)}
+              onhide={() => hideSession(card.session.session_id)}
+            />
           {/each}
           <!-- An empty list opened from the mark says so. Collapsing on the
                click the user just made reads as a broken island. tech.md S12. -->
           {#if cards.length === 0}
-            <p class="empty">No sessions yet. Start Claude Code and it shows up here.</p>
+            <p class="empty">
+              {query
+                ? 'Nothing matches that.'
+                : 'No sessions yet. Start Claude Code and it shows up here.'}
+            </p>
           {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
@@ -338,6 +360,11 @@
     flex: none;
     border-top: 1px solid var(--hairline);
     padding-top: 6px;
+  }
+
+  .search {
+    flex: none;
+    padding-bottom: 6px;
   }
 
   .empty {

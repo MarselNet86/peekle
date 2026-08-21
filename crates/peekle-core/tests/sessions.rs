@@ -135,8 +135,8 @@ fn the_stop_sweep_fails_only_what_never_finished() {
         registry.end_turn(session_id, 3);
     }
 
-    let entries: Vec<_> = registry
-        .cards()
+    let cards = registry.cards();
+    let entries: Vec<_> = cards
         .iter()
         .flat_map(|c| &c.entries)
         .filter(|e| e.kind == EntryKind::Tool)
@@ -246,7 +246,8 @@ fn the_feed_is_capped_per_session() {
 
     assert_eq!(registry.cards()[0].entries.len(), ENTRY_CAP);
     // The tail is kept, so the newest call is the one still on screen.
-    let last = registry.cards()[0].entries.last().unwrap();
+    let cards = registry.cards();
+    let last = cards[0].entries.last().unwrap();
     assert_eq!(last.text, format!("call {}", ENTRY_CAP * 2 - 1));
 }
 
@@ -384,13 +385,12 @@ fn parallel_sessions_are_kept_apart() {
 
     assert_eq!(registry.cards().len(), 2);
 
-    let a = registry
-        .cards()
+    let cards = registry.cards();
+    let a = cards
         .iter()
         .find(|c| c.session.session_id == "a")
         .expect("session a");
-    let b = registry
-        .cards()
+    let b = cards
         .iter()
         .find(|c| c.session.session_id == "b")
         .expect("session b");
@@ -441,7 +441,8 @@ fn the_closing_message_lands_once_however_often_stop_repeats() {
     registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 1);
     registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 2);
 
-    let said: Vec<_> = registry.cards()[0]
+    let cards = registry.cards();
+    let said: Vec<_> = cards[0]
         .entries
         .iter()
         .filter(|e| e.kind == EntryKind::Assistant)
@@ -619,4 +620,99 @@ fn delivering_leaves_a_session_it_never_heard_of_alone() {
     let mut registry = SessionRegistry::new();
     registry.replies_delivered("nobody", 1);
     assert!(registry.cards().is_empty());
+}
+
+/// S14. Titles and hiding live beside the cards, because hooks and the
+/// backfill rebuild the cards themselves on every event.
+#[test]
+fn a_renamed_session_keeps_its_name_through_the_events_that_follow() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/x/peekle".to_string(),
+        project: "peekle".to_string(),
+    };
+    registry.ensure(session.clone(), 0);
+
+    assert!(registry.rename("s", "  Panel work  "));
+    assert_eq!(registry.cards()[0].title, "Panel work", "trimmed");
+
+    // The event that would otherwise write the first user turn as the title.
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session.clone(),
+            text: "fix the notch".to_string(),
+        },
+        1,
+    );
+    assert_eq!(registry.cards()[0].title, "Panel work");
+
+    // And an empty rename hands the name back to the hooks.
+    assert!(registry.rename("s", "   "));
+    assert_eq!(registry.cards()[0].title, "fix the notch");
+}
+
+#[test]
+fn renaming_a_session_nobody_knows_is_refused_rather_than_remembered() {
+    let mut registry = SessionRegistry::new();
+    assert!(!registry.rename("ghost", "Whatever"));
+    assert!(registry.overrides().titles.is_empty());
+}
+
+#[test]
+fn a_hidden_session_stays_hidden_through_events_and_backfill() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/x/peekle".to_string(),
+        project: "peekle".to_string(),
+    };
+    registry.ensure(session.clone(), 0);
+    registry.hide("s");
+    assert!(registry.cards().is_empty());
+
+    // Its own hooks keep arriving.
+    registry.apply(
+        FeedEvent::UserTurn {
+            session: session.clone(),
+            text: "still here".to_string(),
+        },
+        1,
+    );
+    assert!(registry.cards().is_empty(), "an event may not raise it");
+
+    // And the backfill offers it again on the next launch.
+    registry.seed(vec![peekle_core::types::SessionCard {
+        session,
+        title: "from the transcript".to_string(),
+        status: peekle_core::types::SessionStatus::Idle,
+        entries: Vec::new(),
+        updated_at: 2,
+    }]);
+    assert!(registry.cards().is_empty(), "the backfill may not raise it");
+}
+
+#[test]
+fn restoring_applies_what_the_user_said_to_the_cards_already_there() {
+    let mut registry = SessionRegistry::new();
+    for id in ["a", "b"] {
+        registry.ensure(
+            peekle_core::types::SessionRef {
+                session_id: id.to_string(),
+                cwd: "/x/peekle".to_string(),
+                project: "peekle".to_string(),
+            },
+            0,
+        );
+    }
+
+    let mut overrides = peekle_core::sessions::SessionOverrides::default();
+    overrides
+        .titles
+        .insert("a".to_string(), "Renamed".to_string());
+    overrides.hidden.insert("b".to_string());
+    registry.restore(overrides);
+
+    assert_eq!(registry.cards().len(), 1);
+    assert_eq!(registry.cards()[0].title, "Renamed");
 }

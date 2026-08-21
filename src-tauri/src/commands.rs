@@ -360,6 +360,42 @@ fn fail_replies(app: &AppHandle, state: &Arc<AppState>, session_id: &str) {
     }
 }
 
+/// Renames a session in the island. tech.md 6.5.
+///
+/// An override, not an edit: hooks and the backfill rebuild a card on every
+/// event, so a title written into one would be gone by the next tool call. An
+/// empty title hands the name back to whatever the hooks derived.
+#[tauri::command]
+pub fn rename_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    title: String,
+) {
+    let Some(cards) = state.rename_session(&session_id, &title) else {
+        tracing::warn!(session_id, "renamed a session nobody knows");
+        return;
+    };
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+}
+
+/// Puts a session away for good.
+///
+/// Hides, never deletes: the transcript belongs to Claude Code, Peekle only
+/// reads it, and the session stays where the user can still find it there.
+/// tech.md 11.
+#[tauri::command]
+pub fn hide_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String) {
+    let cards = state.hide_session(&session_id);
+    tracing::debug!(session_id, "session hidden from the island");
+
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+}
+
 /// The webview reports the size of the shape it drew. Rust never resizes the
 /// window with it: letting the frontend drive the frame is exactly the stutter
 /// 6.7 forbids. What it does do is remember the size, because that rectangle is
