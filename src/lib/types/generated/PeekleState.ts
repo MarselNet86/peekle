@@ -17,4 +17,9 @@ tasks: Array<TaskItem>, usage: UsageSnapshot, live_sessions: number,
 /**
  * false when the combination is held by another application.
  */
-hotkey_ok: boolean, };
+hotkey_ok: boolean, 
+/**
+ * The session the island is steering, if any. While it is set, that
+ * session's Stop parks and its extension waits. tech.md 6.5.
+ */
+driving: string | null, };

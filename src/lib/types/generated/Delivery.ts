@@ -6,4 +6,4 @@ import type { TmuxTarget } from "./TmuxTarget";
  * than cached: panes get closed, sessions get abandoned, tmux gets restarted.
  * tech.md 6.5.
  */
-export type Delivery = { "Tmux": TmuxTarget } | "TurnBoundary" | "Unreachable";
+export type Delivery = { "Tmux": TmuxTarget } | "Held" | "Resume" | "TurnBoundary" | "Unreachable";

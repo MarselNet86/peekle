@@ -31,6 +31,7 @@ export const EVENTS = {
   toast: 'peekle://toast',
   view: 'peekle://view',
   notch: 'peekle://notch',
+  driving: 'peekle://driving',
 } as const;
 
 export function hasTauri(): boolean {
@@ -56,6 +57,7 @@ export const commands = {
   sendMessage: (sessionId: string, text: string) =>
     call<Delivery>('send_message', { sessionId, text }),
   deliveryFor: (sessionId: string) => call<Delivery>('delivery_for', { sessionId }),
+  setTakeover: (sessionId: string, on: boolean) => call<void>('set_takeover', { sessionId, on }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
   hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
@@ -81,4 +83,6 @@ export const events = {
   onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
   onNotch: (handler: (notch: { height: number; width: number }) => void) =>
     on<{ height: number; width: number }>(EVENTS.notch, handler),
+  onDriving: (handler: (payload: { driving: string | null }) => void) =>
+    on<{ driving: string | null }>(EVENTS.driving, handler),
 };

@@ -32,6 +32,20 @@ describe('what the field promises', () => {
     expect(replyHint('TurnBoundary')).toBe('Type now, it goes when Claude stops');
   });
 
+  /// Steering means Peekle is holding the turn, so the text leaves at once.
+  /// Both rungs of takeover promise the same thing. tech.md 6.5.
+  it('promises now on every channel that delivers now', () => {
+    for (const delivery of [pane, 'Held', 'Resume'] as Delivery[]) {
+      expect(replyHint(delivery)).toBe('Message Claude');
+    }
+  });
+
+  /// Without takeover nothing is held, so "now" would be a lie: the text
+  /// waits for a turn boundary Peekle is not keeping open.
+  it('does not promise now when nothing is being held', () => {
+    expect(replyHint('TurnBoundary')).not.toBe(replyHint('Held'));
+  });
+
   /// The competitor goes dark outside tmux. A session in an IDE extension is
   /// slower, not mute, so the field stays live. tech.md 17.1.
   it('stays live for a session with no pane', () => {

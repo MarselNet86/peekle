@@ -133,6 +133,7 @@
   });
 
   const reachable = $derived(delivery !== null && delivery !== 'Unreachable');
+  const steering = $derived(current !== undefined && island.driving === current.session.session_id);
 
   // The field says which channel it has, because the two differ in when the
   // text lands, and a promise that hides the difference is a promise the
@@ -141,6 +142,8 @@
     if (island.prompt) return 'Reply to Claude';
     if (delivery === null) return 'Send to Claude';
     if (delivery === 'Unreachable') return 'This session has ended';
+    // Held and Resume both leave at once; TurnBoundary waits for a turn that
+    // Peekle is not holding, and saying so is the whole point of the hint.
     if (delivery === 'TurnBoundary') return 'Type now, it goes when Claude stops';
     return 'Message Claude';
   });
@@ -290,6 +293,18 @@
             </svg>
             <span>{current.session.project}</span>
           </button>
+          <!-- Holding a turn blocks the whole session, so it is a switch the
+               user throws rather than something Peekle decides. tech.md 6.5. -->
+          <button
+            class="steer"
+            class:on={steering}
+            onclick={() => island.takeover(current.session.session_id, !steering)}
+            title={steering
+              ? 'Hand this session back to Claude Code (⌥⇧S)'
+              : 'Steer this session from the island (⌥⇧S)'}
+          >
+            {steering ? 'Steering' : 'Take over'}
+          </button>
           <!-- The windows in miniature. The full bars stay in the list, where
                there is room for them. tech.md 6.12. -->
           <div class="dials">
@@ -398,6 +413,32 @@
     align-items: center;
     gap: 10px;
     padding-bottom: 4px;
+  }
+
+  /* Off it reads as an offer, on it reads as a state, because on it is
+     costing the user their extension. tech.md 6.5. */
+  .steer {
+    margin-left: auto;
+    flex: none;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 10px;
+    padding: 2px 8px;
+    margin-bottom: 4px;
+    cursor: pointer;
+  }
+
+  .steer:hover {
+    color: var(--text);
+  }
+
+  .steer.on {
+    border-color: transparent;
+    background: var(--brand);
+    color: #000;
   }
 
   .back {
