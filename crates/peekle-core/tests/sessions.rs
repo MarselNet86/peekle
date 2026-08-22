@@ -614,10 +614,10 @@ fn resting_leaves_every_other_status_alone() {
     }
 }
 
-/// A reply typed while the agent was busy waits in the feed rather than
-/// pretending it went. tech.md 6.5.
+/// A reply stays `Running` until `UserPromptSubmit` confirms it, and each
+/// event confirms exactly one: the channel is FIFO. tech.md 6.3.
 #[test]
-fn a_queued_reply_stays_running_until_a_stop_carries_it() {
+fn each_prompt_submit_confirms_one_waiting_reply() {
     let mut registry = SessionRegistry::new();
     let session = peekle_core::types::SessionRef {
         session_id: "s".to_string(),
@@ -634,17 +634,83 @@ fn a_queued_reply_stays_running_until_a_stop_carries_it() {
         .iter()
         .all(|e| e.state == EntryState::Running));
 
-    registry.replies_delivered("s", 3);
+    assert!(registry.confirm_reply("s", 3));
+    let states: Vec<EntryState> = registry.cards()[0]
+        .entries
+        .iter()
+        .map(|e| e.state)
+        .collect();
+    assert_eq!(
+        states,
+        vec![EntryState::Ok, EntryState::Running],
+        "the oldest one is the one this event belongs to"
+    );
+
+    assert!(registry.confirm_reply("s", 4));
     assert!(registry.cards()[0]
         .entries
         .iter()
         .all(|e| e.state == EntryState::Ok));
+    assert!(!registry.confirm_reply("s", 5), "nothing left to confirm");
+}
+
+/// The reply the island drew when it was typed is the same row the hook
+/// confirms. Two rows for one message is what the user reads as sent twice.
+#[test]
+fn a_prompt_submit_confirms_the_row_instead_of_adding_one() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+        pid: None,
+        tty: None,
+    };
+
+    registry.user_turn(session.clone(), "1 + 2", EntryState::Running, 1);
+    registry.apply(
+        peekle_core::FeedEvent::UserTurn {
+            session: session.clone(),
+            text: "1 + 2".to_string(),
+        },
+        2,
+    );
+
+    let entries = &registry.cards()[0].entries;
+    assert_eq!(entries.len(), 1, "one message, one row");
+    assert_eq!(entries[0].state, EntryState::Ok);
+}
+
+/// A turn the island never sent still needs a row: an observed session, or one
+/// the user typed into their own terminal.
+#[test]
+fn a_turn_the_island_never_sent_still_lands_in_the_feed() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+        pid: None,
+        tty: None,
+    };
+
+    registry.apply(
+        peekle_core::FeedEvent::UserTurn {
+            session,
+            text: "typed in the terminal".to_string(),
+        },
+        1,
+    );
+
+    let entries = &registry.cards()[0].entries;
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].text, "typed in the terminal");
 }
 
 #[test]
-fn delivering_leaves_a_session_it_never_heard_of_alone() {
+fn confirming_leaves_a_session_it_never_heard_of_alone() {
     let mut registry = SessionRegistry::new();
-    registry.replies_delivered("nobody", 1);
+    assert!(!registry.confirm_reply("nobody", 1));
     assert!(registry.cards().is_empty());
 }
 

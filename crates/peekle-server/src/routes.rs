@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use ulid::Ulid;
 
 use crate::map;
-use crate::sink::{HookSink, StopPlan};
+use crate::sink::HookSink;
 
 /// Reported by `/v1/health`. Tracks the core version in the tech.md header.
 pub const CORE_VERSION: &str = "v40";
@@ -171,21 +171,8 @@ async fn stop(
         return empty();
     }
 
-    match state.sink.on_stop(&payload) {
-        StopPlan::Release => empty(),
-        StopPlan::Answer(text) => (StatusCode::OK, Json(map::block_body(&text))).into_response(),
-        StopPlan::Hold(receiver) => {
-            let outcome = tokio::time::timeout(state.sink.reply_window(), receiver).await;
-            match outcome {
-                Ok(Ok(Some(text))) => {
-                    (StatusCode::OK, Json(map::block_body(&text))).into_response()
-                }
-                // Window passed, or the sender was dropped. The turn ends
-                // normally; anything typed later leaves on the next Stop.
-                _ => empty(),
-            }
-        }
-    }
+    state.sink.on_stop(&payload);
+    empty()
 }
 
 async fn permission(

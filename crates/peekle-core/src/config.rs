@@ -63,11 +63,6 @@ pub struct ServerConfig {
 #[serde(default)]
 pub struct HotkeyConfig {
     pub toggle: String,
-    /// Takes control of the session the island is showing, or gives it back.
-    /// A hotkey and not only a button, because control has to be handed back
-    /// at the moment the island is closed and the mouse cannot reach it.
-    /// tech.md 6.9.
-    pub takeover: String,
     /// Empty means do not register.
     pub recall: String,
 }
@@ -112,13 +107,14 @@ pub struct BehaviorConfig {
     /// hook timeout of 86400s so Peekle gives up first and hands the question
     /// back to the terminal. tech.md 6.8.
     pub permission_wait_secs: u32,
-    /// How long a held turn waits for something to be typed. Expiring ends the
-    /// pause, never the channel: text typed later rides the next Stop, so this
-    /// has no lower bound worth warning about. tech.md 6.8.
-    pub reply_window_secs: u32,
     /// How long a sent reply waits for `UserPromptSubmit` before it is called
     /// undelivered. tech.md 6.3.
     pub delivery_confirm_secs: u32,
+    /// Window size of the pty an owned session runs in. Invisible in the feed:
+    /// Claude Code wraps its TUI to it, and the TUI is drained and discarded.
+    /// The keys exist so a zero size can be ruled out. tech.md 6.5 and 6.8.
+    pub pty_cols: u16,
+    pub pty_rows: u16,
 }
 
 impl Default for ServerConfig {
@@ -134,7 +130,6 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             toggle: "Alt+Shift+KeyQ".to_string(),
-            takeover: "Alt+Shift+KeyS".to_string(),
             recall: String::new(),
         }
     }
@@ -166,8 +161,9 @@ impl Default for BehaviorConfig {
         Self {
             enabled: true,
             permission_wait_secs: 300,
-            reply_window_secs: 300,
             delivery_confirm_secs: 20,
+            pty_cols: 120,
+            pty_rows: 40,
         }
     }
 }
@@ -252,9 +248,9 @@ mod tests {
         assert_eq!(config.server.port, 47821);
         assert_eq!(config.server.token.len(), 32);
         assert_eq!(config.hotkey.toggle, "Alt+Shift+KeyQ");
-        assert_eq!(config.hotkey.takeover, "Alt+Shift+KeyS");
         assert_eq!(config.behavior.permission_wait_secs, 300);
-        assert_eq!(config.behavior.reply_window_secs, 300);
+        assert_eq!(config.behavior.pty_cols, 120);
+        assert_eq!(config.behavior.pty_rows, 40);
     }
 
     #[test]
@@ -274,7 +270,7 @@ mod tests {
         let config = Config::from_toml("[behavior]\nenabled = false\n").unwrap();
         assert!(!config.behavior.enabled);
         assert_eq!(config.behavior.permission_wait_secs, 300);
-        assert_eq!(config.behavior.reply_window_secs, 300);
+        assert_eq!(config.behavior.delivery_confirm_secs, 20);
     }
 
     #[test]

@@ -12,13 +12,13 @@ use peekle_core::types::{
     PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest, ToastTone,
 };
 use peekle_core::FeedEvent;
-use peekle_server::{HookSink, StopPlan};
+use peekle_server::HookSink;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
 use crate::events;
-use crate::state::{AppState, StopDecision};
+use crate::state::AppState;
 use crate::windows;
 
 pub struct AppSink {
@@ -62,11 +62,12 @@ impl HookSink for AppSink {
         receiver
     }
 
-    /// A Stop is an event first and a decision second. tech.md 6.5.
+    /// A Stop is an event, not a decision. tech.md 6.2.
     ///
-    /// The feed work below happens whichever way the decision goes: the turn
-    /// really did end, whatever we do about the channel.
-    fn on_stop(&self, payload: &Value) -> StopPlan {
+    /// It closes the rows the turn left open and drops the working status.
+    /// Nothing is held and nothing is carried: text reaches an owned session
+    /// through its pty the moment it is typed.
+    fn on_stop(&self, payload: &Value) {
         let session = peekle_core::sessions::session_ref_of(payload);
         let at = now_ms();
 
@@ -89,38 +90,7 @@ impl HookSink for AppSink {
         }
         self.emit_sessions(self.state.sessions());
 
-        // Holding a turn blocks the whole session: while it is parked, input
-        // in the IDE extension does not go through. So it happens only where
-        // the user asked for it, and never as our guess. tech.md 6.5.
-        //
-        // A pane needs no holding either way: keystrokes reach it at any
-        // moment, so parking would cost the extension for nothing.
-        let has_pane = session
-            .pid
-            .and_then(|pid| peekle_core::tmux::Tmux::find().and_then(|tmux| tmux.pane_for(pid)))
-            .is_some();
-        let hold = !has_pane && self.state.is_driving(&session.session_id);
-
-        match self.state.stop_arrived(&session.session_id, hold) {
-            StopDecision::Answer(text) => {
-                let cards = self.state.replies_delivered(&session.session_id, now_ms());
-                self.emit_sessions(cards);
-                tracing::debug!(session = %session.session_id, "a queued reply left on this stop");
-                StopPlan::Answer(text)
-            }
-            StopDecision::Release => {
-                tracing::debug!(session = %session.session_id, has_pane, hold, "stop released");
-                StopPlan::Release
-            }
-            StopDecision::Hold(rx) => {
-                tracing::debug!(session = %session.session_id, "stop parked for a reply");
-                StopPlan::Hold(rx)
-            }
-        }
-    }
-
-    fn reply_window(&self) -> Duration {
-        self.state.reply_window()
+        tracing::debug!(session = %session.session_id, "the turn ended");
     }
 
     fn prompt_timeout(&self) -> Duration {
@@ -167,17 +137,14 @@ impl HookSink for AppSink {
                 // never finished. tech.md 6.3.
                 self.state.end_turn(session_id, at);
 
-                // A turn parked on this session will never be answered now, so
-                // let it go rather than leave a sender nobody can resolve.
-                self.state.unpark(session_id);
-
-                // Anything still queued has lost its ride: the Stop that would
-                // have carried it is not coming. Saying so beats a reply that
-                // sits `Running` for the rest of the session list's life.
-                // tech.md 6.5.
-                let cards = if self.state.has_pending(session_id) {
-                    tracing::warn!(session = %session_id, "the session ended with text still queued");
-                    self.state.replies_failed(session_id, at)
+                // For a session Peekle owns, the process exiting is what marks
+                // the card ended, and it says so from the pty. SessionEnd fires
+                // at the end of any run while the client behind it carries on,
+                // so treating it as the end of an owned session is exactly the
+                // guess that used to kill a live input field. tech.md 6.3.
+                let cards = if self.state.owns_session(session_id) {
+                    tracing::debug!(session = %session_id, "a run ended, the session we own has not");
+                    self.state.sessions()
                 } else {
                     self.state.mark_session_ended(session_id, at)
                 };

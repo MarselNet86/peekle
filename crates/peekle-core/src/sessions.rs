@@ -119,7 +119,7 @@ pub fn session_ref_of(payload: &Value) -> SessionRef {
 
 /// The last path segment. A full path does not fit a session row and the
 /// directory name is what the user calls the project.
-fn project_of(cwd: &str) -> String {
+pub fn project_of(cwd: &str) -> String {
     cwd.rsplit('/')
         .find(|part| !part.is_empty())
         .unwrap_or_default()
@@ -301,19 +301,31 @@ impl SessionRegistry {
         }
         match event {
             FeedEvent::UserTurn { session, text } => {
-                let entry = now_entry(
-                    EntryKind::User,
-                    truncate(&text, PREVIEW_LIMIT),
-                    None,
-                    EntryState::Ok,
-                    at,
-                );
+                // The island already drew this reply when it was typed, so the
+                // hook confirms that row rather than adding a second one. Only
+                // a turn the island never sent -- an observed session, or one
+                // started in the terminal -- has nothing to confirm and needs
+                // a row of its own. tech.md 6.3.
+                let session_id = session.session_id.clone();
+                let confirmed = self.confirm_reply(&session_id, at);
+
+                let entry = (!confirmed).then(|| {
+                    now_entry(
+                        EntryKind::User,
+                        truncate(&text, PREVIEW_LIMIT),
+                        None,
+                        EntryState::Ok,
+                        at,
+                    )
+                });
                 let card = self.card_mut(session, at);
                 if card.title.is_empty() {
                     card.title = truncate(&text, TITLE_LIMIT);
                 }
                 card.status = SessionStatus::Working;
-                push_entry(card, entry);
+                if let Some(entry) = entry {
+                    push_entry(card, entry);
+                }
             }
             FeedEvent::ToolStarted {
                 session,
@@ -399,10 +411,30 @@ impl SessionRegistry {
         self.mark_replies(session_id, EntryState::Failed, at);
     }
 
-    /// Marks every queued reply of a session as delivered. Called by the `Stop`
-    /// that carried them, or by the turn that took them as its prompt.
-    pub fn replies_delivered(&mut self, session_id: &str, at: i64) {
-        self.mark_replies(session_id, EntryState::Ok, at);
+    /// Confirms the oldest reply still waiting on this session, if any.
+    ///
+    /// `UserPromptSubmit` is what confirms a reply, and it confirms exactly
+    /// one: the channel is FIFO, so the oldest unconfirmed row is the one this
+    /// event belongs to. Returns whether it found one, because the caller then
+    /// knows not to add a row of its own. tech.md 6.3.
+    pub fn confirm_reply(&mut self, session_id: &str, at: i64) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return false;
+        };
+        let Some(entry) = card
+            .entries
+            .iter_mut()
+            .find(|e| e.kind == EntryKind::User && e.state == EntryState::Running)
+        else {
+            return false;
+        };
+        entry.state = EntryState::Ok;
+        card.updated_at = at;
+        true
     }
 
     fn mark_replies(&mut self, session_id: &str, state: EntryState, at: i64) {

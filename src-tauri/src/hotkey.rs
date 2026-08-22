@@ -65,15 +65,6 @@ pub fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
     Some(Shortcut::new(Some(modifiers), code))
 }
 
-/// The shortcut a spelling maps to, or None if it does not parse. Used by the
-/// handler to tell the two combinations apart. tech.md 6.9.
-pub fn parse_shortcut(spelling: &str) -> Option<Shortcut> {
-    Combination::parse(spelling)
-        .ok()
-        .as_ref()
-        .and_then(shortcut_of)
-}
-
 /// Registers a combination. A failure is a flag and one warning, never a
 /// reason not to start. tech.md 6.9.
 pub fn install(app: &AppHandle, spelling: &str) {

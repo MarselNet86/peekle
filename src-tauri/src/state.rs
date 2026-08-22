@@ -19,49 +19,6 @@ use tokio::sync::Notify;
 /// Freshest activity first, capped. tech.md 6.3.
 const TASK_CAP: usize = 50;
 
-/// Text waiting to leave, and the `Stop` hooks parked waiting for it.
-///
-/// Both halves live under one mutex, and that is the whole point. In v38 they
-/// were two locks: `queue_reply` read the session status, then wrote to the
-/// queue, and a `Stop` arriving between those two steps saw an empty queue,
-/// opened an interactive prompt, and left the text stranded — nothing else
-/// ever drained it. Checking the queue and deciding whether to park is one
-/// indivisible step here, so that gap cannot exist. tech.md 6.5.
-#[derive(Default)]
-struct Outbox {
-    /// Typed but not yet carried out, oldest first, per session.
-    pending: HashMap<String, Vec<String>>,
-    /// Turns held open because their session has no other way in.
-    parked: HashMap<String, tokio::sync::oneshot::Sender<Option<String>>>,
-}
-
-/// What happened to a reply the moment it was handed over. tech.md 6.3.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Queued {
-    /// A turn was parked waiting, so the text left immediately.
-    LeftNow,
-    /// Nothing was waiting. It goes out on the next `Stop`.
-    Waiting,
-}
-
-/// What an arriving `Stop` should do. Mirrors `peekle_server::StopPlan`, which
-/// this crate converts it into. tech.md 6.2.
-pub enum StopDecision {
-    Release,
-    Answer(String),
-    Hold(tokio::sync::oneshot::Receiver<Option<String>>),
-}
-
-/// Takes everything queued for a session, joined the way the user wrote it.
-///
-/// Several messages typed before one turn boundary arrive as one prompt, with
-/// blank lines between them: that is how they looked in the feed, and the
-/// agent should read what the user saw themselves write.
-fn take_pending(outbox: &mut Outbox, session_id: &str) -> Option<String> {
-    let texts = outbox.pending.remove(session_id)?;
-    (!texts.is_empty()).then(|| texts.join("\n\n"))
-}
-
 pub struct AppState {
     pub config: Mutex<Config>,
     pub pending: PendingRegistry,
@@ -90,15 +47,8 @@ pub struct AppState {
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
     sessions: Mutex<SessionRegistry>,
-    /// Text on its way out, and the turns parked waiting for it. One mutex on
-    /// purpose: see [`Outbox`]. tech.md 6.5.
-    outbox: Mutex<Outbox>,
-    /// The session the island is steering, if any. Only this session's Stop
-    /// parks; every other one is released at once so its extension keeps
-    /// working. tech.md 6.5.
-    driving: Mutex<Option<String>>,
-    /// Sessions Peekle has a run going for. tech.md 6.5.
-    running: Mutex<std::collections::HashSet<String>>,
+    /// The sessions Peekle started and can type into. tech.md 6.5.
+    pty: peekle_core::pty::SharedPtyHost,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -173,9 +123,7 @@ impl AppState {
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
-            outbox: Mutex::new(Outbox::default()),
-            driving: Mutex::new(None),
-            running: Mutex::new(std::collections::HashSet::new()),
+            pty: std::sync::Arc::new(peekle_core::pty::PtyHost::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -381,128 +329,28 @@ impl AppState {
         sessions.cards().to_vec()
     }
 
-    /// Hands a reply to the outbox for a session with no tmux pane.
-    ///
-    /// If a turn is parked waiting, the text leaves on it right now. Otherwise
-    /// it waits for the next `Stop`. Both branches run under the one lock, so
-    /// a `Stop` cannot slip between the decision and the write.
-    pub fn queue_reply(&self, session_id: &str, text: &str) -> Queued {
-        let mut outbox = self.lock(&self.outbox);
-
-        if let Some(parked) = outbox.parked.remove(session_id) {
-            // Err means the held turn gave up while we held the lock, so its
-            // receiver is gone. The text is not lost: it falls through to the
-            // queue and rides the next Stop. tech.md 6.8.
-            if parked.send(Some(text.to_string())).is_ok() {
-                return Queued::LeftNow;
-            }
-        }
-
-        outbox
-            .pending
-            .entry(session_id.to_string())
-            .or_default()
-            .push(text.to_string());
-        Queued::Waiting
+    /// The pty host. Commands spawn through it; the hook sink asks it whether
+    /// an arriving session is one of ours.
+    pub fn pty(&self) -> &peekle_core::pty::SharedPtyHost {
+        &self.pty
     }
 
-    /// Decides what an arriving `Stop` does, atomically with the queue.
-    ///
-    /// `hold` is the caller's answer to "does this session have another way
-    /// in": false for a session with a tmux pane, whose text goes in as
-    /// keystrokes and needs no parked turn at all.
-    pub fn stop_arrived(&self, session_id: &str, hold: bool) -> StopDecision {
-        let mut outbox = self.lock(&self.outbox);
-
-        if let Some(text) = take_pending(&mut outbox, session_id) {
-            return StopDecision::Answer(text);
-        }
-        if !hold {
-            return StopDecision::Release;
-        }
-
-        let (sender, receiver) = tokio::sync::oneshot::channel();
-        // A second Stop for one session replaces the first. Dropping the old
-        // sender resolves its receiver with an error, and that turn ends
-        // normally rather than hanging on a channel nobody will ever use.
-        outbox.parked.insert(session_id.to_string(), sender);
-        StopDecision::Hold(receiver)
+    /// Claims an id before the process behind it says anything, so the very
+    /// first hook is already recognised as ours. tech.md 6.5.
+    pub fn claim_session(&self, session_id: &str) {
+        self.lock(&self.sessions).claim(session_id);
     }
 
-    /// Drops a parked turn without answering it, releasing the session.
-    ///
-    /// Resolving with `None` rather than dropping the sender: both end the
-    /// turn, but this one says so deliberately instead of looking like a
-    /// channel that fell over.
-    pub fn unpark(&self, session_id: &str) {
-        if let Some(parked) = self.lock(&self.outbox).parked.remove(session_id) {
-            let _ = parked.send(None);
-        }
+    /// Whether the island can type into this session.
+    pub fn owns_session(&self, session_id: &str) -> bool {
+        self.lock(&self.sessions).is_owned(session_id)
     }
 
-    /// The session the island is steering. tech.md 6.5.
-    pub fn driving(&self) -> Option<String> {
-        self.lock(&self.driving).clone()
-    }
-
-    pub fn is_driving(&self, session_id: &str) -> bool {
-        self.lock(&self.driving).as_deref() == Some(session_id)
-    }
-
-    /// Takes control of a session, or hands it back.
-    ///
-    /// Returns every session that has to be released as a result: the one
-    /// being handed back, and any other that was being steered, because one
-    /// at a time is the rule. Releasing is the caller's job so it happens
-    /// outside this lock.
-    pub fn set_driving(&self, session_id: &str, on: bool) -> Vec<String> {
-        let mut driving = self.lock(&self.driving);
-        let previous = driving.clone();
-
-        *driving = if on {
-            Some(session_id.to_string())
-        } else if previous.as_deref() == Some(session_id) {
-            None
-        } else {
-            // Handing back a session nobody was steering changes nothing.
-            return Vec::new();
-        };
-
-        // Whatever we stopped steering has to be let go, or its extension
-        // stays blocked on a turn the user already walked away from.
-        previous
-            .filter(|id| driving.as_deref() != Some(id.as_str()))
-            .into_iter()
-            .collect()
-    }
-
-    /// Claims the right to run a turn for a session. False means one is
-    /// already going and the text belongs in the outbox instead.
-    pub fn claim_run(&self, session_id: &str) -> bool {
-        self.lock(&self.running).insert(session_id.to_string())
-    }
-
-    pub fn release_run(&self, session_id: &str) {
-        self.lock(&self.running).remove(session_id);
-    }
-
-    /// Takes the outbox contents to hand to a run that is starting.
-    pub fn take_pending_for_run(&self, session_id: &str) -> Option<String> {
-        let mut outbox = self.lock(&self.outbox);
-        take_pending(&mut outbox, session_id)
-    }
-
-    /// Whether a turn of this session is parked right now.
-    pub fn has_parked(&self, session_id: &str) -> bool {
-        self.lock(&self.outbox).parked.contains_key(session_id)
-    }
-
-    /// Whether anything typed for this session is still waiting to leave.
-    pub fn has_pending(&self, session_id: &str) -> bool {
-        self.lock(&self.outbox)
-            .pending
-            .get(session_id)
-            .is_some_and(|texts| !texts.is_empty())
+    /// The process behind a session is gone. The card stays readable; only the
+    /// claim goes, so the field knows there is nothing to type into.
+    pub fn disown_session(&self, session_id: &str) {
+        self.lock(&self.sessions).disown(session_id);
+        self.pty.forget(session_id);
     }
 
     /// Marks the queued replies of a session as undeliverable. Only the path
@@ -511,12 +359,6 @@ impl AppState {
     pub fn replies_failed(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
         sessions.replies_failed(session_id, at);
-        sessions.cards().to_vec()
-    }
-
-    pub fn replies_delivered(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
-        let mut sessions = self.lock(&self.sessions);
-        sessions.replies_delivered(session_id, at);
         sessions.cards().to_vec()
     }
 
@@ -552,11 +394,6 @@ impl AppState {
 
     pub fn prompt_timeout(&self) -> Duration {
         Duration::from_secs(self.lock_config().behavior.permission_wait_secs as u64)
-    }
-
-    /// How long a parked turn waits. tech.md 6.8.
-    pub fn reply_window(&self) -> Duration {
-        Duration::from_secs(self.lock_config().behavior.reply_window_secs as u64)
     }
 
     pub fn active_prompt(&self) -> Option<PromptRequest> {
@@ -652,7 +489,6 @@ impl AppState {
             usage: self.usage(),
             live_sessions: self.live_sessions(),
             hotkey_ok: self.hotkey_ok(),
-            driving: self.driving(),
         }
     }
 
@@ -904,9 +740,9 @@ mod tests {
     }
 }
 
-/// The outbox: the delivery ladder's turn-boundary half. tech.md 6.5.
+/// Owning a session: who the island may type into. tech.md 6.5.
 #[cfg(test)]
-mod outbox_tests {
+mod owned_tests {
     use super::*;
     use peekle_core::config::Config;
     use peekle_usage::FakeUsage;
@@ -915,210 +751,37 @@ mod outbox_tests {
         AppState::new(Config::default(), Arc::new(FakeUsage::default()))
     }
 
-    /// The v38 regression, as a test. Two locks used to let a Stop land between
-    /// "read the status" and "write to the queue": it saw an empty queue, let
-    /// the turn go, and the text sat in the queue forever because nothing else
-    /// ever drained it. Now the two steps are one, so the only two orderings
-    /// possible are the two below, and both deliver exactly once. tech.md S3.
+    /// A session Peekle did not start is observed, and observed means no
+    /// input field. This is the replacement for the old ladder: instead of
+    /// three ways to fail at typing into someone else's process, one honest no.
     #[test]
-    fn a_reply_racing_a_stop_leaves_exactly_once() {
-        // Reply first: the Stop finds it and carries it.
+    fn a_session_it_never_started_is_not_owned() {
         let state = fresh();
-        assert_eq!(state.queue_reply("s", "ship it"), Queued::Waiting);
-        match state.stop_arrived("s", true) {
-            StopDecision::Answer(text) => assert_eq!(text, "ship it"),
-            _ => panic!("the queued text has to leave on this stop"),
-        }
-        // And it left: a second Stop has nothing to carry.
-        assert!(matches!(
-            state.stop_arrived("s", true),
-            StopDecision::Hold(_)
-        ));
-
-        // Stop first: it parks, and the reply leaves on the parked turn.
-        let state = fresh();
-        let StopDecision::Hold(mut receiver) = state.stop_arrived("s", true) else {
-            panic!("a session with no other channel parks");
-        };
-        assert_eq!(state.queue_reply("s", "ship it"), Queued::LeftNow);
-        assert_eq!(receiver.try_recv().unwrap(), Some("ship it".to_string()));
-        assert!(!state.has_pending("s"), "nothing is left behind");
-    }
-
-    /// A session with a pane is released: its text goes in as keystrokes at any
-    /// moment, so parking the agent buys nothing. tech.md 6.5.
-    #[test]
-    fn a_session_with_another_channel_is_never_parked() {
-        let state = fresh();
-        assert!(matches!(
-            state.stop_arrived("s", false),
-            StopDecision::Release
-        ));
-    }
-
-    /// Queued text outranks parking even for a session with a pane: it was
-    /// typed before the pane existed, or before the pane was found.
-    #[test]
-    fn queued_text_leaves_even_when_the_session_has_a_pane() {
-        let state = fresh();
-        state.queue_reply("s", "typed earlier");
-        match state.stop_arrived("s", false) {
-            StopDecision::Answer(text) => assert_eq!(text, "typed earlier"),
-            _ => panic!("text in hand always leaves"),
-        }
-    }
-
-    /// The window expiring ends the pause, not the channel. The receiver is
-    /// gone, so the send fails, and the text has to fall back into the queue
-    /// rather than vanish into a dead channel. tech.md 6.8.
-    #[test]
-    fn a_reply_to_an_abandoned_turn_waits_for_the_next_one() {
-        let state = fresh();
-        let StopDecision::Hold(receiver) = state.stop_arrived("s", true) else {
-            panic!("parked");
-        };
-        drop(receiver); // the reply window passed
-
-        assert_eq!(state.queue_reply("s", "still matters"), Queued::Waiting);
-        assert!(state.has_pending("s"), "the text is not lost");
-        match state.stop_arrived("s", true) {
-            StopDecision::Answer(text) => assert_eq!(text, "still matters"),
-            _ => panic!("the next stop carries it"),
-        }
-    }
-
-    /// Everything typed before one boundary arrives as one prompt, in order,
-    /// looking the way it looked in the feed.
-    #[test]
-    fn several_replies_arrive_as_one_prompt_in_order() {
-        let state = fresh();
-        state.queue_reply("s", "first");
-        state.queue_reply("s", "second");
-        match state.stop_arrived("s", true) {
-            StopDecision::Answer(text) => assert_eq!(text, "first\n\nsecond"),
-            _ => panic!("both leave together"),
-        }
-    }
-
-    /// Two sessions never read each other's mail.
-    #[test]
-    fn the_outbox_is_per_session() {
-        let state = fresh();
-        state.queue_reply("a", "for a");
-        assert!(matches!(
-            state.stop_arrived("b", true),
-            StopDecision::Hold(_)
-        ));
-        assert!(state.has_pending("a"), "b's stop left a's text alone");
-    }
-
-    /// A second Stop for one session replaces the first. The abandoned turn
-    /// ends normally instead of waiting on a channel nobody will use.
-    #[test]
-    fn a_second_stop_replaces_the_parked_turn() {
-        let state = fresh();
-        let StopDecision::Hold(mut first) = state.stop_arrived("s", true) else {
-            panic!("parked");
-        };
-        let StopDecision::Hold(mut second) = state.stop_arrived("s", true) else {
-            panic!("parked again");
-        };
-
-        assert!(first.try_recv().is_err(), "the first turn was let go");
-        state.queue_reply("s", "text");
-        assert_eq!(second.try_recv().unwrap(), Some("text".to_string()));
-    }
-}
-
-/// Takeover: who is steering a session, and what that costs its extension.
-/// tech.md 6.5.
-#[cfg(test)]
-mod takeover_tests {
-    use super::*;
-    use peekle_core::config::Config;
-    use peekle_usage::FakeUsage;
-
-    fn fresh() -> AppState {
-        AppState::new(Config::default(), Arc::new(FakeUsage::default()))
-    }
-
-    /// Nothing is steered until the user says so. Holding a turn blocks the
-    /// whole session, so it is never Peekle's guess to make.
-    #[test]
-    fn nobody_is_steering_by_default() {
-        let state = fresh();
-        assert_eq!(state.driving(), None);
-        assert!(!state.is_driving("s"));
+        assert!(!state.owns_session("someone-elses"));
     }
 
     #[test]
-    fn taking_and_handing_back_a_session() {
+    fn claiming_an_id_makes_the_session_ours() {
         let state = fresh();
-        assert!(
-            state.set_driving("s", true).is_empty(),
-            "nothing to release"
-        );
-        assert!(state.is_driving("s"));
-
-        assert_eq!(state.set_driving("s", false), vec!["s".to_string()]);
-        assert_eq!(state.driving(), None);
+        state.claim_session("ours");
+        assert!(state.owns_session("ours"));
     }
 
-    /// One at a time. Steering a second session hands the first one back, or
-    /// its extension would stay blocked on a turn nobody is watching.
+    /// The claim goes when the process does, but the card does not: the
+    /// conversation is still worth reading after the agent is gone.
     #[test]
-    fn steering_a_second_session_releases_the_first() {
+    fn disowning_leaves_nothing_to_type_into() {
         let state = fresh();
-        state.set_driving("a", true);
-        assert_eq!(state.set_driving("b", true), vec!["a".to_string()]);
-        assert!(state.is_driving("b"));
-        assert!(!state.is_driving("a"));
+        state.claim_session("ours");
+        state.disown_session("ours");
+        assert!(!state.owns_session("ours"));
     }
 
-    /// Handing back something nobody was steering is a no-op, not a release
-    /// of whatever else happened to be held.
     #[test]
-    fn handing_back_an_unsteered_session_changes_nothing() {
+    fn ownership_is_per_session() {
         let state = fresh();
-        state.set_driving("a", true);
-        assert!(state.set_driving("b", false).is_empty());
-        assert!(state.is_driving("a"), "a is still steered");
-    }
-
-    /// The whole point of handing back: the parked turn ends at once so the
-    /// extension comes alive, rather than waiting out the window. tech.md 6.5.
-    #[test]
-    fn handing_back_releases_the_parked_turn_immediately() {
-        let state = fresh();
-        state.set_driving("s", true);
-        let StopDecision::Hold(mut receiver) = state.stop_arrived("s", true) else {
-            panic!("a steered session parks");
-        };
-
-        for released in state.set_driving("s", false) {
-            state.unpark(&released);
-        }
-
-        assert_eq!(
-            receiver.try_recv().unwrap(),
-            None,
-            "the turn ends with no text, which frees the session"
-        );
-        assert!(!state.has_parked("s"));
-    }
-
-    /// Text typed before the handover is not thrown away with the turn: it
-    /// waits in the outbox for whenever the next Stop comes.
-    #[test]
-    fn handing_back_keeps_what_was_already_typed() {
-        let state = fresh();
-        state.set_driving("s", true);
-        state.stop_arrived("s", true);
-        state.queue_reply("s", "written earlier");
-
-        for released in state.set_driving("s", false) {
-            state.unpark(&released);
-        }
-        assert!(state.has_pending("s"), "the text survives the handover");
+        state.claim_session("a");
+        assert!(state.owns_session("a"));
+        assert!(!state.owns_session("b"));
     }
 }
