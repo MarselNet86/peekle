@@ -89,15 +89,19 @@ impl HookSink for AppSink {
         }
         self.emit_sessions(self.state.sessions());
 
-        // Holding buys nothing for a session whose text can go in as
-        // keystrokes at any moment. It is the only channel for every other
-        // session, so there the turn waits. tech.md 6.5.
+        // Holding a turn blocks the whole session: while it is parked, input
+        // in the IDE extension does not go through. So it happens only where
+        // the user asked for it, and never as our guess. tech.md 6.5.
+        //
+        // A pane needs no holding either way: keystrokes reach it at any
+        // moment, so parking would cost the extension for nothing.
         let has_pane = session
             .pid
             .and_then(|pid| peekle_core::tmux::Tmux::find().and_then(|tmux| tmux.pane_for(pid)))
             .is_some();
+        let hold = !has_pane && self.state.is_driving(&session.session_id);
 
-        match self.state.stop_arrived(&session.session_id, !has_pane) {
+        match self.state.stop_arrived(&session.session_id, hold) {
             StopDecision::Answer(text) => {
                 let cards = self.state.replies_delivered(&session.session_id, now_ms());
                 self.emit_sessions(cards);
@@ -105,7 +109,7 @@ impl HookSink for AppSink {
                 StopPlan::Answer(text)
             }
             StopDecision::Release => {
-                tracing::debug!(session = %session.session_id, has_pane, "stop released");
+                tracing::debug!(session = %session.session_id, has_pane, hold, "stop released");
                 StopPlan::Release
             }
             StopDecision::Hold(rx) => {

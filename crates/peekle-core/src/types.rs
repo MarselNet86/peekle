@@ -33,7 +33,12 @@ pub enum PromptKind {
 pub enum Delivery {
     /// Found the pane: type into it, any time, holding nothing.
     Tmux(TmuxTarget),
-    /// No pane, but the session still turns. The text rides out on its Stop.
+    /// Steering this session, and its turn is parked: the text leaves now.
+    Held,
+    /// Steering this session and it is standing still: start a run for it.
+    Resume,
+    /// Not steering it. The text waits for whenever the next Stop arrives,
+    /// because promising "now" without holding the turn is promising nothing.
     TurnBoundary,
     /// Neither path reaches it. The field says so instead of pretending.
     Unreachable,
@@ -348,6 +353,9 @@ pub struct PeekleState {
     pub live_sessions: u32,
     /// false when the combination is held by another application.
     pub hotkey_ok: bool,
+    /// The session the island is steering, if any. While it is set, that
+    /// session's Stop parks and its extension waits. tech.md 6.5.
+    pub driving: Option<String>,
 }
 
 #[cfg(test)]

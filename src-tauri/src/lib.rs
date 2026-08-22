@@ -23,10 +23,24 @@ pub fn run() {
         .plugin(tauri_nspanel::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     // Fire on press only. The plugin reports both edges and a
                     // release would toggle straight back.
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                    if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    // Both combinations arrive here, so the handler has to tell
+                    // them apart. Parsed per press rather than cached: presses
+                    // are rare and the config is editable while running.
+                    let takeover = app
+                        .state::<Arc<state::AppState>>()
+                        .lock_config()
+                        .hotkey
+                        .takeover
+                        .clone();
+                    if hotkey::parse_shortcut(&takeover).as_ref() == Some(shortcut) {
+                        commands::toggle_takeover(app.clone());
+                    } else {
                         commands::toggle_enabled(app.clone());
                     }
                 })
@@ -51,6 +65,7 @@ pub fn run() {
             let port = config.server.port;
             let token = config.server.token.clone();
             let toggle = config.hotkey.toggle.clone();
+            let takeover = config.hotkey.takeover.clone();
             let provider = usage_provider(&config);
 
             let state = Arc::new(state::AppState::new(config, provider));
@@ -104,6 +119,9 @@ pub fn run() {
             rest_stale_sessions(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
+            if !takeover.is_empty() {
+                hotkey::install(app.handle(), &takeover);
+            }
 
             poll_usage(app.handle(), Arc::clone(&state));
 
@@ -141,6 +159,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::island_bounds,
             commands::send_message,
             commands::delivery_for,
+            commands::set_takeover,
+            commands::toggle_takeover,
             commands::rename_session,
             commands::hide_session,
             commands::dev_emit_prompt,
@@ -161,6 +181,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::island_bounds,
             commands::send_message,
             commands::delivery_for,
+            commands::set_takeover,
+            commands::toggle_takeover,
             commands::rename_session,
             commands::hide_session,
         ]

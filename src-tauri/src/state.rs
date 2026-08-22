@@ -93,6 +93,12 @@ pub struct AppState {
     /// Text on its way out, and the turns parked waiting for it. One mutex on
     /// purpose: see [`Outbox`]. tech.md 6.5.
     outbox: Mutex<Outbox>,
+    /// The session the island is steering, if any. Only this session's Stop
+    /// parks; every other one is released at once so its extension keeps
+    /// working. tech.md 6.5.
+    driving: Mutex<Option<String>>,
+    /// Sessions Peekle has a run going for. tech.md 6.5.
+    running: Mutex<std::collections::HashSet<String>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -168,6 +174,8 @@ impl AppState {
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
             outbox: Mutex::new(Outbox::default()),
+            driving: Mutex::new(None),
+            running: Mutex::new(std::collections::HashSet::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -421,10 +429,72 @@ impl AppState {
         StopDecision::Hold(receiver)
     }
 
-    /// Drops a parked turn without answering it. Used when the session ends
-    /// under a held Stop, so the entry does not outlive the agent.
+    /// Drops a parked turn without answering it, releasing the session.
+    ///
+    /// Resolving with `None` rather than dropping the sender: both end the
+    /// turn, but this one says so deliberately instead of looking like a
+    /// channel that fell over.
     pub fn unpark(&self, session_id: &str) {
-        self.lock(&self.outbox).parked.remove(session_id);
+        if let Some(parked) = self.lock(&self.outbox).parked.remove(session_id) {
+            let _ = parked.send(None);
+        }
+    }
+
+    /// The session the island is steering. tech.md 6.5.
+    pub fn driving(&self) -> Option<String> {
+        self.lock(&self.driving).clone()
+    }
+
+    pub fn is_driving(&self, session_id: &str) -> bool {
+        self.lock(&self.driving).as_deref() == Some(session_id)
+    }
+
+    /// Takes control of a session, or hands it back.
+    ///
+    /// Returns every session that has to be released as a result: the one
+    /// being handed back, and any other that was being steered, because one
+    /// at a time is the rule. Releasing is the caller's job so it happens
+    /// outside this lock.
+    pub fn set_driving(&self, session_id: &str, on: bool) -> Vec<String> {
+        let mut driving = self.lock(&self.driving);
+        let previous = driving.clone();
+
+        *driving = if on {
+            Some(session_id.to_string())
+        } else if previous.as_deref() == Some(session_id) {
+            None
+        } else {
+            // Handing back a session nobody was steering changes nothing.
+            return Vec::new();
+        };
+
+        // Whatever we stopped steering has to be let go, or its extension
+        // stays blocked on a turn the user already walked away from.
+        previous
+            .filter(|id| driving.as_deref() != Some(id.as_str()))
+            .into_iter()
+            .collect()
+    }
+
+    /// Claims the right to run a turn for a session. False means one is
+    /// already going and the text belongs in the outbox instead.
+    pub fn claim_run(&self, session_id: &str) -> bool {
+        self.lock(&self.running).insert(session_id.to_string())
+    }
+
+    pub fn release_run(&self, session_id: &str) {
+        self.lock(&self.running).remove(session_id);
+    }
+
+    /// Takes the outbox contents to hand to a run that is starting.
+    pub fn take_pending_for_run(&self, session_id: &str) -> Option<String> {
+        let mut outbox = self.lock(&self.outbox);
+        take_pending(&mut outbox, session_id)
+    }
+
+    /// Whether a turn of this session is parked right now.
+    pub fn has_parked(&self, session_id: &str) -> bool {
+        self.lock(&self.outbox).parked.contains_key(session_id)
     }
 
     /// Whether anything typed for this session is still waiting to leave.
@@ -582,6 +652,7 @@ impl AppState {
             usage: self.usage(),
             live_sessions: self.live_sessions(),
             hotkey_ok: self.hotkey_ok(),
+            driving: self.driving(),
         }
     }
 
@@ -956,5 +1027,98 @@ mod outbox_tests {
         assert!(first.try_recv().is_err(), "the first turn was let go");
         state.queue_reply("s", "text");
         assert_eq!(second.try_recv().unwrap(), Some("text".to_string()));
+    }
+}
+
+/// Takeover: who is steering a session, and what that costs its extension.
+/// tech.md 6.5.
+#[cfg(test)]
+mod takeover_tests {
+    use super::*;
+    use peekle_core::config::Config;
+    use peekle_usage::FakeUsage;
+
+    fn fresh() -> AppState {
+        AppState::new(Config::default(), Arc::new(FakeUsage::default()))
+    }
+
+    /// Nothing is steered until the user says so. Holding a turn blocks the
+    /// whole session, so it is never Peekle's guess to make.
+    #[test]
+    fn nobody_is_steering_by_default() {
+        let state = fresh();
+        assert_eq!(state.driving(), None);
+        assert!(!state.is_driving("s"));
+    }
+
+    #[test]
+    fn taking_and_handing_back_a_session() {
+        let state = fresh();
+        assert!(
+            state.set_driving("s", true).is_empty(),
+            "nothing to release"
+        );
+        assert!(state.is_driving("s"));
+
+        assert_eq!(state.set_driving("s", false), vec!["s".to_string()]);
+        assert_eq!(state.driving(), None);
+    }
+
+    /// One at a time. Steering a second session hands the first one back, or
+    /// its extension would stay blocked on a turn nobody is watching.
+    #[test]
+    fn steering_a_second_session_releases_the_first() {
+        let state = fresh();
+        state.set_driving("a", true);
+        assert_eq!(state.set_driving("b", true), vec!["a".to_string()]);
+        assert!(state.is_driving("b"));
+        assert!(!state.is_driving("a"));
+    }
+
+    /// Handing back something nobody was steering is a no-op, not a release
+    /// of whatever else happened to be held.
+    #[test]
+    fn handing_back_an_unsteered_session_changes_nothing() {
+        let state = fresh();
+        state.set_driving("a", true);
+        assert!(state.set_driving("b", false).is_empty());
+        assert!(state.is_driving("a"), "a is still steered");
+    }
+
+    /// The whole point of handing back: the parked turn ends at once so the
+    /// extension comes alive, rather than waiting out the window. tech.md 6.5.
+    #[test]
+    fn handing_back_releases_the_parked_turn_immediately() {
+        let state = fresh();
+        state.set_driving("s", true);
+        let StopDecision::Hold(mut receiver) = state.stop_arrived("s", true) else {
+            panic!("a steered session parks");
+        };
+
+        for released in state.set_driving("s", false) {
+            state.unpark(&released);
+        }
+
+        assert_eq!(
+            receiver.try_recv().unwrap(),
+            None,
+            "the turn ends with no text, which frees the session"
+        );
+        assert!(!state.has_parked("s"));
+    }
+
+    /// Text typed before the handover is not thrown away with the turn: it
+    /// waits in the outbox for whenever the next Stop comes.
+    #[test]
+    fn handing_back_keeps_what_was_already_typed() {
+        let state = fresh();
+        state.set_driving("s", true);
+        state.stop_arrived("s", true);
+        state.queue_reply("s", "written earlier");
+
+        for released in state.set_driving("s", false) {
+            state.unpark(&released);
+        }
+        assert!(state.has_pending("s"), "the text survives the handover");
     }
 }

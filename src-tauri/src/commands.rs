@@ -237,11 +237,15 @@ pub fn delivery_for(state: State<'_, Arc<AppState>>, session_id: String) -> Deli
     else {
         return Delivery::Unreachable;
     };
-    delivery_of(&card)
+    delivery_of(state.inner(), &card)
 }
 
 /// The ladder itself. tech.md 6.5.
-fn delivery_of(card: &peekle_core::types::SessionCard) -> Delivery {
+fn delivery_of(state: &Arc<AppState>, card: &peekle_core::types::SessionCard) -> Delivery {
+    let id = &card.session.session_id;
+
+    // A pane takes keystrokes at any moment and holds nothing, so it wins
+    // whatever else is true.
     if let Some(target) = card
         .session
         .pid
@@ -250,12 +254,70 @@ fn delivery_of(card: &peekle_core::types::SessionCard) -> Delivery {
         return Delivery::Tmux(target);
     }
 
-    // No pane, but a session that still turns will hit Stop, and that Stop is
-    // an injection point. Only a session that has ended for good is out of
-    // reach: its Stop is never coming. tech.md 6.5.
+    if card.status == peekle_core::types::SessionStatus::Ended && !state.has_parked(id) {
+        return Delivery::Unreachable;
+    }
+
+    // Without takeover Peekle holds nothing, so the extension keeps working
+    // and the text waits for whenever the next Stop comes. Promising "now"
+    // here would be promising something we have no channel for. tech.md 6.5.
+    if !state.is_driving(id) {
+        return Delivery::TurnBoundary;
+    }
+
+    // Steering. A parked turn carries the text immediately; a session that is
+    // standing still gets a run started for it.
+    if state.has_parked(id) {
+        return Delivery::Held;
+    }
     match card.status {
-        peekle_core::types::SessionStatus::Ended => Delivery::Unreachable,
-        _ => Delivery::TurnBoundary,
+        peekle_core::types::SessionStatus::Working => Delivery::TurnBoundary,
+        _ => Delivery::Resume,
+    }
+}
+
+/// Toggles takeover for the session the island is showing. Bound to the
+/// hotkey, which is the only way to hand control back once the island is
+/// closed and the mouse cannot reach it. tech.md 6.9.
+#[tauri::command]
+pub fn toggle_takeover(app: AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+
+    // Only a session in view can be steered: a hotkey that grabs whichever
+    // session happens to be first would hand the wrong extension over.
+    let IslandView::Session(session_id) = state.view() else {
+        tracing::debug!("takeover pressed with no session in view");
+        return;
+    };
+
+    let on = !state.is_driving(&session_id);
+    for released in state.set_driving(&session_id, on) {
+        state.unpark(&released);
+    }
+    tracing::info!(session = %session_id, on, "takeover toggled");
+
+    if let Err(err) = app.emit(
+        events::DRIVING,
+        serde_json::json!({ "driving": state.driving() }),
+    ) {
+        tracing::warn!(error = %err, "failed to emit driving");
+    }
+}
+
+/// Takes control of a session, or hands it back to whatever was running it.
+///
+/// Handing back releases the parked turn at once: the user asked for their
+/// extension, and making them wait out a timeout would be answering a
+/// different question. tech.md 6.5.
+#[tauri::command]
+pub fn set_takeover(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String, on: bool) {
+    for released in state.set_driving(&session_id, on) {
+        tracing::debug!(session = %released, "handing the session back");
+        state.unpark(&released);
+    }
+    let driving = state.driving();
+    if let Err(err) = app.emit(events::DRIVING, serde_json::json!({ "driving": driving })) {
+        tracing::warn!(error = %err, "failed to emit driving");
     }
 }
 
@@ -286,7 +348,7 @@ pub fn send_message(
         return Delivery::Unreachable;
     };
 
-    let delivery = delivery_of(&card);
+    let delivery = delivery_of(state.inner(), &card);
 
     // Into the feed before anything is attempted: a message the user cannot
     // see is a message they will type twice. tech.md 6.5.
@@ -308,14 +370,24 @@ pub fn send_message(
                 fail_replies(&app, state.inner(), &session_id);
             }
         }
-        Delivery::TurnBoundary => match state.queue_reply(&session_id, text) {
+        // Held and TurnBoundary take the same road: the text goes to the
+        // outbox, which hands it straight to a parked turn when there is one.
+        // They differ in what the field promised, not in the mechanism.
+        Delivery::Held | Delivery::TurnBoundary => match state.queue_reply(&session_id, text) {
             crate::state::Queued::LeftNow => {
-                tracing::debug!(session_id, "a held turn carried the reply");
+                tracing::debug!(session_id, "a parked turn carried the reply");
             }
             crate::state::Queued::Waiting => {
                 tracing::debug!(session_id, "reply waits for the next stop");
             }
         },
+        Delivery::Resume => {
+            // Queue before starting: the run's own hooks arrive while it
+            // works, and text that is not in the outbox by then would be
+            // called delivered by a Stop that never carried it.
+            state.queue_reply(&session_id, text);
+            start_turn(&app, state.inner().clone(), &card.session);
+        }
         Delivery::Unreachable => {
             tracing::warn!(session_id, "nowhere to deliver");
             fail_replies(&app, state.inner(), &session_id);
@@ -323,6 +395,75 @@ pub fn send_message(
     }
 
     delivery
+}
+
+/// Starts the one run Peekle is allowed to start: the text the user typed for
+/// a session they are steering that has stopped turning. tech.md 2 and 6.5.
+///
+/// Only reachable through `Delivery::Resume`, which needs takeover to be on,
+/// so this path's two costs -- no permission hook, and an editor that will not
+/// learn about the turn -- are ones the user opted into.
+fn start_turn(app: &AppHandle, state: Arc<AppState>, session: &peekle_core::types::SessionRef) {
+    let session_id = session.session_id.clone();
+
+    // One run per session. Two agents on one transcript is a race for a file,
+    // not twice the speed.
+    if !state.claim_run(&session_id) {
+        tracing::debug!(session_id, "a run is already going; the text waits for it");
+        return;
+    }
+    let Some(text) = state.take_pending_for_run(&session_id) else {
+        state.release_run(&session_id);
+        return;
+    };
+    let Some(cli) = peekle_core::claude_path() else {
+        tracing::warn!("no claude binary to resume with");
+        fail_replies(app, &state, &session_id);
+        state.release_run(&session_id);
+        return;
+    };
+
+    let cwd = session.cwd.clone();
+    let handle = app.clone();
+    let id = session_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let app = handle;
+        let session_id = id;
+        tracing::info!(session = %session_id, "starting a run for a standing session");
+
+        let run = tauri::async_runtime::spawn_blocking({
+            let session_id = session_id.clone();
+            move || {
+                std::process::Command::new(cli)
+                    .current_dir(&cwd)
+                    .args(["--resume", &session_id, "-p", &text])
+                    // The island reports the run through its hooks, so the
+                    // process output is of no use to anybody here.
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+            }
+        })
+        .await;
+
+        let state = app.state::<Arc<AppState>>().inner().clone();
+        match run {
+            Ok(Ok(status)) if status.success() => {
+                tracing::debug!(session = %session_id, "the run finished");
+            }
+            other => {
+                tracing::warn!(session = %session_id, ?other, "the run did not start");
+                fail_replies(&app, &state, &session_id);
+            }
+        }
+        state.release_run(&session_id);
+    });
+
+    // The text is the prompt of a run that is starting, so it has left.
+    let cards = state.replies_delivered(&session_id, now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
 }
 
 /// A message that will never leave says so rather than sitting dim forever.

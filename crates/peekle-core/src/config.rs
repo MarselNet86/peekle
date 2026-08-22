@@ -63,6 +63,11 @@ pub struct ServerConfig {
 #[serde(default)]
 pub struct HotkeyConfig {
     pub toggle: String,
+    /// Takes control of the session the island is showing, or gives it back.
+    /// A hotkey and not only a button, because control has to be handed back
+    /// at the moment the island is closed and the mouse cannot reach it.
+    /// tech.md 6.9.
+    pub takeover: String,
     /// Empty means do not register.
     pub recall: String,
 }
@@ -129,6 +134,7 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             toggle: "Alt+Shift+KeyQ".to_string(),
+            takeover: "Alt+Shift+KeyS".to_string(),
             recall: String::new(),
         }
     }
@@ -246,6 +252,7 @@ mod tests {
         assert_eq!(config.server.port, 47821);
         assert_eq!(config.server.token.len(), 32);
         assert_eq!(config.hotkey.toggle, "Alt+Shift+KeyQ");
+        assert_eq!(config.hotkey.takeover, "Alt+Shift+KeyS");
         assert_eq!(config.behavior.permission_wait_secs, 300);
         assert_eq!(config.behavior.reply_window_secs, 300);
     }

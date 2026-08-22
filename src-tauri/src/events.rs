@@ -10,3 +10,5 @@ pub const ENABLED: &str = "peekle://enabled";
 pub const TOAST: &str = "peekle://toast";
 pub const VIEW: &str = "peekle://view";
 pub const NOTCH: &str = "peekle://notch";
+/// Who is steering a session now. tech.md 6.6.
+pub const DRIVING: &str = "peekle://driving";

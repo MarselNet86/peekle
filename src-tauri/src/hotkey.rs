@@ -46,7 +46,7 @@ impl HotkeyRegistrar for PluginRegistrar {
 
 /// Maps our spelling onto the plugin's. An unknown key yields None rather than
 /// a guess: registering the wrong key is worse than registering nothing.
-fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
+pub fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
     let mut modifiers = Modifiers::empty();
     if combination.alt {
         modifiers |= Modifiers::ALT;
@@ -65,8 +65,17 @@ fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
     Some(Shortcut::new(Some(modifiers), code))
 }
 
-/// Registers the toggle. A failure is a flag and one warning, never a reason
-/// not to start. tech.md 6.9.
+/// The shortcut a spelling maps to, or None if it does not parse. Used by the
+/// handler to tell the two combinations apart. tech.md 6.9.
+pub fn parse_shortcut(spelling: &str) -> Option<Shortcut> {
+    Combination::parse(spelling)
+        .ok()
+        .as_ref()
+        .and_then(shortcut_of)
+}
+
+/// Registers a combination. A failure is a flag and one warning, never a
+/// reason not to start. tech.md 6.9.
 pub fn install(app: &AppHandle, spelling: &str) {
     let state = app.state::<Arc<AppState>>().inner().clone();
 
@@ -90,5 +99,5 @@ pub fn install(app: &AppHandle, spelling: &str) {
         return;
     }
 
-    tracing::info!(combination = %combination.to_display(), "toggle registered");
+    tracing::info!(combination = %combination.to_display(), "combination registered");
 }
