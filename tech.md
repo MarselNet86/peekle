@@ -109,6 +109,7 @@ Peekle это оверлей поверх Claude Code для macOS. Разраб
 - `tauri-plugin-autostart` (Open at Login), `tauri-plugin-updater` (проверка обновлений).
 - `axum` + `tokio` для локального сервера хуков.
 - `reqwest` (rustls) для запроса usage.
+- `portable-pty` для сессии, которую островок держит сам (6.5). Берётся готовый крейт, а не `forkpty` руками: разбираться с управляющим терминалом, сигналами и размером окна в unsafe-коде значит писать свой pty вместо продукта.
 - `serde`, `serde_json`, `ulid`, `thiserror`, `tracing`, `directories`, `toml`.
 - `ts-rs` для генерации типов во фронтенд.
 - `objc2` для флагов панели, которых нет в `tauri-nspanel`.
