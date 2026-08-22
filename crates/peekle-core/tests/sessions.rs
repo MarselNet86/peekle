@@ -716,6 +716,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         session,
         title: "from the transcript".to_string(),
         status: peekle_core::types::SessionStatus::Idle,
+        origin: peekle_core::types::SessionOrigin::Observed,
         entries: Vec::new(),
         updated_at: 2,
     }]);

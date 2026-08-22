@@ -7,9 +7,9 @@ pub mod hooks;
 pub mod island;
 pub mod labels;
 pub mod pending;
+pub mod pty;
 pub mod sessions;
 pub mod time;
-pub mod tmux;
 pub mod transcripts;
 pub mod types;
 
@@ -18,8 +18,8 @@ pub use hooks::{HOOK_PATH_PREFIX, MANAGED_HOOK_EVENTS};
 pub use island::{shape_rect, Rect};
 pub use labels::classify;
 pub use pending::PendingRegistry;
+pub use pty::{PtyError, PtyHost, SharedPtyHost, SpawnSpec};
 pub use sessions::{FeedEvent, SessionRegistry};
-pub use tmux::{Pane, Tmux};
 pub use types::*;
 
 /// Where `claude` might be, in the order tech.md 6.4 gives.

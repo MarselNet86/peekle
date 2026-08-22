@@ -15,7 +15,9 @@ use serde_json::Value;
 use ulid::Ulid;
 
 use crate::sessions::{ENTRY_CAP, SESSION_CAP};
-use crate::types::{EntryKind, EntryState, FeedEntry, SessionCard, SessionRef, SessionStatus};
+use crate::types::{
+    EntryKind, EntryState, FeedEntry, SessionCard, SessionOrigin, SessionRef, SessionStatus,
+};
 
 /// Same limits the live feed applies, so a backfilled row and a live row of the
 /// same length look the same. tech.md 6.3.
@@ -227,6 +229,9 @@ where
         // Whether it ended cleanly or was killed is not in the file, and
         // `Ended` would be a claim nobody made. tech.md 6.11.
         status: SessionStatus::Idle,
+        // A backfilled card is history. The process that wrote it is gone, so
+        // nobody can type into it whoever started it. tech.md 6.11.
+        origin: SessionOrigin::Observed,
         entries,
         updated_at: if latest > 0 { latest } else { updated_at },
     })

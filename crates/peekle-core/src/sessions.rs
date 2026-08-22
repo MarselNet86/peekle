@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ulid::Ulid;
 
-use crate::types::{EntryKind, EntryState, FeedEntry, SessionCard, SessionRef, SessionStatus};
+use crate::types::{
+    EntryKind, EntryState, FeedEntry, SessionCard, SessionOrigin, SessionRef, SessionStatus,
+};
 
 /// Freshest activity first, capped. tech.md 6.3.
 pub const SESSION_CAP: usize = 20;
@@ -195,11 +197,39 @@ pub struct SessionRegistry {
     /// `PeekleState`: `FeedEntry::id` stays a ulid and the frontend never sees
     /// this map. tech.md 6.3.
     open_tools: HashMap<String, (String, String)>,
+    /// Ids Peekle assigned when it started a session itself. A hook carrying
+    /// one of these describes a session we own; anything else is observed.
+    /// tech.md 6.5.
+    owned: HashSet<String>,
 }
 
 impl SessionRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Claims an id before the session behind it starts talking. Called with
+    /// the id passed to `claude --session-id`, so the first hook to arrive is
+    /// already recognised as ours.
+    pub fn claim(&mut self, session_id: &str) {
+        self.owned.insert(session_id.to_string());
+        if let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        {
+            card.origin = SessionOrigin::Owned;
+        }
+    }
+
+    /// Drops a claim. The card stays: the conversation is still worth reading
+    /// after the process behind it is gone.
+    pub fn disown(&mut self, session_id: &str) {
+        self.owned.remove(session_id);
+    }
+
+    pub fn is_owned(&self, session_id: &str) -> bool {
+        self.owned.contains(session_id)
     }
 
     /// Loads what the user said about sessions.
@@ -487,6 +517,11 @@ impl SessionRegistry {
                     session,
                     title: String::new(),
                     status: SessionStatus::Working,
+                    origin: if self.owned.contains(&id) {
+                        SessionOrigin::Owned
+                    } else {
+                        SessionOrigin::Observed
+                    },
                     entries: Vec::new(),
                     updated_at: at,
                 },

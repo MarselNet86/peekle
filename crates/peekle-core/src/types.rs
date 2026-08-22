@@ -25,54 +25,17 @@ pub enum PromptKind {
     Idle,
 }
 
-/// Where typed text goes for one session. Computed on every keystroke rather
-/// than cached: panes get closed, sessions get abandoned, tmux gets restarted.
-/// tech.md 6.5.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// Where a session came from. Decides exactly one thing: whether it has an
+/// input field. tech.md 6.5.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
-pub enum Delivery {
-    /// Found the pane: type into it, any time, holding nothing.
-    Tmux(TmuxTarget),
-    /// Steering this session, and its turn is parked: the text leaves now.
-    Held,
-    /// Steering this session and it is standing still: start a run for it.
-    Resume,
-    /// Not steering it. The text waits for whenever the next Stop arrives,
-    /// because promising "now" without holding the turn is promising nothing.
-    TurnBoundary,
-    /// Neither path reaches it. The field says so instead of pretending.
-    Unreachable,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct TmuxTarget {
-    pub session: String,
-    pub window: u32,
-    pub pane: u32,
-}
-
-impl TmuxTarget {
-    /// The `session:window.pane` string every tmux command takes as `-t`.
-    pub fn target(&self) -> String {
-        format!("{}:{}.{}", self.session, self.window, self.pane)
-    }
-
-    /// Parses what `list-panes -F` prints back. Returns None on anything that
-    /// is not exactly `session:window.pane`, because a half-parsed target
-    /// would send keys into some other pane.
-    pub fn parse(text: &str) -> Option<Self> {
-        let (session, rest) = text.rsplit_once(':')?;
-        let (window, pane) = rest.split_once('.')?;
-        if session.is_empty() {
-            return None;
-        }
-        Some(Self {
-            session: session.to_string(),
-            window: window.parse().ok()?,
-            pane: pane.parse().ok()?,
-        })
-    }
+pub enum SessionOrigin {
+    /// Peekle started it and holds its pty, so the dialogue goes both ways.
+    Owned,
+    /// Started outside the island. Feed and permissions, no input: there is no
+    /// supported way to type into a process we did not start, and every
+    /// workaround for it cost more than it gave. tech.md 6.5.
+    Observed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -244,6 +207,7 @@ pub struct SessionCard {
     /// First user turn, truncated to 80.
     pub title: String,
     pub status: SessionStatus,
+    pub origin: SessionOrigin,
     /// Tail of the feed, capped at 200 per session.
     pub entries: Vec<FeedEntry>,
     /// unix ms
@@ -353,9 +317,6 @@ pub struct PeekleState {
     pub live_sessions: u32,
     /// false when the combination is held by another application.
     pub hotkey_ok: bool,
-    /// The session the island is steering, if any. While it is set, that
-    /// session's Stop parks and its extension waits. tech.md 6.5.
-    pub driving: Option<String>,
 }
 
 #[cfg(test)]
