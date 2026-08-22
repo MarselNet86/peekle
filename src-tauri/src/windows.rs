@@ -248,6 +248,30 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
 /// away. tech.md 6.7.
 const PROMPT_HOLD: Duration = Duration::from_secs(10);
 
+/// Opens the island on a session whose turn just ended. tech.md 6.2.
+///
+/// The promise of section 1: the agent finished, the notch opens and shows
+/// what came of it. Since v41 the island is the chat, so the reply arrives
+/// here and the user waits for it where they typed -- an island that takes the
+/// text and never shows the answer has to be opened by hand.
+///
+/// Passive in exactly the way a request is: the panel takes the mouse and
+/// never the keyboard, and a pointer that never arrives puts it away again.
+/// An open request outranks this and keeps the view it already has.
+pub async fn reveal_turn(app: &AppHandle, session_id: &str) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+
+    if state.active_prompt().is_some() {
+        tracing::debug!(session = %session_id, "a request already holds the view");
+        return;
+    }
+
+    let gate = state.ready_gate(panel::ISLAND);
+    let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
+    set_view(app, IslandView::Session(session_id.to_string()));
+    state.hold_open(Instant::now() + PROMPT_HOLD);
+}
+
 /// Tells the webview which outcome settled the request and collapses the
 /// island behind it.
 pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {

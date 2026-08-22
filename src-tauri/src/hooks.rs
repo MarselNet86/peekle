@@ -90,6 +90,17 @@ impl HookSink for AppSink {
         }
         self.emit_sessions(self.state.sessions());
 
+        // The notch opens on the turn it belongs to, and only for a session
+        // the island owns: an observed one is read in the user's editor, and
+        // surfacing there on every turn boundary is noise. tech.md 6.2.
+        if self.state.owns_session(&session.session_id) {
+            let app = self.app.clone();
+            let session_id = session.session_id.clone();
+            tauri::async_runtime::spawn(async move {
+                windows::reveal_turn(&app, &session_id).await;
+            });
+        }
+
         tracing::debug!(session = %session.session_id, "the turn ended");
     }
 
