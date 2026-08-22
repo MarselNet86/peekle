@@ -103,8 +103,17 @@ pub enum UsageProviderKind {
 #[serde(default)]
 pub struct BehaviorConfig {
     pub enabled: bool,
-    /// Held below the hook timeout of 900s so Peekle always answers first.
-    pub prompt_timeout_secs: u32,
+    /// How long the permission hook waits for a decision. Held far below the
+    /// hook timeout of 86400s so Peekle gives up first and hands the question
+    /// back to the terminal. tech.md 6.8.
+    pub permission_wait_secs: u32,
+    /// How long a held turn waits for something to be typed. Expiring ends the
+    /// pause, never the channel: text typed later rides the next Stop, so this
+    /// has no lower bound worth warning about. tech.md 6.8.
+    pub reply_window_secs: u32,
+    /// How long a sent reply waits for `UserPromptSubmit` before it is called
+    /// undelivered. tech.md 6.3.
+    pub delivery_confirm_secs: u32,
 }
 
 impl Default for ServerConfig {
@@ -150,7 +159,9 @@ impl Default for BehaviorConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            prompt_timeout_secs: 600,
+            permission_wait_secs: 300,
+            reply_window_secs: 300,
+            delivery_confirm_secs: 20,
         }
     }
 }
@@ -235,7 +246,8 @@ mod tests {
         assert_eq!(config.server.port, 47821);
         assert_eq!(config.server.token.len(), 32);
         assert_eq!(config.hotkey.toggle, "Alt+Shift+KeyQ");
-        assert_eq!(config.behavior.prompt_timeout_secs, 600);
+        assert_eq!(config.behavior.permission_wait_secs, 300);
+        assert_eq!(config.behavior.reply_window_secs, 300);
     }
 
     #[test]
@@ -254,7 +266,8 @@ mod tests {
 
         let config = Config::from_toml("[behavior]\nenabled = false\n").unwrap();
         assert!(!config.behavior.enabled);
-        assert_eq!(config.behavior.prompt_timeout_secs, 600);
+        assert_eq!(config.behavior.permission_wait_secs, 300);
+        assert_eq!(config.behavior.reply_window_secs, 300);
     }
 
     #[test]

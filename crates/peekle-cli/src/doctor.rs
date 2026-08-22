@@ -67,30 +67,32 @@ pub fn overall(checks: &[Check]) -> Health {
 /// checked rather than assumed. tech.md 6.1 and R-5.
 /// The shortest window a person can actually use.
 ///
-/// The island opens when the agent stops. Noticing it, reading what it says and
-/// typing an answer does not happen in half a minute, and a window that closes
-/// first ends the turn normally: the answer then arrives at a hook that is no
-/// longer listening, which reads as the reply being ignored. tech.md R-5.
+/// Noticing the island, reading it and answering does not happen in half a
+/// minute. A permission window that closes first hands the question back to
+/// the terminal, which is safe but reads as the island ignoring it. tech.md R-5.
 const USABLE_WINDOW_SECS: u32 = 60;
 
-pub fn timeout_gap(prompt_timeout_secs: u32, hook_timeout_secs: u32) -> Check {
-    if prompt_timeout_secs >= hook_timeout_secs {
+/// The permission window against the hook timeout. Only permission: a Stop
+/// that gives up costs nothing, because the text it was waiting for stays
+/// queued for the next one. tech.md 6.8.
+pub fn timeout_gap(permission_wait_secs: u32, hook_timeout_secs: u32) -> Check {
+    if permission_wait_secs >= hook_timeout_secs {
         return Check::fail(
             "timeout gap",
-            format!("{prompt_timeout_secs}s answer window in a {hook_timeout_secs}s hook"),
-            "lower behavior.prompt_timeout_secs below the hook timeout",
+            format!("{permission_wait_secs}s permission window in a {hook_timeout_secs}s hook"),
+            "lower behavior.permission_wait_secs below the hook timeout",
         );
     }
-    if prompt_timeout_secs < USABLE_WINDOW_SECS {
+    if permission_wait_secs < USABLE_WINDOW_SECS {
         return Check::warn(
             "timeout gap",
-            format!("{prompt_timeout_secs}s answer window, too short to answer in"),
-            "raise behavior.prompt_timeout_secs: the turn ends before you finish typing",
+            format!("{permission_wait_secs}s permission window, too short to answer in"),
+            "raise behavior.permission_wait_secs: the question goes back to the terminal",
         );
     }
     Check::ok(
         "timeout gap",
-        format!("{prompt_timeout_secs}s answer window inside a {hook_timeout_secs}s hook"),
+        format!("{permission_wait_secs}s permission window inside a {hook_timeout_secs}s hook"),
     )
 }
 
@@ -136,7 +138,7 @@ mod tests {
     #[test]
     fn the_gap_failure_says_what_to_change() {
         let check = timeout_gap(900, 900);
-        assert!(check.fix.contains("prompt_timeout_secs"));
+        assert!(check.fix.contains("permission_wait_secs"));
     }
 
     #[test]

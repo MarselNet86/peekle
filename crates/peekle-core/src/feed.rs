@@ -68,6 +68,20 @@ impl TaskFeed for FixtureFeed {
     }
 }
 
+/// What the agent said last, capped. tech.md 6.3.
+pub const LAST_MESSAGE_LIMIT: usize = 2000;
+
+/// Truncates on a character boundary and marks the cut, so nothing is ever
+/// shortened silently. Character counts, not bytes: cutting mid-codepoint
+/// would corrupt the text rather than shorten it.
+pub fn truncate(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
+    }
+    let kept: String = text.chars().take(limit.saturating_sub(1)).collect();
+    format!("{kept}…")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

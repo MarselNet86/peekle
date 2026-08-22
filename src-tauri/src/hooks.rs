@@ -9,17 +9,16 @@ use std::time::Duration;
 
 use peekle_core::labels::classify;
 use peekle_core::types::{
-    PromptAnswer, PromptKind, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus,
-    ToastRequest, ToastTone,
+    PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest, ToastTone,
 };
 use peekle_core::FeedEvent;
-use peekle_server::HookSink;
+use peekle_server::{HookSink, StopPlan};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
 use crate::events;
-use crate::state::AppState;
+use crate::state::{AppState, StopDecision};
 use crate::windows;
 
 pub struct AppSink {
@@ -54,48 +53,6 @@ impl HookSink for AppSink {
         // anything can resolve it.
         let receiver = self.state.pending.register(request.id.clone());
 
-        // Something typed while the agent was busy. This is the turn boundary
-        // it was waiting for, so it leaves now and the island stays down: the
-        // user already said what they wanted. tech.md 6.5.
-        if request.kind == PromptKind::Stop {
-            if let Some(text) = self.state.take_queued(&request.session.session_id) {
-                let at = now_ms();
-                self.state.end_turn(&request.session.session_id, at);
-                let cards = self
-                    .state
-                    .replies_delivered(&request.session.session_id, at);
-                self.emit_sessions(cards);
-
-                self.state.pending.resolve(
-                    &request.id,
-                    PromptOutcome::Answered(PromptAnswer {
-                        prompt_id: request.id.clone(),
-                        choice: None,
-                        text: Some(text),
-                    }),
-                );
-                tracing::debug!(session = %request.session.session_id, "a queued reply left on this stop");
-                return receiver;
-            }
-        }
-
-        // A Stop means the turn is over, so nothing can still be in flight.
-        // Whatever is still Running never reported success: PostToolUse does
-        // not fire for a failed call. tech.md 6.3.
-        if request.kind == PromptKind::Stop {
-            let at = now_ms();
-            self.state.end_turn(&request.session.session_id, at);
-            self.state
-                .set_session_status(&request.session, SessionStatus::WaitingOnUser, at);
-
-            // What the agent said last belongs in the feed, not only in the
-            // prompt: the user scrolls back to it. tech.md S6.
-            if let Some(text) = request.last_message.as_deref() {
-                self.state.assistant_turn(&request.session, text, at);
-            }
-            self.emit_sessions(self.state.sessions());
-        }
-
         if self.state.claim_prompt(request.clone()) {
             let app = self.app.clone();
             tauri::async_runtime::spawn(async move {
@@ -103,6 +60,63 @@ impl HookSink for AppSink {
             });
         }
         receiver
+    }
+
+    /// A Stop is an event first and a decision second. tech.md 6.5.
+    ///
+    /// The feed work below happens whichever way the decision goes: the turn
+    /// really did end, whatever we do about the channel.
+    fn on_stop(&self, payload: &Value) -> StopPlan {
+        let session = peekle_core::sessions::session_ref_of(payload);
+        let at = now_ms();
+
+        // Nothing can still be in flight once the turn is over. Whatever is
+        // still Running never reported success, because PostToolUse does not
+        // fire for a failed call. tech.md 6.3.
+        self.state.end_turn(&session.session_id, at);
+        self.state
+            .set_session_status(&session, SessionStatus::Idle, at);
+
+        // What the agent said last belongs in the feed: the user scrolls back
+        // to it. tech.md S6.
+        if let Some(text) = payload
+            .get("last_assistant_message")
+            .and_then(Value::as_str)
+            .filter(|t| !t.trim().is_empty())
+        {
+            let text = peekle_core::truncate(text, peekle_core::LAST_MESSAGE_LIMIT);
+            self.state.assistant_turn(&session, &text, at);
+        }
+        self.emit_sessions(self.state.sessions());
+
+        // Holding buys nothing for a session whose text can go in as
+        // keystrokes at any moment. It is the only channel for every other
+        // session, so there the turn waits. tech.md 6.5.
+        let has_pane = session
+            .pid
+            .and_then(|pid| peekle_core::tmux::Tmux::find().and_then(|tmux| tmux.pane_for(pid)))
+            .is_some();
+
+        match self.state.stop_arrived(&session.session_id, !has_pane) {
+            StopDecision::Answer(text) => {
+                let cards = self.state.replies_delivered(&session.session_id, now_ms());
+                self.emit_sessions(cards);
+                tracing::debug!(session = %session.session_id, "a queued reply left on this stop");
+                StopPlan::Answer(text)
+            }
+            StopDecision::Release => {
+                tracing::debug!(session = %session.session_id, has_pane, "stop released");
+                StopPlan::Release
+            }
+            StopDecision::Hold(rx) => {
+                tracing::debug!(session = %session.session_id, "stop parked for a reply");
+                StopPlan::Hold(rx)
+            }
+        }
+    }
+
+    fn reply_window(&self) -> Duration {
+        self.state.reply_window()
     }
 
     fn prompt_timeout(&self) -> Duration {
@@ -148,7 +162,21 @@ impl HookSink for AppSink {
                 // A turn cannot outlive its session, so anything still running
                 // never finished. tech.md 6.3.
                 self.state.end_turn(session_id, at);
-                let cards = self.state.mark_session_ended(session_id, at);
+
+                // A turn parked on this session will never be answered now, so
+                // let it go rather than leave a sender nobody can resolve.
+                self.state.unpark(session_id);
+
+                // Anything still queued has lost its ride: the Stop that would
+                // have carried it is not coming. Saying so beats a reply that
+                // sits `Running` for the rest of the session list's life.
+                // tech.md 6.5.
+                let cards = if self.state.has_pending(session_id) {
+                    tracing::warn!(session = %session_id, "the session ended with text still queued");
+                    self.state.replies_failed(session_id, at)
+                } else {
+                    self.state.mark_session_ended(session_id, at)
+                };
                 self.emit_sessions(cards);
             }
             _ => {}

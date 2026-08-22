@@ -73,11 +73,11 @@ impl FeedEvent {
 
         match event {
             "UserPromptSubmit" => Some(Self::UserTurn {
-                session: session_ref(payload),
+                session: session_ref_of(payload),
                 text: str_at(payload, "prompt")?.to_string(),
             }),
             "PreToolUse" => Some(Self::ToolStarted {
-                session: session_ref(payload),
+                session: session_ref_of(payload),
                 tool_use_id: str_at(payload, "tool_use_id")?.to_string(),
                 tool: str_at(payload, "tool_name")?.to_string(),
                 preview: preview_of(payload.get("tool_input")),
@@ -97,7 +97,9 @@ fn str_at<'a>(payload: &'a Value, key: &str) -> Option<&'a str> {
     payload.get(key).and_then(Value::as_str)
 }
 
-fn session_ref(payload: &Value) -> SessionRef {
+/// The session a hook payload is about. Public because the Stop path needs the
+/// same reading of the same fields the feed uses. tech.md 6.3.
+pub fn session_ref_of(payload: &Value) -> SessionRef {
     let cwd = str_at(payload, "cwd").unwrap_or_default().to_string();
     SessionRef {
         session_id: str_at(payload, "session_id")

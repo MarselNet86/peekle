@@ -19,6 +19,49 @@ use tokio::sync::Notify;
 /// Freshest activity first, capped. tech.md 6.3.
 const TASK_CAP: usize = 50;
 
+/// Text waiting to leave, and the `Stop` hooks parked waiting for it.
+///
+/// Both halves live under one mutex, and that is the whole point. In v38 they
+/// were two locks: `queue_reply` read the session status, then wrote to the
+/// queue, and a `Stop` arriving between those two steps saw an empty queue,
+/// opened an interactive prompt, and left the text stranded — nothing else
+/// ever drained it. Checking the queue and deciding whether to park is one
+/// indivisible step here, so that gap cannot exist. tech.md 6.5.
+#[derive(Default)]
+struct Outbox {
+    /// Typed but not yet carried out, oldest first, per session.
+    pending: HashMap<String, Vec<String>>,
+    /// Turns held open because their session has no other way in.
+    parked: HashMap<String, tokio::sync::oneshot::Sender<Option<String>>>,
+}
+
+/// What happened to a reply the moment it was handed over. tech.md 6.3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Queued {
+    /// A turn was parked waiting, so the text left immediately.
+    LeftNow,
+    /// Nothing was waiting. It goes out on the next `Stop`.
+    Waiting,
+}
+
+/// What an arriving `Stop` should do. Mirrors `peekle_server::StopPlan`, which
+/// this crate converts it into. tech.md 6.2.
+pub enum StopDecision {
+    Release,
+    Answer(String),
+    Hold(tokio::sync::oneshot::Receiver<Option<String>>),
+}
+
+/// Takes everything queued for a session, joined the way the user wrote it.
+///
+/// Several messages typed before one turn boundary arrive as one prompt, with
+/// blank lines between them: that is how they looked in the feed, and the
+/// agent should read what the user saw themselves write.
+fn take_pending(outbox: &mut Outbox, session_id: &str) -> Option<String> {
+    let texts = outbox.pending.remove(session_id)?;
+    (!texts.is_empty()).then(|| texts.join("\n\n"))
+}
+
 pub struct AppState {
     pub config: Mutex<Config>,
     pub pending: PendingRegistry,
@@ -47,12 +90,9 @@ pub struct AppState {
     /// of `PeekleState`: the frontend never sees the queue. tech.md 6.3.
     queue: Mutex<Vec<PromptRequest>>,
     sessions: Mutex<SessionRegistry>,
-    /// Replies typed while the agent was busy, waiting for its next `Stop`.
-    /// tech.md 6.5.
-    queued: Mutex<HashMap<String, Vec<String>>>,
-    /// Sessions Peekle is running a turn for right now. Two agents on one
-    /// transcript is a race for a file, not twice the speed. tech.md 6.5.
-    resuming: Mutex<std::collections::HashSet<String>>,
+    /// Text on its way out, and the turns parked waiting for it. One mutex on
+    /// purpose: see [`Outbox`]. tech.md 6.5.
+    outbox: Mutex<Outbox>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -127,8 +167,7 @@ impl AppState {
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
-            queued: Mutex::new(HashMap::new()),
-            resuming: Mutex::new(std::collections::HashSet::new()),
+            outbox: Mutex::new(Outbox::default()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -334,34 +373,66 @@ impl AppState {
         sessions.cards().to_vec()
     }
 
-    /// Queues a reply for the next `Stop` of a session. tech.md 6.5.
-    pub fn queue_reply(&self, session_id: &str, text: &str) {
-        self.lock(&self.queued)
+    /// Hands a reply to the outbox for a session with no tmux pane.
+    ///
+    /// If a turn is parked waiting, the text leaves on it right now. Otherwise
+    /// it waits for the next `Stop`. Both branches run under the one lock, so
+    /// a `Stop` cannot slip between the decision and the write.
+    pub fn queue_reply(&self, session_id: &str, text: &str) -> Queued {
+        let mut outbox = self.lock(&self.outbox);
+
+        if let Some(parked) = outbox.parked.remove(session_id) {
+            // Err means the held turn gave up while we held the lock, so its
+            // receiver is gone. The text is not lost: it falls through to the
+            // queue and rides the next Stop. tech.md 6.8.
+            if parked.send(Some(text.to_string())).is_ok() {
+                return Queued::LeftNow;
+            }
+        }
+
+        outbox
+            .pending
             .entry(session_id.to_string())
             .or_default()
             .push(text.to_string());
+        Queued::Waiting
     }
 
-    /// Takes everything queued for a session, joined the way the user wrote it.
-    /// Empty means nothing was waiting, and the caller opens the island as
-    /// usual.
-    pub fn take_queued(&self, session_id: &str) -> Option<String> {
-        let queued = self.lock(&self.queued).remove(session_id)?;
-        (!queued.is_empty()).then(|| queued.join("\n\n"))
+    /// Decides what an arriving `Stop` does, atomically with the queue.
+    ///
+    /// `hold` is the caller's answer to "does this session have another way
+    /// in": false for a session with a tmux pane, whose text goes in as
+    /// keystrokes and needs no parked turn at all.
+    pub fn stop_arrived(&self, session_id: &str, hold: bool) -> StopDecision {
+        let mut outbox = self.lock(&self.outbox);
+
+        if let Some(text) = take_pending(&mut outbox, session_id) {
+            return StopDecision::Answer(text);
+        }
+        if !hold {
+            return StopDecision::Release;
+        }
+
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        // A second Stop for one session replaces the first. Dropping the old
+        // sender resolves its receiver with an error, and that turn ends
+        // normally rather than hanging on a channel nobody will ever use.
+        outbox.parked.insert(session_id.to_string(), sender);
+        StopDecision::Hold(receiver)
     }
 
-    /// Claims the right to run a turn for a session. False means one is
-    /// already running and the text belongs in the queue instead.
-    pub fn claim_resume(&self, session_id: &str) -> bool {
-        self.lock(&self.resuming).insert(session_id.to_string())
+    /// Drops a parked turn without answering it. Used when the session ends
+    /// under a held Stop, so the entry does not outlive the agent.
+    pub fn unpark(&self, session_id: &str) {
+        self.lock(&self.outbox).parked.remove(session_id);
     }
 
-    pub fn release_resume(&self, session_id: &str) {
-        self.lock(&self.resuming).remove(session_id);
-    }
-
-    pub fn is_resuming(&self, session_id: &str) -> bool {
-        self.lock(&self.resuming).contains(session_id)
+    /// Whether anything typed for this session is still waiting to leave.
+    pub fn has_pending(&self, session_id: &str) -> bool {
+        self.lock(&self.outbox)
+            .pending
+            .get(session_id)
+            .is_some_and(|texts| !texts.is_empty())
     }
 
     /// Marks the queued replies of a session as undeliverable. Only the path
@@ -410,7 +481,12 @@ impl AppState {
     }
 
     pub fn prompt_timeout(&self) -> Duration {
-        Duration::from_secs(self.lock_config().behavior.prompt_timeout_secs as u64)
+        Duration::from_secs(self.lock_config().behavior.permission_wait_secs as u64)
+    }
+
+    /// How long a parked turn waits. tech.md 6.8.
+    pub fn reply_window(&self) -> Duration {
+        Duration::from_secs(self.lock_config().behavior.reply_window_secs as u64)
     }
 
     pub fn active_prompt(&self) -> Option<PromptRequest> {
@@ -653,11 +729,13 @@ mod tests {
     fn request(id: &str) -> PromptRequest {
         PromptRequest {
             id: id.to_string(),
-            kind: PromptKind::Stop,
+            kind: PromptKind::Permission,
             session: SessionRef {
                 session_id: "s".into(),
                 cwd: "/tmp".into(),
                 project: "tmp".into(),
+                pid: None,
+                tty: None,
             },
             title: "t".into(),
             last_message: None,
@@ -752,5 +830,131 @@ mod tests {
         state.session_started();
         state.session_ended();
         assert_eq!(state.live_sessions(), 1);
+    }
+}
+
+/// The outbox: the delivery ladder's turn-boundary half. tech.md 6.5.
+#[cfg(test)]
+mod outbox_tests {
+    use super::*;
+    use peekle_core::config::Config;
+    use peekle_usage::FakeUsage;
+
+    fn fresh() -> AppState {
+        AppState::new(Config::default(), Arc::new(FakeUsage::default()))
+    }
+
+    /// The v38 regression, as a test. Two locks used to let a Stop land between
+    /// "read the status" and "write to the queue": it saw an empty queue, let
+    /// the turn go, and the text sat in the queue forever because nothing else
+    /// ever drained it. Now the two steps are one, so the only two orderings
+    /// possible are the two below, and both deliver exactly once. tech.md S3.
+    #[test]
+    fn a_reply_racing_a_stop_leaves_exactly_once() {
+        // Reply first: the Stop finds it and carries it.
+        let state = fresh();
+        assert_eq!(state.queue_reply("s", "ship it"), Queued::Waiting);
+        match state.stop_arrived("s", true) {
+            StopDecision::Answer(text) => assert_eq!(text, "ship it"),
+            _ => panic!("the queued text has to leave on this stop"),
+        }
+        // And it left: a second Stop has nothing to carry.
+        assert!(matches!(
+            state.stop_arrived("s", true),
+            StopDecision::Hold(_)
+        ));
+
+        // Stop first: it parks, and the reply leaves on the parked turn.
+        let state = fresh();
+        let StopDecision::Hold(mut receiver) = state.stop_arrived("s", true) else {
+            panic!("a session with no other channel parks");
+        };
+        assert_eq!(state.queue_reply("s", "ship it"), Queued::LeftNow);
+        assert_eq!(receiver.try_recv().unwrap(), Some("ship it".to_string()));
+        assert!(!state.has_pending("s"), "nothing is left behind");
+    }
+
+    /// A session with a pane is released: its text goes in as keystrokes at any
+    /// moment, so parking the agent buys nothing. tech.md 6.5.
+    #[test]
+    fn a_session_with_another_channel_is_never_parked() {
+        let state = fresh();
+        assert!(matches!(
+            state.stop_arrived("s", false),
+            StopDecision::Release
+        ));
+    }
+
+    /// Queued text outranks parking even for a session with a pane: it was
+    /// typed before the pane existed, or before the pane was found.
+    #[test]
+    fn queued_text_leaves_even_when_the_session_has_a_pane() {
+        let state = fresh();
+        state.queue_reply("s", "typed earlier");
+        match state.stop_arrived("s", false) {
+            StopDecision::Answer(text) => assert_eq!(text, "typed earlier"),
+            _ => panic!("text in hand always leaves"),
+        }
+    }
+
+    /// The window expiring ends the pause, not the channel. The receiver is
+    /// gone, so the send fails, and the text has to fall back into the queue
+    /// rather than vanish into a dead channel. tech.md 6.8.
+    #[test]
+    fn a_reply_to_an_abandoned_turn_waits_for_the_next_one() {
+        let state = fresh();
+        let StopDecision::Hold(receiver) = state.stop_arrived("s", true) else {
+            panic!("parked");
+        };
+        drop(receiver); // the reply window passed
+
+        assert_eq!(state.queue_reply("s", "still matters"), Queued::Waiting);
+        assert!(state.has_pending("s"), "the text is not lost");
+        match state.stop_arrived("s", true) {
+            StopDecision::Answer(text) => assert_eq!(text, "still matters"),
+            _ => panic!("the next stop carries it"),
+        }
+    }
+
+    /// Everything typed before one boundary arrives as one prompt, in order,
+    /// looking the way it looked in the feed.
+    #[test]
+    fn several_replies_arrive_as_one_prompt_in_order() {
+        let state = fresh();
+        state.queue_reply("s", "first");
+        state.queue_reply("s", "second");
+        match state.stop_arrived("s", true) {
+            StopDecision::Answer(text) => assert_eq!(text, "first\n\nsecond"),
+            _ => panic!("both leave together"),
+        }
+    }
+
+    /// Two sessions never read each other's mail.
+    #[test]
+    fn the_outbox_is_per_session() {
+        let state = fresh();
+        state.queue_reply("a", "for a");
+        assert!(matches!(
+            state.stop_arrived("b", true),
+            StopDecision::Hold(_)
+        ));
+        assert!(state.has_pending("a"), "b's stop left a's text alone");
+    }
+
+    /// A second Stop for one session replaces the first. The abandoned turn
+    /// ends normally instead of waiting on a channel nobody will use.
+    #[test]
+    fn a_second_stop_replaces_the_parked_turn() {
+        let state = fresh();
+        let StopDecision::Hold(mut first) = state.stop_arrived("s", true) else {
+            panic!("parked");
+        };
+        let StopDecision::Hold(mut second) = state.stop_arrived("s", true) else {
+            panic!("parked again");
+        };
+
+        assert!(first.try_recv().is_err(), "the first turn was let go");
+        state.queue_reply("s", "text");
+        assert_eq!(second.try_recv().unwrap(), Some("text".to_string()));
     }
 }

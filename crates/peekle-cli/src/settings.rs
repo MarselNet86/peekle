@@ -7,7 +7,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use peekle_core::hooks::{HOOK_PATH_PREFIX, MANAGED_HOOK_EVENTS};
+use peekle_core::hooks::{
+    hook_script_path, HOOK_PATH_PREFIX, HOOK_SCRIPT_NAME, MANAGED_HOOK_EVENTS,
+};
 use serde_json::{json, Map, Value};
 
 #[derive(Debug, thiserror::Error)]
@@ -104,15 +106,46 @@ impl ClaudeSettings for FakeSettings {
 /// True when a handler entry is one Peekle wrote: loopback host on our port,
 /// path under `/v1/h/`. Anything else belongs to the user and is left alone.
 pub fn is_peekle_handler(entry: &Value, port: u16) -> bool {
-    let Some(url) = entry.get("url").and_then(Value::as_str) else {
-        return false;
-    };
-    url.starts_with(&format!("http://127.0.0.1:{port}{HOOK_PATH_PREFIX}"))
+    // A command handler is ours when it runs our script. The url arm keeps
+    // recognising what older versions wrote, so an upgrade replaces those
+    // rather than leaving a second handler behind. Both stay as narrow as they
+    // were: another Peekle on another port is somebody else's. tech.md 6.1.
+    if let Some(command) = entry.get("command").and_then(Value::as_str) {
+        return command.contains(HOOK_SCRIPT_NAME);
+    }
+    entry
+        .get("url")
+        .and_then(Value::as_str)
+        .is_some_and(|url| url.starts_with(&format!("http://127.0.0.1:{port}{HOOK_PATH_PREFIX}")))
+}
+
+/// The hook script, compiled in so `init` never depends on where the binary
+/// was unpacked from. tech.md 6.1.
+const HOOK_SCRIPT: &str = include_str!("../../../scripts/peekle-hook.py");
+
+/// Writes the hook script and makes it executable.
+///
+/// Rewritten on every `init` rather than only when missing: the script ships
+/// with the binary, so an upgraded Peekle with an older script on disk would
+/// speak a protocol nobody is listening to.
+pub fn install_hook_script() -> io::Result<PathBuf> {
+    let path = hook_script_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&path, HOOK_SCRIPT)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(path)
 }
 
 /// Merges Peekle's handlers into the settings tree, replacing only its own
 /// entries. Idempotent: running it twice changes nothing.
-pub fn merge_handlers(settings: &Value, port: u16, token: &str) -> Value {
+pub fn merge_handlers(settings: &Value, port: u16, _token: &str) -> Value {
     let mut root = settings.as_object().cloned().unwrap_or_default();
     let mut hooks = root
         .get("hooks")
@@ -121,12 +154,13 @@ pub fn merge_handlers(settings: &Value, port: u16, token: &str) -> Value {
         .unwrap_or_default();
 
     for event in MANAGED_HOOK_EVENTS {
-        let endpoint = endpoint_for(event);
-        let ours = json!({
-            "type": "http",
-            "url": format!("http://127.0.0.1:{port}{HOOK_PATH_PREFIX}{token}/{endpoint}"),
-            "timeout": timeout_for(event),
+        let mut ours = json!({
+            "type": "command",
+            "command": hook_command(),
         });
+        if let Some(timeout) = timeout_for(event) {
+            ours["timeout"] = json!(timeout);
+        }
 
         let mut matchers = hooks
             .get(*event)
@@ -205,7 +239,7 @@ fn matcher_for(event: &str) -> Option<&'static str> {
 /// that the router has never had, so every tool call in the product's life was
 /// posted to a handler that drops it or to a 404: the live feed was dead while
 /// its tests passed against the router directly.
-fn endpoint_for(event: &str) -> &'static str {
+pub fn endpoint_for(event: &str) -> &'static str {
     match event {
         "Stop" => "stop",
         "PermissionRequest" => "permission",
@@ -215,13 +249,22 @@ fn endpoint_for(event: &str) -> &'static str {
     }
 }
 
-/// Blocking hooks need room for the user to answer. Peekle's own timeout is
-/// held below this so it always replies first. tech.md 6.1 and R-5.
-fn timeout_for(event: &str) -> u32 {
+/// Only the hooks that can wait for a person carry a timeout, and it is an
+/// upper bound rather than a working window: Peekle gives up first, on its own
+/// terms, using the windows in 6.8. A whole day because the one waiting is a
+/// process, not the user. tech.md 6.1.
+fn timeout_for(event: &str) -> Option<u32> {
     match event {
-        "Stop" | "PermissionRequest" => 900,
-        _ => 10,
+        "Stop" | "PermissionRequest" => Some(86400),
+        _ => None,
     }
+}
+
+/// The command `init` installs. Absolute python3 rather than a bare name: the
+/// hook runs with whatever environment Claude Code had, which is not a login
+/// shell. tech.md 6.1.
+fn hook_command() -> String {
+    format!("/usr/bin/env python3 {}", hook_script_path().display())
 }
 
 #[cfg(test)]
@@ -313,14 +356,57 @@ mod tests {
         }
     }
 
+    /// Only the two hooks that can wait for a person carry a timeout, and it
+    /// is a ceiling rather than a working window: Peekle gives up first, on
+    /// the windows in 6.8. A day, because the one waiting is a process.
     #[test]
-    fn blocking_hooks_get_room_to_answer() {
+    fn only_the_hooks_that_wait_for_a_person_carry_a_timeout() {
         let merged = merge_handlers(&json!({}), PORT, TOKEN);
-        assert_eq!(merged["hooks"]["Stop"][0]["hooks"][0]["timeout"], 900);
-        assert_eq!(
-            merged["hooks"]["Notification"][0]["hooks"][0]["timeout"],
-            10
-        );
+        for event in ["Stop", "PermissionRequest"] {
+            assert_eq!(
+                merged["hooks"][event][0]["hooks"][0]["timeout"], 86400,
+                "{event}"
+            );
+        }
+        for event in ["Notification", "PreToolUse", "SessionEnd"] {
+            assert!(
+                merged["hooks"][event][0]["hooks"][0]
+                    .get("timeout")
+                    .is_none(),
+                "{event} does not wait for anybody"
+            );
+        }
+    }
+
+    /// Every handler runs the script, because only a child of the agent can
+    /// report its pid and tty. tech.md 6.1.
+    #[test]
+    fn every_managed_event_runs_the_hook_script() {
+        let merged = merge_handlers(&json!({}), PORT, TOKEN);
+        for event in MANAGED_HOOK_EVENTS {
+            let handler = &merged["hooks"][*event][0]["hooks"][0];
+            assert_eq!(handler["type"], "command", "{event}");
+            assert!(
+                handler["command"]
+                    .as_str()
+                    .is_some_and(|c| c.contains(HOOK_SCRIPT_NAME)),
+                "{event}"
+            );
+            assert!(handler.get("url").is_none(), "{event} is not http any more");
+        }
+    }
+
+    /// An upgrade from the http era replaces those handlers rather than
+    /// leaving a second one behind that posts to the same server.
+    #[test]
+    fn installing_over_the_old_http_handlers_replaces_them() {
+        let old = json!({"hooks": {"Stop": [{"hooks": [
+            {"type": "http", "url": format!("http://127.0.0.1:{PORT}/v1/h/{TOKEN}/stop")}
+        ]}]}});
+        let merged = merge_handlers(&old, PORT, TOKEN);
+        let handlers = merged["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(handlers.len(), 1, "the old handler is gone");
+        assert_eq!(handlers[0]["hooks"][0]["type"], "command");
     }
 
     #[test]

@@ -10,4 +10,4 @@ pub mod routes;
 pub mod sink;
 
 pub use routes::{router, CORE_VERSION};
-pub use sink::HookSink;
+pub use sink::{HookSink, StopPlan};

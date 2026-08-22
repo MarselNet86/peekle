@@ -16,7 +16,7 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use peekle_core::types::{PromptAnswer, PromptOutcome, PromptRequest};
 use peekle_server::routes::ServerState;
-use peekle_server::{router, HookSink, CORE_VERSION};
+use peekle_server::{router, HookSink, StopPlan, CORE_VERSION};
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use tower::ServiceExt;
@@ -33,6 +33,22 @@ struct TestSink {
     /// Senders for prompts this sink deliberately never answers. Holding them
     /// keeps the receiver waiting instead of erroring out early.
     held: Mutex<Vec<oneshot::Sender<PromptOutcome>>>,
+    /// What `/stop` should decide. None means release straight away.
+    stop: Mutex<StopBehaviour>,
+    /// Senders for parked turns, held for the same reason as `held`.
+    parked: Mutex<Vec<oneshot::Sender<Option<String>>>>,
+}
+
+/// What the sink under test tells `/stop` to do. One variant per row of the
+/// mapping table in tech.md 6.2.
+#[derive(Clone)]
+enum StopBehaviour {
+    /// There is another channel, or nobody to wait for.
+    Release,
+    /// The queue already had text when the turn ended.
+    Answer(String),
+    /// Park the turn and never resolve it, so the window has to expire.
+    HoldForever,
 }
 
 impl TestSink {
@@ -44,7 +60,16 @@ impl TestSink {
             seen: Mutex::new(Vec::new()),
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
+            stop: Mutex::new(StopBehaviour::Release),
+            parked: Mutex::new(Vec::new()),
         })
+    }
+
+    /// A sink whose `/stop` behaves the given way.
+    fn stopping(behaviour: StopBehaviour) -> Arc<Self> {
+        let sink = Self::new(None);
+        *sink.stop.lock().unwrap() = behaviour;
+        sink
     }
 
     fn disabled() -> Arc<Self> {
@@ -55,6 +80,8 @@ impl TestSink {
             seen: Mutex::new(Vec::new()),
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
+            stop: Mutex::new(StopBehaviour::Release),
+            parked: Mutex::new(Vec::new()),
         })
     }
 
@@ -67,6 +94,8 @@ impl TestSink {
             seen: Mutex::new(Vec::new()),
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
+            stop: Mutex::new(StopBehaviour::HoldForever),
+            parked: Mutex::new(Vec::new()),
         })
     }
 }
@@ -85,6 +114,22 @@ impl HookSink for TestSink {
             self.held.lock().unwrap().push(tx);
         }
         rx
+    }
+
+    fn on_stop(&self, _payload: &Value) -> StopPlan {
+        match self.stop.lock().unwrap().clone() {
+            StopBehaviour::Release => StopPlan::Release,
+            StopBehaviour::Answer(text) => StopPlan::Answer(text),
+            StopBehaviour::HoldForever => {
+                let (tx, rx) = oneshot::channel();
+                self.parked.lock().unwrap().push(tx);
+                StopPlan::Hold(rx)
+            }
+        }
+    }
+
+    fn reply_window(&self) -> Duration {
+        self.timeout
     }
 
     fn prompt_timeout(&self) -> Duration {
@@ -184,9 +229,10 @@ async fn a_body_that_is_not_json_is_a_400() {
     }
 }
 
+/// Text already queued when the turn ended leaves on that very Stop.
 #[tokio::test]
-async fn free_text_comes_back_as_a_block_decision() {
-    let sink = TestSink::new(Some(answered(None, Some("run the tests"))));
+async fn queued_text_comes_back_as_a_block_decision() {
+    let sink = TestSink::stopping(StopBehaviour::Answer("run the tests".into()));
     let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/stop"), "{}").await;
 
     assert_eq!(status, StatusCode::OK);
@@ -194,6 +240,43 @@ async fn free_text_comes_back_as_a_block_decision() {
         body,
         json!({"decision": "block", "reason": "run the tests"})
     );
+}
+
+/// A session with a tmux pane is let go at once: its text goes in as
+/// keystrokes whenever it is typed, so parking the turn buys nothing.
+#[tokio::test]
+async fn a_session_with_another_channel_is_released_at_once() {
+    let sink = TestSink::stopping(StopBehaviour::Release);
+    let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/stop"), "{}").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+}
+
+/// A held turn whose window passes ends normally. The text is not lost by
+/// this: it stays queued for the next Stop, which is the sink's business.
+/// tech.md 6.8.
+#[tokio::test]
+async fn a_held_turn_that_nobody_answers_ends_normally() {
+    let sink = TestSink::silent();
+    let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/stop"), "{}").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+}
+
+/// Stop never registers a pending request any more: it is not a question.
+#[tokio::test]
+async fn stop_opens_no_prompt() {
+    let sink = TestSink::stopping(StopBehaviour::Answer("go".into()));
+    let handle = Arc::clone(&sink);
+    let _ = post(
+        app(Arc::clone(&sink) as Arc<dyn HookSink>),
+        &format!("/v1/h/{TOKEN}/stop"),
+        "{}",
+    )
+    .await;
+    assert!(handle.seen.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -264,7 +347,7 @@ async fn a_disabled_peekle_answers_empty_without_opening_a_prompt() {
 #[tokio::test]
 async fn a_prompt_that_is_never_answered_times_out_into_an_empty_body() {
     let sink = TestSink::silent();
-    let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/stop"), "{}").await;
+    let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/permission"), "{}").await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
@@ -293,7 +376,7 @@ async fn feeds_answer_empty_and_hand_the_payload_over() {
 
 #[tokio::test]
 async fn unknown_payload_fields_are_ignored_rather_than_rejected() {
-    let sink = TestSink::new(Some(answered(Some("finish"), None)));
+    let sink = TestSink::stopping(StopBehaviour::Release);
     let body = r#"{"session_id":"s","cwd":"/tmp","brand_new_field":{"nested":[1,2]}}"#;
     let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/stop"), body).await;
 

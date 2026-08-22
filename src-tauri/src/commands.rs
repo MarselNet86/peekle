@@ -4,7 +4,8 @@
 use std::sync::Arc;
 
 use peekle_core::types::{
-    IslandView, PeekleState, PromptAnswer, PromptOutcome, ToastRequest, ToastTone, UsageSnapshot,
+    Delivery, IslandView, PeekleState, PromptAnswer, PromptOutcome, ToastRequest, ToastTone,
+    UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -222,21 +223,58 @@ pub fn set_view(app: AppHandle, view: IslandView) {
     windows::set_view(&app, view);
 }
 
-/// Holds a reply until the agent stops.
+/// Where typed text would go for this session right now. tech.md 6.5.
 ///
-/// Not a send: there is no send. The text leaves as the body of the next
-/// blocking hook of this session, which is the only channel there is, and the
-/// entry stays `Running` in the feed until that happens. tech.md 6.5.
+/// Read-only and cheap enough to call on every keystroke, which is the point:
+/// panes close and sessions are abandoned, so a cached answer goes stale in
+/// exactly the moment it matters.
 #[tauri::command]
-pub fn queue_reply(
+pub fn delivery_for(state: State<'_, Arc<AppState>>, session_id: String) -> Delivery {
+    let Some(card) = state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+    else {
+        return Delivery::Unreachable;
+    };
+    delivery_of(&card)
+}
+
+/// The ladder itself. tech.md 6.5.
+fn delivery_of(card: &peekle_core::types::SessionCard) -> Delivery {
+    if let Some(target) = card
+        .session
+        .pid
+        .and_then(|pid| peekle_core::tmux::Tmux::find().and_then(|tmux| tmux.pane_for(pid)))
+    {
+        return Delivery::Tmux(target);
+    }
+
+    // No pane, but a session that still turns will hit Stop, and that Stop is
+    // an injection point. Only a session that has ended for good is out of
+    // reach: its Stop is never coming. tech.md 6.5.
+    match card.status {
+        peekle_core::types::SessionStatus::Ended => Delivery::Unreachable,
+        _ => Delivery::TurnBoundary,
+    }
+}
+
+/// Sends what the user typed, by the best channel this session has.
+///
+/// The reply lands in the feed first and stays `Running` until something
+/// confirms it: `UserPromptSubmit` for a pane, the Stop that carries it for a
+/// queue. tmux reports success even for a pane whose agent has exited, so its
+/// return value is never the confirmation. tech.md 6.3.
+#[tauri::command]
+pub fn send_message(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     text: String,
-) {
+) -> Delivery {
     let text = text.trim();
     if text.is_empty() {
-        return;
+        return Delivery::Unreachable;
     }
 
     let Some(card) = state
@@ -244,11 +282,14 @@ pub fn queue_reply(
         .into_iter()
         .find(|c| c.session.session_id == session_id)
     else {
-        tracing::warn!(session_id, "queued a reply for a session nobody knows");
-        return;
+        tracing::warn!(session_id, "a reply for a session nobody knows");
+        return Delivery::Unreachable;
     };
 
-    state.queue_reply(&session_id, text);
+    let delivery = delivery_of(&card);
+
+    // Into the feed before anything is attempted: a message the user cannot
+    // see is a message they will type twice. tech.md 6.5.
     let cards = state.user_turn(
         &card.session,
         text,
@@ -259,97 +300,29 @@ pub fn queue_reply(
         tracing::warn!(error = %err, "failed to emit sessions");
     }
 
-    // A working session will stop, and its stop carries the queue for free. A
-    // standing one never will, so waiting for it means waiting forever. The
-    // registry alone cannot tell those apart: a session open in an IDE sends
-    // no hooks, reads as idle, and is being written by its own client right
-    // now. The transcript's mtime is the signal that cannot lie. tech.md 6.5.
-    const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
-
-    let working = card.status == peekle_core::types::SessionStatus::Working;
-    let live_client = peekle_core::transcripts::default_root().is_some_and(|root| {
-        peekle_core::transcripts::client_is_live(
-            &root,
-            &card.session.cwd,
-            &session_id,
-            LIVE_CLIENT_WINDOW,
-        )
-    });
-    if working || live_client || state.is_resuming(&session_id) {
-        tracing::debug!(
-            session_id,
-            working,
-            live_client,
-            "reply queued for the next stop"
-        );
-        return;
-    }
-    start_turn(&app, state.inner().clone(), &card.session);
-}
-
-/// Starts the one turn Peekle is allowed to start: the text the user typed for
-/// a session nobody is working in. tech.md 2 and 6.5.
-fn start_turn(app: &AppHandle, state: Arc<AppState>, session: &peekle_core::types::SessionRef) {
-    let session_id = session.session_id.clone();
-    if !state.claim_resume(&session_id) {
-        return;
-    }
-    let Some(text) = state.take_queued(&session_id) else {
-        state.release_resume(&session_id);
-        return;
-    };
-
-    let Some(cli) = peekle_core::claude_path() else {
-        tracing::warn!("no claude binary to resume with");
-        fail_replies(app, &state, &session_id);
-        state.release_resume(&session_id);
-        return;
-    };
-
-    let cwd = session.cwd.clone();
-    let handle = app.clone();
-    let id = session_id.clone();
-    tauri::async_runtime::spawn(async move {
-        let app = handle;
-        let session_id = id;
-        tracing::info!(session = %session_id, "starting a turn for a standing session");
-
-        let run = tauri::async_runtime::spawn_blocking({
-            let session_id = session_id.clone();
-            move || {
-                std::process::Command::new(cli)
-                    .current_dir(&cwd)
-                    .args(["--resume", &session_id, "-p", &text])
-                    // The island reports the run through its hooks, so the
-                    // output of the process itself is of no use to anybody.
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status()
-            }
-        })
-        .await;
-
-        match run {
-            Ok(Ok(status)) if status.success() => {
-                tracing::debug!(session = %session_id, "the turn finished");
-            }
-            other => {
-                tracing::warn!(session = %session_id, ?other, "the turn did not run");
-                fail_replies(
-                    &app,
-                    &app.state::<Arc<AppState>>().inner().clone(),
-                    &session_id,
-                );
+    match &delivery {
+        Delivery::Tmux(target) => {
+            let sent = peekle_core::tmux::Tmux::find().is_some_and(|tmux| tmux.send(target, text));
+            if !sent {
+                tracing::warn!(session_id, "tmux refused the keys");
+                fail_replies(&app, state.inner(), &session_id);
             }
         }
-        app.state::<Arc<AppState>>().release_resume(&session_id);
-    });
-
-    // The text is the prompt of a run that is starting, so it has left.
-    let cards = state.replies_delivered(&session_id, now_ms());
-    if let Err(err) = app.emit(events::SESSIONS, &cards) {
-        tracing::warn!(error = %err, "failed to emit sessions");
+        Delivery::TurnBoundary => match state.queue_reply(&session_id, text) {
+            crate::state::Queued::LeftNow => {
+                tracing::debug!(session_id, "a held turn carried the reply");
+            }
+            crate::state::Queued::Waiting => {
+                tracing::debug!(session_id, "reply waits for the next stop");
+            }
+        },
+        Delivery::Unreachable => {
+            tracing::warn!(session_id, "nowhere to deliver");
+            fail_replies(&app, state.inner(), &session_id);
+        }
     }
+
+    delivery
 }
 
 /// A message that will never leave says so rather than sitting dim forever.

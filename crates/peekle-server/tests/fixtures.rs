@@ -18,7 +18,7 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use peekle_core::types::{PromptAnswer, PromptOutcome, PromptRequest};
 use peekle_server::routes::ServerState;
-use peekle_server::{router, HookSink};
+use peekle_server::{router, HookSink, StopPlan};
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use tower::ServiceExt;
@@ -48,6 +48,13 @@ struct FixtureSink {
     held: Mutex<Vec<oneshot::Sender<PromptOutcome>>>,
     seen: Mutex<Vec<PromptRequest>>,
     feeds: Mutex<Vec<Value>>,
+    /// Text the outbox is pretending to hold when a Stop lands. None parks the
+    /// turn instead, so the reply window has to expire.
+    queued: Option<String>,
+    /// The payloads `/stop` handed over, which is how the feed learns a turn
+    /// ended now that Stop opens no prompt.
+    stops: Mutex<Vec<Value>>,
+    parked: Mutex<Vec<oneshot::Sender<Option<String>>>>,
 }
 
 impl FixtureSink {
@@ -57,6 +64,22 @@ impl FixtureSink {
             held: Mutex::new(Vec::new()),
             seen: Mutex::new(Vec::new()),
             feeds: Mutex::new(Vec::new()),
+            queued: None,
+            stops: Mutex::new(Vec::new()),
+            parked: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// A sink whose outbox already holds `text` when the Stop arrives.
+    fn holding(text: &str) -> Arc<Self> {
+        Arc::new(Self {
+            reply: None,
+            held: Mutex::new(Vec::new()),
+            seen: Mutex::new(Vec::new()),
+            feeds: Mutex::new(Vec::new()),
+            queued: Some(text.to_string()),
+            stops: Mutex::new(Vec::new()),
+            parked: Mutex::new(Vec::new()),
         })
     }
 }
@@ -76,6 +99,22 @@ impl HookSink for FixtureSink {
             None => self.held.lock().unwrap().push(tx),
         }
         rx
+    }
+
+    fn on_stop(&self, payload: &Value) -> StopPlan {
+        self.stops.lock().unwrap().push(payload.clone());
+        match self.queued.clone() {
+            Some(text) => StopPlan::Answer(text),
+            None => {
+                let (tx, rx) = oneshot::channel();
+                self.parked.lock().unwrap().push(tx);
+                StopPlan::Hold(rx)
+            }
+        }
+    }
+
+    fn reply_window(&self) -> Duration {
+        Duration::from_millis(80)
     }
 
     fn prompt_timeout(&self) -> Duration {
@@ -137,15 +176,15 @@ async fn the_stop_capture_still_carries_the_fields_we_read() {
     );
 }
 
+/// Queued text leaves on the real captured Stop, verbatim. tech.md 6.2.
 #[tokio::test]
-async fn a_captured_stop_answered_with_text_blocks_with_that_text() {
-    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
-        prompt_id: "p".to_string(),
-        choice: None,
-        text: Some("run the tests".to_string()),
-    })));
-
-    let (status, body) = post(sink, "stop", &payload("stop")).await;
+async fn a_captured_stop_carries_the_queued_text() {
+    let (status, body) = post(
+        FixtureSink::holding("run the tests"),
+        "stop",
+        &payload("stop"),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -154,84 +193,36 @@ async fn a_captured_stop_answered_with_text_blocks_with_that_text() {
     );
 }
 
-/// Every outcome the island can produce, checked against 6.2 on the real
-/// capture. The buttons are the only way to reach continue and finish, so a
-/// drift here would silently change what the agent is told to do.
+/// Nothing queued and the window passes: the turn ends exactly as it would
+/// without Peekle installed. The text is not lost, it waits for the next Stop.
 #[tokio::test]
-async fn each_captured_stop_choice_maps_to_its_documented_body() {
-    for (choice, expected) in [
-        (
-            "continue",
-            json!({"decision": "block", "reason": "Continue with the current plan."}),
-        ),
-        ("finish", json!({})),
-    ] {
-        let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
-            prompt_id: "p".to_string(),
-            choice: Some(choice.to_string()),
-            text: None,
-        })));
-
-        let (status, body) = post(sink, "stop", &payload("stop")).await;
-
-        assert_eq!(status, StatusCode::OK, "{choice}");
-        assert_eq!(body, expected, "{choice}");
-    }
-}
-
-/// Escape. The turn ends the way it would without Peekle installed.
-#[tokio::test]
-async fn a_captured_stop_dismissed_ends_the_turn_normally() {
-    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
-
-    let (status, body) = post(sink, "stop", &payload("stop")).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({}));
-}
-
-/// Whitespace only is not an answer. The reason becomes the next prompt, and
-/// handing the agent a blank instruction is worse than ending the turn.
-#[tokio::test]
-async fn a_captured_stop_answered_with_blank_text_does_not_block() {
-    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
-        prompt_id: "p".to_string(),
-        choice: None,
-        text: Some("   \n  ".to_string()),
-    })));
-
-    let (status, body) = post(sink, "stop", &payload("stop")).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({}));
-}
-
-#[tokio::test]
-async fn a_captured_stop_left_unanswered_ends_the_turn_normally() {
+async fn a_captured_stop_with_an_empty_outbox_ends_the_turn_normally() {
     let (status, body) = post(FixtureSink::new(None), "stop", &payload("stop")).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
 }
 
-/// The panel title and message are built from the capture, not from a payload
-/// we invented, so this pins the mapping to reality.
+/// Stop is an event, not a question: it opens no prompt and the payload
+/// reaches the sink so the feed can close the turn. tech.md 6.5.
 #[tokio::test]
-async fn a_captured_stop_builds_a_renderable_prompt() {
-    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
+async fn a_captured_stop_opens_no_prompt_and_reaches_the_sink() {
+    let sink = FixtureSink::holding("go");
     let handle = Arc::clone(&sink);
 
     post(sink, "stop", &payload("stop")).await;
 
-    let seen = handle.seen.lock().unwrap();
-    let request = seen.first().expect("a prompt was opened");
-    assert_eq!(request.title, "Claude finished");
     assert!(
-        request.last_message.is_some(),
-        "last message reached the panel"
+        handle.seen.lock().unwrap().is_empty(),
+        "Stop must not register a pending request"
     );
-    assert!(!request.session.project.is_empty(), "project name");
-    assert!(request.allow_free_text);
+    let stops = handle.stops.lock().unwrap();
+    let seen = stops.first().expect("the payload reached the sink");
+    assert_eq!(seen["hook_event_name"], "Stop");
+    assert!(
+        seen["last_assistant_message"].is_string(),
+        "the last message is there for the feed"
+    );
 }
 
 #[tokio::test]

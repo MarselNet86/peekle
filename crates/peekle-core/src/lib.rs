@@ -13,7 +13,7 @@ pub mod tmux;
 pub mod transcripts;
 pub mod types;
 
-pub use feed::{FixtureFeed, TaskFeed};
+pub use feed::{truncate, FixtureFeed, TaskFeed, LAST_MESSAGE_LIMIT};
 pub use hooks::{HOOK_PATH_PREFIX, MANAGED_HOOK_EVENTS};
 pub use island::{shape_rect, Rect};
 pub use labels::classify;

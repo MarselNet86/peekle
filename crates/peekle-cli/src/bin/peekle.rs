@@ -68,17 +68,23 @@ fn init() -> Result<(), String> {
     let (config, config_path) = load_or_create()?;
     let store = settings()?;
 
+    // The script goes down first and every time. A handler pointing at a file
+    // that is missing or stale is worse than no handler at all. tech.md 6.1.
+    let script = peekle_cli::settings::install_hook_script().map_err(|e| e.to_string())?;
+
     let before = store.read().map_err(|e| e.to_string())?;
     let after = merge_handlers(&before, config.server.port, &config.server.token);
 
     if before == after {
         println!("already installed, nothing changed");
+        println!("script  {}", script.display());
         println!("config  {}", config_path.display());
         return Ok(());
     }
 
     let backup = store.write(&after).map_err(|e| e.to_string())?;
     println!("hooks installed for {} events", MANAGED_HOOK_EVENTS.len());
+    println!("script  {}", script.display());
     println!("backup  {}", backup.display());
     println!("config  {}", config_path.display());
     println!("\nstart Peekle, then run a Claude Code session as usual");
@@ -183,7 +189,7 @@ fn collect_checks() -> Result<Vec<Check>, String> {
         ),
     });
 
-    checks.push(timeout_gap(config.behavior.prompt_timeout_secs, 900));
+    checks.push(timeout_gap(config.behavior.permission_wait_secs, 86400));
     checks.push(stop_block_cap(
         std::env::var("CLAUDE_CODE_STOP_HOOK_BLOCK_CAP")
             .ok()

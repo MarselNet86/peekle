@@ -15,10 +15,10 @@ use serde_json::{json, Value};
 use ulid::Ulid;
 
 use crate::map;
-use crate::sink::HookSink;
+use crate::sink::{HookSink, StopPlan};
 
 /// Reported by `/v1/health`. Tracks the core version in the tech.md header.
-pub const CORE_VERSION: &str = "v38";
+pub const CORE_VERSION: &str = "v39";
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -137,12 +137,55 @@ async fn blocking(
     (StatusCode::OK, Json(render(&outcome, &request))).into_response()
 }
 
+/// `/stop`. Holds the turn only for a session that has no other way in.
+///
+/// The three arms are the three rows of the mapping table in tech.md 6.2. A
+/// session with a tmux pane is released immediately: its text goes in as
+/// keystrokes whenever it is typed, so keeping the agent parked buys nothing.
 async fn stop(
     State(state): State<ServerState>,
     Path(token): Path<String>,
     body: bytes::Bytes,
 ) -> Response {
-    blocking(state, token, body, map::stop_request, map::stop_body).await
+    if !check_token(&state, &token) {
+        return not_found();
+    }
+    let payload = match parse(&body) {
+        Ok(payload) => payload,
+        Err(status) => return status.into_response(),
+    };
+
+    let enabled = state.sink.is_enabled();
+    tracing::debug!(
+        session = payload
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        enabled,
+        "stop arrived"
+    );
+
+    // Off means the agent runs in its normal mode, so the turn ends now. The
+    // feed still gets the event through the sink below in the enabled path.
+    if !enabled {
+        return empty();
+    }
+
+    match state.sink.on_stop(&payload) {
+        StopPlan::Release => empty(),
+        StopPlan::Answer(text) => (StatusCode::OK, Json(map::block_body(&text))).into_response(),
+        StopPlan::Hold(receiver) => {
+            let outcome = tokio::time::timeout(state.sink.reply_window(), receiver).await;
+            match outcome {
+                Ok(Ok(Some(text))) => {
+                    (StatusCode::OK, Json(map::block_body(&text))).into_response()
+                }
+                // Window passed, or the sender was dropped. The turn ends
+                // normally; anything typed later leaves on the next Stop.
+                _ => empty(),
+            }
+        }
+    }
 }
 
 async fn permission(
