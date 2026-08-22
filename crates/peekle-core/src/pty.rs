@@ -127,6 +127,31 @@ fn session_path() -> String {
     .clone()
 }
 
+/// The `CLAUDE_CODE_*` variables Peekle inherited from whatever launched it.
+///
+/// A session the island starts is a session of its own, and it must not be
+/// told it is a child of some other one. Launch Peekle from inside a Claude
+/// Code session -- which a developer working on Peekle does constantly -- and
+/// the environment carries `CLAUDE_CODE_SESSION_ID`, which argues with the
+/// `--session-id` we pass, and `CLAUDE_CODE_CHILD_SESSION`, which switches
+/// transcript saving off and takes the backfill of 6.11 down with it. Hooks
+/// then arrive under an id that matches no card, so a reply sits unconfirmed
+/// forever and the answer lands somewhere the user is not looking.
+///
+/// Scrubbed by prefix rather than by a list of names: the set of markers is
+/// Claude Code's business and changes between versions, and inheriting a new
+/// one would fail the same silent way.
+fn is_session_marker(key: &str) -> bool {
+    key.starts_with("CLAUDE_CODE_")
+}
+
+fn inherited_session_markers() -> Vec<String> {
+    std::env::vars_os()
+        .filter_map(|(key, _)| key.into_string().ok())
+        .filter(|key| is_session_marker(key))
+        .collect()
+}
+
 /// One live session and the handles that keep it alive.
 struct Owned {
     writer: Box<dyn Write + Send>,
@@ -187,6 +212,9 @@ impl PtyHost {
         // to inherit, and Claude Code draws a TUI.
         command.env("TERM", "xterm-256color");
         command.env("PATH", session_path());
+        for key in inherited_session_markers() {
+            command.env_remove(key);
+        }
 
         let child = pair
             .slave
@@ -338,6 +366,32 @@ mod tests {
         let host = PtyHost::new();
         host.end("nope");
         host.forget("nope");
+    }
+
+    /// Observed live: Peekle launched from inside a Claude Code session passed
+    /// `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION` down to the
+    /// agent it started. The first argues with the `--session-id` we assign,
+    /// so hooks arrived under an id matching no card and the reply sat
+    /// unconfirmed; the second switched transcript saving off.
+    #[test]
+    fn the_markers_of_a_parent_session_are_not_passed_down() {
+        for key in [
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_CODE_MESSAGING_SOCKET",
+        ] {
+            assert!(is_session_marker(key), "{key} has to be scrubbed");
+        }
+    }
+
+    /// Scrubbing must not reach past Claude Code's own markers: the session
+    /// still needs the environment the user works in.
+    #[test]
+    fn the_rest_of_the_environment_survives() {
+        for key in ["PATH", "TERM", "HOME", "SHELL", "LANG", "CLAUDECODE"] {
+            assert!(!is_session_marker(key), "{key} must be left alone");
+        }
     }
 
     /// The session must not run with the crippled path a GUI app inherits, or
