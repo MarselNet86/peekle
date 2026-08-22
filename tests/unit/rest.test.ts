@@ -19,7 +19,7 @@ import type { SessionCard } from '$lib/types/generated/SessionCard';
 import type { SessionStatus } from '$lib/types/generated/SessionStatus';
 
 const card = (status: SessionStatus, id = 's1'): SessionCard => ({
-  session: { session_id: id, cwd: '/Users/x/peekle', project: 'peekle' },
+  session: { session_id: id, cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Refactor the panel code',
   status,
   entries: [],
@@ -37,15 +37,21 @@ describe('the status the resting mark carries', () => {
   });
 
   /// Waiting outranks working: it is the one state the user has to act on.
-  it('is waiting whenever any session waits on the user', () => {
-    expect(restStatus([card('Working'), card('WaitingOnUser', 's2')])).toBe('waiting');
+  /// Only a permission request reaches it now. A finished turn holds its own
+  /// channel open and needs nobody. tech.md 6.5.
+  it('is waiting only while a permission request is open', () => {
+    expect(restStatus([card('Working')], true)).toBe('waiting');
+    expect(restStatus([card('Idle')], false)).toBe('idle');
   });
 
   it('is total over any list of cards', () => {
-    const statuses = fc.constantFrom<SessionStatus>('Working', 'WaitingOnUser', 'Idle', 'Ended');
+    const statuses = fc.constantFrom<SessionStatus>('Working', 'Idle', 'Ended');
     fc.assert(
-      fc.property(fc.array(statuses), (list) => {
-        const value = restStatus(list.map((status, index) => card(status, `s${index}`)));
+      fc.property(fc.array(statuses), fc.boolean(), (list, prompt) => {
+        const value = restStatus(
+          list.map((status, index) => card(status, `s${index}`)),
+          prompt,
+        );
         expect(['idle', 'working', 'waiting']).toContain(value);
       }),
     );

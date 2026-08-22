@@ -14,9 +14,14 @@ export type RestStatus = 'idle' | 'working' | 'waiting';
 /**
  * Waiting outranks working, and working outranks everything else. A session
  * that ended or went idle says nothing: Peekle is running either way.
+ *
+ * Only a permission request makes the mark wait now. A finished turn no longer
+ * needs anybody: it holds its channel open by itself and takes what is typed
+ * whenever it is typed, so pulsing at the user would be asking for something
+ * that is not required. tech.md 6.5 and 6.7.
  */
-export function restStatus(cards: SessionCard[]): RestStatus {
-  if (cards.some((card) => card.status === 'WaitingOnUser')) return 'waiting';
+export function restStatus(cards: SessionCard[], awaitingPermission = false): RestStatus {
+  if (awaitingPermission) return 'waiting';
   if (cards.some((card) => card.status === 'Working')) return 'working';
   return 'idle';
 }

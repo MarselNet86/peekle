@@ -14,7 +14,7 @@ import type { SessionCard } from '$lib/types/generated/SessionCard';
 import type { SessionStatus } from '$lib/types/generated/SessionStatus';
 
 const card = (status: SessionStatus, over: Partial<SessionCard> = {}): SessionCard => ({
-  session: { session_id: 's1', cwd: '/Users/x/peekle', project: 'peekle' },
+  session: { session_id: 's1', cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Refactor the panel code',
   status,
   entries: [],

@@ -12,3 +12,6 @@ src/lib/types/generated/
 # Governance files. Reformatting the source of truth buries real contract diffs in noise.
 tech.md
 CLAUDE.md
+
+# The competitor's repository, kept for reference. Not ours to format.
+vibe-notch-main/

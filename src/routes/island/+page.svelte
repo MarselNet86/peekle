@@ -11,6 +11,7 @@
     sessionOf,
   } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
+  import type { Delivery } from '$lib/types/generated/Delivery';
   import { scrollState } from '$lib/logic/feed';
   import { searchSessions } from '$lib/logic/sessions';
   import { clickPutsAway, restStatus } from '$lib/logic/rest';
@@ -93,7 +94,7 @@
   });
   // The mark is all the user sees while the island rests, so it carries the
   // one bit worth acting on. tech.md 6.7.
-  const resting = $derived(restStatus(feed.sessions));
+  const resting = $derived(restStatus(feed.sessions, island.prompt !== null));
 
   // A request that is still waiting is the reason to come back, so the mark
   // opens its session rather than the list. tech.md 6.7.
@@ -106,20 +107,42 @@
   // come from the same place. tech.md 6.7.
   const hourWindow = $derived(usage.bars[0]?.pct ?? null);
 
-  // The field is live only while a session is actually waiting on an answer.
-  // Outside that there is nowhere to deliver the text, and a field that looks
-  // ready but goes nowhere is worse than one that is plainly off. tech.md 6.5.
-  const waiting = $derived(current?.status === 'WaitingOnUser' && island.prompt !== null);
+  // Where the text would go if it were typed right now. Asked of Rust on every
+  // session change, because a pane can close between two keystrokes and a
+  // cached answer goes stale exactly when it matters. tech.md 6.5.
+  let delivery = $state<Delivery | null>(null);
 
-  // The field never goes dark. An ended session is a standing session and
-  // resume continues it; Ended itself is unreliable anyway, since a resumed
-  // run shares the id and its SessionEnd marks the card while a live client
-  // keeps writing. tech.md 6.5.
+  $effect(() => {
+    const id = sessionOf(island.view);
+    if (!id) {
+      delivery = null;
+      return;
+    }
+    // Re-asked whenever the feed moves: a session that just ended stops being
+    // reachable, and the field has to say so without waiting for a click.
+    void current?.status;
+    void current?.entries.length;
+
+    let live = true;
+    commands.deliveryFor(id).then((next) => {
+      if (live) delivery = next;
+    });
+    return () => {
+      live = false;
+    };
+  });
+
+  const reachable = $derived(delivery !== null && delivery !== 'Unreachable');
+
+  // The field says which channel it has, because the two differ in when the
+  // text lands, and a promise that hides the difference is a promise the
+  // product cannot keep. tech.md 6.5.
   const replyHint = $derived.by(() => {
-    if (waiting) return 'Reply to Claude';
-    // A working session will stop and carry the text for free; a standing one
-    // gets started. Saying which one it is beats one vague promise for both.
-    return current?.status === 'Working' ? 'Type now, it goes when Claude stops' : 'Send to Claude';
+    if (island.prompt) return 'Reply to Claude';
+    if (delivery === null) return 'Send to Claude';
+    if (delivery === 'Unreachable') return 'This session has ended';
+    if (delivery === 'TurnBoundary') return 'Type now, it goes when Claude stops';
+    return 'Message Claude';
   });
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
@@ -298,29 +321,17 @@
             />
           </div>
         {:else}
-          <!-- The field is always here and only sometimes live. Typed text
-               reaches the agent one way, as the body of a blocking hook's
-               reply, so outside that there is nowhere to deliver it; hiding the
-               field made the island look broken, and a field that lies about
-               delivery would be worse. tech.md 6.5. -->
+          <!-- Always here, and dark only when there is genuinely nowhere to
+               deliver. Hiding it made the island look broken; a field that
+               lies about delivery would be worse. tech.md 6.5. -->
           <div class="reply">
             <PromptInput
               bind:value={reply}
               placeholder={replyHint}
+              disabled={!reachable}
               onsubmit={send}
               onescape={() => island.dismiss()}
             />
-            {#if waiting}
-              <div class="choices">
-                {#each island.prompt?.options ?? [] as option (option.id)}
-                  <Button
-                    label={option.label}
-                    variant={option.kind === 'Continue' ? 'primary' : 'ghost'}
-                    onclick={() => island.choose(option.id)}
-                  />
-                {/each}
-              </div>
-            {/if}
           </div>
         {/if}
       </div>
@@ -410,13 +421,6 @@
   .reply {
     flex: none;
     border-top: 1px solid var(--hairline);
-    padding-top: 6px;
-  }
-
-  .choices {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
     padding-top: 6px;
   }
 </style>

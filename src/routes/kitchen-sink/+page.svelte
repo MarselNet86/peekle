@@ -116,7 +116,7 @@
   const permission: PromptRequest = {
     id: '01J0',
     kind: 'Permission',
-    session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle' },
+    session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
     title: 'Bash needs permission',
     last_message: null,
     detail: '{"command":"rm -rf target/debug/incremental"}',
@@ -130,15 +130,19 @@
     expires_at: 0,
   };
 
-  const cards: SessionCard[] = (['Working', 'WaitingOnUser', 'Idle', 'Ended'] as const).map(
-    (status, i) => ({
-      session: { session_id: `s${i}`, cwd: '/Users/x/peekle', project: 'peekle' },
-      title: 'Refactor the panel code and open a PR when the tests pass',
-      status,
-      entries: [],
-      updated_at: 0,
-    }),
-  );
+  const cards: SessionCard[] = (['Working', 'Idle', 'Ended'] as const).map((status, i) => ({
+    session: {
+      session_id: `s${i}`,
+      cwd: '/Users/x/peekle',
+      project: 'peekle',
+      pid: null,
+      tty: null,
+    },
+    title: 'Refactor the panel code and open a PR when the tests pass',
+    status,
+    entries: [],
+    updated_at: 0,
+  }));
 
   let view = $state<IslandView>('Pill');
   let text = $state('');

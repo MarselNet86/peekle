@@ -15,7 +15,7 @@ import type { PromptRequest } from '$lib/types/generated/PromptRequest';
 const request: PromptRequest = {
   id: '01J0',
   kind: 'Permission',
-  session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle' },
+  session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Bash needs permission',
   last_message: null,
   detail: '{"command":"rm -rf target"}',
@@ -44,9 +44,9 @@ describe('choice mapping', () => {
     expect(choiceFor(null, 'deny')).toBeUndefined();
   });
 
-  it('tells a permission apart from a Stop', () => {
+  it('tells a permission apart from anything else', () => {
     expect(isPermission(request)).toBe(true);
-    expect(isPermission({ ...request, kind: 'Stop' })).toBe(false);
+    expect(isPermission({ ...request, kind: 'Idle' })).toBe(false);
     expect(isPermission(null)).toBe(false);
   });
 });

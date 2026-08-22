@@ -10,6 +10,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+import type { Delivery } from '$lib/types/generated/Delivery';
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
@@ -52,7 +53,9 @@ export const commands = {
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
-  queueReply: (sessionId: string, text: string) => call<void>('queue_reply', { sessionId, text }),
+  sendMessage: (sessionId: string, text: string) =>
+    call<Delivery>('send_message', { sessionId, text }),
+  deliveryFor: (sessionId: string) => call<Delivery>('delivery_for', { sessionId }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
   hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),

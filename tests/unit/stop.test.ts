@@ -16,12 +16,12 @@ vi.mock('$lib/bridge', async (original) => {
   const real = await original<typeof import('$lib/bridge')>();
   return {
     ...real,
-    commands: { ...real.commands, queueReply: vi.fn(), answerPrompt: vi.fn() },
+    commands: { ...real.commands, sendMessage: vi.fn(), answerPrompt: vi.fn() },
   };
 });
 
 beforeEach(() => {
-  vi.mocked(commands.queueReply).mockClear();
+  vi.mocked(commands.sendMessage).mockClear();
   vi.mocked(commands.answerPrompt).mockClear();
 });
 
@@ -102,13 +102,14 @@ describe('the choice buttons', () => {
 });
 
 describe('writing while the agent is busy', () => {
-  /// A terminal takes typing whenever you do it and hands it over at the turn
-  /// boundary. The island does the same, and says so. tech.md 6.5.
-  it('queues the text for the session instead of answering nothing', () => {
+  /// The island hands the text to Rust, which picks the channel. It never
+  /// decides the route itself: only Rust can see whether a pane exists at this
+  /// instant. tech.md 6.5.
+  it('sends the text for the session instead of answering nothing', () => {
     const island = createIsland('');
     island.answer('keep going', 's1');
 
-    expect(commands.queueReply).toHaveBeenCalledExactlyOnceWith('s1', 'keep going');
+    expect(commands.sendMessage).toHaveBeenCalledExactlyOnceWith('s1', 'keep going');
     expect(commands.answerPrompt).not.toHaveBeenCalled();
   });
 
@@ -116,13 +117,13 @@ describe('writing while the agent is busy', () => {
     const island = createIsland('');
     island.answer('keep going');
 
-    expect(commands.queueReply).not.toHaveBeenCalled();
+    expect(commands.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('never queues whitespace', () => {
+  it('never sends whitespace', () => {
     const island = createIsland('');
     island.answer('   \n  ', 's1');
 
-    expect(commands.queueReply).not.toHaveBeenCalled();
+    expect(commands.sendMessage).not.toHaveBeenCalled();
   });
 });

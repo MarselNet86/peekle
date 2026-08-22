@@ -11,7 +11,7 @@ import { searchSessions } from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 const card = (title: string, project = 'peekle'): SessionCard => ({
-  session: { session_id: title, cwd: `/x/${project}`, project },
+  session: { session_id: title, cwd: `/x/${project}`, project, pid: null, tty: null },
   title,
   status: 'Idle',
   entries: [],
