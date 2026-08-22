@@ -115,6 +115,8 @@ fn seeding_leaves_a_session_the_hooks_already_know_alone() {
         session_id: "c64242ae-b10a-4ca6-966c-7f2a56b395bd".to_string(),
         cwd: "/Users/x/peekle".to_string(),
         project: "peekle".to_string(),
+        pid: None,
+        tty: None,
     };
     registry.ensure(live.clone(), 1000);
     registry.set_status(&live.session_id, SessionStatus::Working, 1000);

@@ -10,14 +10,64 @@ pub struct SessionRef {
     pub session_id: String,
     pub cwd: String,
     pub project: String,
+    /// Pid of the agent. Only the hook script can supply it, because it runs as
+    /// a child of the Claude process. tech.md 6.1.
+    pub pid: Option<u32>,
+    /// "/dev/ttys004", or None when the agent talks over pipes, as it does in
+    /// an IDE extension. tech.md 6.5.
+    pub tty: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum PromptKind {
-    Stop,
     Permission,
     Idle,
+}
+
+/// Where typed text goes for one session. Computed on every keystroke rather
+/// than cached: panes get closed, sessions get abandoned, tmux gets restarted.
+/// tech.md 6.5.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum Delivery {
+    /// Found the pane: type into it, any time, holding nothing.
+    Tmux(TmuxTarget),
+    /// No pane, but the session still turns. The text rides out on its Stop.
+    TurnBoundary,
+    /// Neither path reaches it. The field says so instead of pretending.
+    Unreachable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TmuxTarget {
+    pub session: String,
+    pub window: u32,
+    pub pane: u32,
+}
+
+impl TmuxTarget {
+    /// The `session:window.pane` string every tmux command takes as `-t`.
+    pub fn target(&self) -> String {
+        format!("{}:{}.{}", self.session, self.window, self.pane)
+    }
+
+    /// Parses what `list-panes -F` prints back. Returns None on anything that
+    /// is not exactly `session:window.pane`, because a half-parsed target
+    /// would send keys into some other pane.
+    pub fn parse(text: &str) -> Option<Self> {
+        let (session, rest) = text.rsplit_once(':')?;
+        let (window, pane) = rest.split_once('.')?;
+        if session.is_empty() {
+            return None;
+        }
+        Some(Self {
+            session: session.to_string(),
+            window: window.parse().ok()?,
+            pane: pane.parse().ok()?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -59,8 +109,6 @@ pub enum ChoiceKind {
     AllowOnce,
     AllowAlways,
     Deny,
-    Continue,
-    Finish,
     Custom,
 }
 
@@ -180,7 +228,6 @@ pub struct FeedEntry {
 #[ts(export)]
 pub enum SessionStatus {
     Working,
-    WaitingOnUser,
     Idle,
     Ended,
 }

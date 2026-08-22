@@ -212,6 +212,8 @@ fn a_prompt_that_is_not_ascii_survives_truncation() {
                 session_id: "s".into(),
                 cwd: "/tmp/peekle".into(),
                 project: "peekle".into(),
+                pid: None,
+                tty: None,
             },
             text: long,
         },
@@ -230,6 +232,8 @@ fn the_feed_is_capped_per_session() {
         session_id: "s".into(),
         cwd: "/tmp/peekle".into(),
         project: "peekle".into(),
+        pid: None,
+        tty: None,
     };
 
     for i in 0..(ENTRY_CAP * 2) {
@@ -262,6 +266,8 @@ fn the_session_list_is_capped_and_freshest_first() {
                     session_id: format!("s{i}"),
                     cwd: "/tmp/peekle".into(),
                     project: "peekle".into(),
+                    pid: None,
+                    tty: None,
                 },
                 text: format!("turn {i}"),
             },
@@ -311,6 +317,8 @@ fn a_status_change_moves_the_session_to_the_front() {
                     session_id: format!("s{i}"),
                     cwd: "/tmp/peekle".into(),
                     project: "peekle".into(),
+                    pid: None,
+                    tty: None,
                 },
                 text: format!("turn {i}"),
             },
@@ -319,9 +327,9 @@ fn a_status_change_moves_the_session_to_the_front() {
     }
     assert_eq!(registry.cards()[0].session.session_id, "s2");
 
-    assert!(registry.set_status("s0", SessionStatus::WaitingOnUser, 10));
+    assert!(registry.set_status("s0", SessionStatus::Idle, 10));
     assert_eq!(registry.cards()[0].session.session_id, "s0");
-    assert_eq!(registry.cards()[0].status, SessionStatus::WaitingOnUser);
+    assert_eq!(registry.cards()[0].status, SessionStatus::Idle);
 }
 
 #[test]
@@ -329,7 +337,7 @@ fn a_status_change_on_an_unknown_session_is_reported_not_guessed() {
     use peekle_core::types::SessionStatus;
 
     let mut registry = SessionRegistry::new();
-    assert!(!registry.set_status("nobody", SessionStatus::WaitingOnUser, 1));
+    assert!(!registry.set_status("nobody", SessionStatus::Idle, 1));
     assert!(registry.cards().is_empty());
 }
 
@@ -345,10 +353,12 @@ fn a_session_can_be_opened_by_a_stop_alone() {
             session_id: "s".into(),
             cwd: "/tmp/peekle".into(),
             project: "peekle".into(),
+            pid: None,
+            tty: None,
         },
         1,
     );
-    assert!(registry.set_status("s", SessionStatus::WaitingOnUser, 2));
+    assert!(registry.set_status("s", SessionStatus::Idle, 2));
     assert_eq!(registry.cards().len(), 1);
     assert!(registry.cards()[0].title.is_empty());
 }
@@ -363,6 +373,8 @@ fn parallel_sessions_are_kept_apart() {
         session_id: id.to_string(),
         cwd: format!("/work/{project}"),
         project: project.to_string(),
+        pid: None,
+        tty: None,
     };
 
     registry.apply(
@@ -380,7 +392,7 @@ fn parallel_sessions_are_kept_apart() {
         2,
     );
 
-    registry.set_status("a", SessionStatus::WaitingOnUser, 3);
+    registry.set_status("a", SessionStatus::Idle, 3);
     registry.set_status("b", SessionStatus::Working, 4);
 
     assert_eq!(registry.cards().len(), 2);
@@ -395,7 +407,7 @@ fn parallel_sessions_are_kept_apart() {
         .find(|c| c.session.session_id == "b")
         .expect("session b");
 
-    assert_eq!(a.status, SessionStatus::WaitingOnUser);
+    assert_eq!(a.status, SessionStatus::Idle);
     assert_eq!(b.status, SessionStatus::Working);
     assert_eq!(a.title, "ship the island");
     assert_eq!(b.title, "write the docs");
@@ -415,6 +427,8 @@ fn a_session_can_end_without_ever_having_started() {
                 session_id: "a".into(),
                 cwd: "/work/peekle".into(),
                 project: "peekle".into(),
+                pid: None,
+                tty: None,
             },
             text: "go".into(),
         },
@@ -436,6 +450,8 @@ fn the_closing_message_lands_once_however_often_stop_repeats() {
         session_id: "a".into(),
         cwd: "/work/peekle".into(),
         project: "peekle".into(),
+        pid: None,
+        tty: None,
     };
 
     registry.assistant_turn(session.clone(), "Tests pass. Want a PR?", 1);
@@ -472,6 +488,8 @@ fn an_empty_closing_message_is_not_an_entry() {
             session_id: "a".into(),
             cwd: "/work/peekle".into(),
             project: "peekle".into(),
+            pid: None,
+            tty: None,
         },
         "   \n  ",
         1,
@@ -490,6 +508,8 @@ fn a_very_long_closing_message_is_cut_on_a_character_boundary() {
             session_id: "a".into(),
             cwd: "/work/peekle".into(),
             project: "peekle".into(),
+            pid: None,
+            tty: None,
         },
         &long,
         1,
@@ -506,6 +526,8 @@ fn an_answer_lands_in_the_feed_as_a_turn() {
         session_id: "s".to_string(),
         cwd: "/Users/x/peekle".to_string(),
         project: "peekle".to_string(),
+        pid: None,
+        tty: None,
     };
 
     registry.user_turn(session.clone(), "  keep going  ", EntryState::Ok, 10);
@@ -527,6 +549,8 @@ fn an_empty_answer_is_not_a_turn() {
         session_id: "s".to_string(),
         cwd: "/tmp".to_string(),
         project: "tmp".to_string(),
+        pid: None,
+        tty: None,
     };
 
     registry.user_turn(session.clone(), "   ", EntryState::Ok, 1);
@@ -542,6 +566,8 @@ fn a_session_that_stopped_reporting_goes_back_to_rest() {
         session_id: "s".to_string(),
         cwd: "/tmp".to_string(),
         project: "tmp".to_string(),
+        pid: None,
+        tty: None,
     };
     registry.ensure(session.clone(), 0);
     registry.set_status("s", peekle_core::types::SessionStatus::Working, 1_000);
@@ -571,16 +597,14 @@ fn a_session_that_stopped_reporting_goes_back_to_rest() {
 fn resting_leaves_every_other_status_alone() {
     use peekle_core::types::SessionStatus;
 
-    for status in [
-        SessionStatus::WaitingOnUser,
-        SessionStatus::Idle,
-        SessionStatus::Ended,
-    ] {
+    for status in [SessionStatus::Idle, SessionStatus::Ended] {
         let mut registry = SessionRegistry::new();
         let session = peekle_core::types::SessionRef {
             session_id: "s".to_string(),
             cwd: "/tmp".to_string(),
             project: "tmp".to_string(),
+            pid: None,
+            tty: None,
         };
         registry.ensure(session, 0);
         registry.set_status("s", status, 0);
@@ -599,6 +623,8 @@ fn a_queued_reply_stays_running_until_a_stop_carries_it() {
         session_id: "s".to_string(),
         cwd: "/tmp".to_string(),
         project: "tmp".to_string(),
+        pid: None,
+        tty: None,
     };
 
     registry.user_turn(session.clone(), "keep going", EntryState::Running, 1);
@@ -631,6 +657,8 @@ fn a_renamed_session_keeps_its_name_through_the_events_that_follow() {
         session_id: "s".to_string(),
         cwd: "/x/peekle".to_string(),
         project: "peekle".to_string(),
+        pid: None,
+        tty: None,
     };
     registry.ensure(session.clone(), 0);
 
@@ -666,6 +694,8 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         session_id: "s".to_string(),
         cwd: "/x/peekle".to_string(),
         project: "peekle".to_string(),
+        pid: None,
+        tty: None,
     };
     registry.ensure(session.clone(), 0);
     registry.hide("s");
@@ -701,6 +731,8 @@ fn restoring_applies_what_the_user_said_to_the_cards_already_there() {
                 session_id: id.to_string(),
                 cwd: "/x/peekle".to_string(),
                 project: "peekle".to_string(),
+                pid: None,
+                tty: None,
             },
             0,
         );

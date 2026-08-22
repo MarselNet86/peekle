@@ -105,6 +105,11 @@ fn session_ref(payload: &Value) -> SessionRef {
             .to_string(),
         project: project_of(&cwd),
         cwd,
+        // Only the hook script knows these, and only for live events. A
+        // payload without them is not an error: backfilled and older sessions
+        // simply take the turn-boundary path. tech.md 6.1.
+        pid: payload.get("pid").and_then(Value::as_u64).map(|p| p as u32),
+        tty: str_at(payload, "tty").map(str::to_string),
     }
 }
 

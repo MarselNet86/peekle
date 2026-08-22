@@ -218,6 +218,10 @@ where
             session_id,
             cwd,
             project,
+            // A transcript records a conversation, not a running process.
+            // Whatever pid wrote it is long gone. tech.md 6.11.
+            pid: None,
+            tty: None,
         },
         title: if title.is_empty() { first_turn } else { title },
         // Whether it ended cleanly or was killed is not in the file, and
