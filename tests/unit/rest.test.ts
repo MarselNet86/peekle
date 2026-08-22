@@ -22,6 +22,7 @@ const card = (status: SessionStatus, id = 's1'): SessionCard => ({
   session: { session_id: id, cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Refactor the panel code',
   status,
+  origin: 'Observed',
   entries: [],
   updated_at: 0,
 });

@@ -14,6 +14,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   session: { session_id: title, cwd: `/x/${project}`, project, pid: null, tty: null },
   title,
   status: 'Idle',
+  origin: 'Observed',
   entries: [],
   updated_at: 0,
 });

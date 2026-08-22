@@ -1,6 +1,6 @@
 /**
- * S3 acceptance. The ladder decides where typed text goes, and the field has
- * to tell the truth about which rung it is on. tech.md 6.5.
+ * S3 acceptance. One channel, so the field has one question to answer: is this
+ * a session the island can type into. tech.md 6.5.
  */
 
 import { render, screen } from '@testing-library/svelte';
@@ -9,77 +9,84 @@ import { describe, expect, it, vi } from 'vitest';
 
 import PromptInput from '$lib/ui/PromptInput.svelte';
 import { restStatus } from '$lib/logic/rest';
-import type { Delivery } from '$lib/types/generated/Delivery';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
-/// The same expression the island renders its placeholder from. Kept here so
-/// the wording is pinned by a test rather than by whoever edits the markup.
-function replyHint(delivery: Delivery | null, prompt = false): string {
-  if (prompt) return 'Reply to Claude';
-  if (delivery === null) return 'Send to Claude';
-  if (delivery === 'Unreachable') return 'This session has ended';
-  if (delivery === 'TurnBoundary') return 'Type now, it goes when Claude stops';
-  return 'Message Claude';
+const card = (
+  origin: SessionCard['origin'],
+  status: SessionCard['status'] = 'Idle',
+): SessionCard => ({
+  session: { session_id: 's', cwd: '/x/p', project: 'p', pid: null, tty: null },
+  title: 'x',
+  status,
+  origin,
+  entries: [],
+  updated_at: 0,
+});
+
+/// The same expressions the island renders from. Kept here so the wording and
+/// the rule behind it are pinned by a test rather than by whoever edits markup.
+function owned(current: SessionCard | undefined): boolean {
+  return current !== undefined && current.origin === 'Owned' && current.status !== 'Ended';
 }
 
-const pane: Delivery = { Tmux: { session: 'work', window: 0, pane: 1 } };
+function replyHint(current: SessionCard | undefined, prompt = false): string {
+  if (prompt) return 'Reply to Claude';
+  if (owned(current)) return 'Message Claude';
+  if (current?.status === 'Ended') return 'This session has finished';
+  return 'Started outside Peekle, so this one is read-only';
+}
 
 describe('what the field promises', () => {
-  /// The two channels differ in when the text lands, and hiding that would be
-  /// a promise the product cannot keep. tech.md 6.5.
-  it('names the channel it actually has', () => {
-    expect(replyHint(pane)).toBe('Message Claude');
-    expect(replyHint('TurnBoundary')).toBe('Type now, it goes when Claude stops');
+  /// One channel and no qualifiers. The old ladder had the field explaining
+  /// when text would arrive; a pty takes it now, so there is nothing to hedge.
+  it('promises delivery now for a session the island owns', () => {
+    expect(replyHint(card('Owned'))).toBe('Message Claude');
+    expect(replyHint(card('Owned', 'Working'))).toBe('Message Claude');
   });
 
-  /// Steering means Peekle is holding the turn, so the text leaves at once.
-  /// Both rungs of takeover promise the same thing. tech.md 6.5.
-  it('promises now on every channel that delivers now', () => {
-    for (const delivery of [pane, 'Held', 'Resume'] as Delivery[]) {
-      expect(replyHint(delivery)).toBe('Message Claude');
-    }
+  /// Working means the agent is busy, not that it has stopped listening: a pty
+  /// takes what is typed whenever it is typed. tech.md 6.5.
+  it('stays open while the agent is working', () => {
+    expect(owned(card('Owned', 'Working'))).toBe(true);
   });
 
-  /// Without takeover nothing is held, so "now" would be a lie: the text
-  /// waits for a turn boundary Peekle is not keeping open.
-  it('does not promise now when nothing is being held', () => {
-    expect(replyHint('TurnBoundary')).not.toBe(replyHint('Held'));
+  /// The honest no. Peekle cannot type into a process it did not start, and
+  /// says which one it is rather than going dark for no stated reason.
+  it('says why an observed session has no field', () => {
+    expect(replyHint(card('Observed'))).toBe('Started outside Peekle, so this one is read-only');
+    expect(owned(card('Observed'))).toBe(false);
   });
 
-  /// The competitor goes dark outside tmux. A session in an IDE extension is
-  /// slower, not mute, so the field stays live. tech.md 17.1.
-  it('stays live for a session with no pane', () => {
-    expect(replyHint('TurnBoundary')).not.toBe(replyHint('Unreachable'));
-  });
-
-  it('says so only when there is genuinely nowhere to deliver', () => {
-    expect(replyHint('Unreachable')).toBe('This session has ended');
+  /// The bug this replaces: `Ended` came off SessionEnd, which fires at the end
+  /// of any run while the session carries on, and it killed the field on a live
+  /// session. Now only a process of ours exiting sets it. tech.md 6.3.
+  it('closes the field only once the process behind it is gone', () => {
+    expect(owned(card('Owned', 'Ended'))).toBe(false);
+    expect(replyHint(card('Owned', 'Ended'))).toBe('This session has finished');
   });
 
   it('lets an open permission request take the field', () => {
-    expect(replyHint(pane, true)).toBe('Reply to Claude');
+    expect(replyHint(card('Observed'), true)).toBe('Reply to Claude');
   });
 });
 
 describe('the field itself', () => {
-  it('takes no input when nothing can be delivered', async () => {
+  it('takes no input for a session the island cannot type into', async () => {
     render(PromptInput, {
       value: '',
-      placeholder: replyHint('Unreachable'),
+      placeholder: replyHint(card('Observed')),
       disabled: true,
       onsubmit: vi.fn(),
     });
 
-    const field = screen.getByRole('textbox');
-    expect(field).toBeDisabled();
+    expect(screen.getByRole('textbox')).toBeDisabled();
   });
 
-  /// Every rung except Unreachable accepts typing, including the slow one.
-  it('accepts typing on either channel', async () => {
+  it('accepts typing for a session the island owns', async () => {
     const onsubmit = vi.fn();
     render(PromptInput, {
       value: '',
-      placeholder: replyHint('TurnBoundary'),
+      placeholder: replyHint(card('Owned')),
       disabled: false,
       onsubmit,
     });
@@ -91,19 +98,11 @@ describe('the field itself', () => {
 });
 
 describe('the resting mark', () => {
-  const card = (status: SessionCard['status']): SessionCard => ({
-    session: { session_id: 's', cwd: '/x/p', project: 'p', pid: null, tty: null },
-    title: 'x',
-    status,
-    entries: [],
-    updated_at: 0,
-  });
-
   /// A finished turn holds its own channel open and needs nobody, so it no
   /// longer pulses at the user. Only a permission request does. tech.md 6.7.
   it('pulses for a permission request and not for a finished turn', () => {
-    expect(restStatus([card('Idle')], false)).toBe('idle');
-    expect(restStatus([card('Idle')], true)).toBe('waiting');
-    expect(restStatus([card('Working')], false)).toBe('working');
+    expect(restStatus([card('Owned')], false)).toBe('idle');
+    expect(restStatus([card('Owned')], true)).toBe('waiting');
+    expect(restStatus([card('Owned', 'Working')], false)).toBe('working');
   });
 });

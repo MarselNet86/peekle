@@ -22,12 +22,6 @@ export function createIsland(search = '') {
   let view = $state<IslandView>('Collapsed');
   let toast = $state<ToastRequest | null>(null);
   let prompt = $state<PromptRequest | null>(null);
-  /**
-   * The session the island is steering, or null. While it is set, that
-   * session's turn is held for us and its extension waits, so the island has
-   * to show whose it is. tech.md 6.5.
-   */
-  let driving = $state<string | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function show(next: ToastRequest) {
@@ -41,8 +35,7 @@ export function createIsland(search = '') {
   }
 
   /**
-   * Typed text goes out by the best channel the session has. Rust picks it:
-   * keystrokes into a tmux pane, or the next turn boundary. tech.md 6.5.
+   * Typed text goes into the session's pty and leaves at once. tech.md 6.5.
    *
    * A permission request open on screen takes precedence, because there the
    * text is the reason for a denial rather than a message.
@@ -75,7 +68,7 @@ export function createIsland(search = '') {
   }
 
   async function start(): Promise<() => void> {
-    const [offToast, offView, offNotch, offOpen, offClose, offDriving] = await Promise.all([
+    const [offToast, offView, offNotch, offOpen, offClose] = await Promise.all([
       events.onToast(show),
       events.onView((next) => {
         view = next;
@@ -92,11 +85,6 @@ export function createIsland(search = '') {
       events.onPromptClose(({ prompt_id }) => {
         if (prompt?.id === prompt_id) prompt = null;
       }),
-      // The hotkey can hand a session back while the island is closed, so the
-      // state cannot be inferred from anything the island itself did.
-      events.onDriving(({ driving: next }) => {
-        driving = next;
-      }),
     ]);
 
     const state = await commands.getState();
@@ -104,7 +92,6 @@ export function createIsland(search = '') {
     if (state) {
       view = state.view;
       prompt = state.active_prompt;
-      driving = state.driving;
     }
 
     return () => {
@@ -114,21 +101,10 @@ export function createIsland(search = '') {
       offNotch();
       offOpen();
       offClose();
-      offDriving();
     };
   }
 
-  /** Takes control of a session for the island, or hands it back. */
-  function takeover(sessionId: string, on: boolean) {
-    commands.setTakeover(sessionId, on);
-    driving = on ? sessionId : null;
-  }
-
   return {
-    get driving() {
-      return driving;
-    },
-    takeover,
     get notch() {
       return notch;
     },

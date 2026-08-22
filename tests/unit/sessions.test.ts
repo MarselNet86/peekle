@@ -17,6 +17,7 @@ const card = (status: SessionStatus, over: Partial<SessionCard> = {}): SessionCa
   session: { session_id: 's1', cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Refactor the panel code',
   status,
+  origin: 'Observed',
   entries: [],
   updated_at: 0,
   ...over,

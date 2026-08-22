@@ -10,12 +10,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import type { Delivery } from '$lib/types/generated/Delivery';
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
+import type { SessionRef } from '$lib/types/generated/SessionRef';
 import type { TaskItem } from '$lib/types/generated/TaskItem';
 import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
@@ -31,7 +31,6 @@ export const EVENTS = {
   toast: 'peekle://toast',
   view: 'peekle://view',
   notch: 'peekle://notch',
-  driving: 'peekle://driving',
 } as const;
 
 export function hasTauri(): boolean {
@@ -54,10 +53,9 @@ export const commands = {
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
-  sendMessage: (sessionId: string, text: string) =>
-    call<Delivery>('send_message', { sessionId, text }),
-  deliveryFor: (sessionId: string) => call<Delivery>('delivery_for', { sessionId }),
-  setTakeover: (sessionId: string, on: boolean) => call<void>('set_takeover', { sessionId, on }),
+  startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
+  sendMessage: (sessionId: string, text: string) => call<void>('send_message', { sessionId, text }),
+  endSession: (sessionId: string) => call<void>('end_session', { sessionId }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
   hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
@@ -83,6 +81,4 @@ export const events = {
   onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
   onNotch: (handler: (notch: { height: number; width: number }) => void) =>
     on<{ height: number; width: number }>(EVENTS.notch, handler),
-  onDriving: (handler: (payload: { driving: string | null }) => void) =>
-    on<{ driving: string | null }>(EVENTS.driving, handler),
 };

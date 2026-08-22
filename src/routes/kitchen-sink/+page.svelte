@@ -140,6 +140,7 @@
     },
     title: 'Refactor the panel code and open a PR when the tests pass',
     status,
+    origin: i === 0 ? 'Owned' : 'Observed',
     entries: [],
     updated_at: 0,
   }));

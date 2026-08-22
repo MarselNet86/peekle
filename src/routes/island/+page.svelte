@@ -11,7 +11,6 @@
     sessionOf,
   } from '$lib/features/sessions/sessions.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
-  import type { Delivery } from '$lib/types/generated/Delivery';
   import { scrollState } from '$lib/logic/feed';
   import { searchSessions } from '$lib/logic/sessions';
   import { clickPutsAway, restStatus } from '$lib/logic/rest';
@@ -107,46 +106,39 @@
   // come from the same place. tech.md 6.7.
   const hourWindow = $derived(usage.bars[0]?.pct ?? null);
 
-  // Where the text would go if it were typed right now. Asked of Rust on every
-  // session change, because a pane can close between two keystrokes and a
-  // cached answer goes stale exactly when it matters. tech.md 6.5.
-  let delivery = $state<Delivery | null>(null);
+  // Whether this session has an input field at all. One question with one
+  // answer: the island types into sessions it started, and into nothing else.
+  // A session whose process has exited is no longer one of them. tech.md 6.5.
+  const owned = $derived(
+    current !== undefined && current.origin === 'Owned' && current.status !== 'Ended',
+  );
+  const reachable = $derived(island.prompt !== null || owned);
 
-  $effect(() => {
-    const id = sessionOf(island.view);
-    if (!id) {
-      delivery = null;
-      return;
-    }
-    // Re-asked whenever the feed moves: a session that just ended stops being
-    // reachable, and the field has to say so without waiting for a click.
-    void current?.status;
-    void current?.entries.length;
-
-    let live = true;
-    commands.deliveryFor(id).then((next) => {
-      if (live) delivery = next;
-    });
-    return () => {
-      live = false;
-    };
-  });
-
-  const reachable = $derived(delivery !== null && delivery !== 'Unreachable');
-  const steering = $derived(current !== undefined && island.driving === current.session.session_id);
-
-  // The field says which channel it has, because the two differ in when the
-  // text lands, and a promise that hides the difference is a promise the
-  // product cannot keep. tech.md 6.5.
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
-    if (delivery === null) return 'Send to Claude';
-    if (delivery === 'Unreachable') return 'This session has ended';
-    // Held and Resume both leave at once; TurnBoundary waits for a turn that
-    // Peekle is not holding, and saying so is the whole point of the hint.
-    if (delivery === 'TurnBoundary') return 'Type now, it goes when Claude stops';
-    return 'Message Claude';
+    if (owned) return 'Message Claude';
+    if (current?.status === 'Ended') return 'This session has finished';
+    // No lie about delivery and no dead field without a reason: Peekle cannot
+    // type into a process it did not start, and says which one it is.
+    return 'Started outside Peekle, so this one is read-only';
   });
+  // Starting a session is what makes one talkable-to, so the island needs a
+  // way to do it. The folder comes from a project the island already knows,
+  // because there is no folder picker in the product and inventing a path is
+  // worse than reusing one. tech.md 6.5.
+  const newestCwd = $derived(feed.sessions[0]?.session.cwd ?? null);
+  let startError = $state<string | null>(null);
+
+  async function startSession(cwd: string) {
+    startError = null;
+    try {
+      const session = await commands.startSession(cwd);
+      if (session) openSession(session.session_id);
+    } catch (err) {
+      startError = String(err);
+    }
+  }
+
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
 
   function answerPermission(kind: 'allow' | 'deny') {
@@ -261,6 +253,11 @@
         {#if feed.sessions.length > 3}
           <div class="search"><SearchField bind:value={query} /></div>
         {/if}
+        {#if newestCwd}
+          <div class="start">
+            <Button label="New session" onclick={() => startSession(newestCwd)} wide />
+          </div>
+        {/if}
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each cards as card (card.session.session_id)}
             <SessionRow
@@ -276,8 +273,11 @@
             <p class="empty">
               {query
                 ? 'Nothing matches that.'
-                : 'No sessions yet. Start Claude Code and it shows up here.'}
+                : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
             </p>
+          {/if}
+          {#if startError}
+            <p class="empty">{startError}</p>
           {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
@@ -293,17 +293,15 @@
             </svg>
             <span>{current.session.project}</span>
           </button>
-          <!-- Holding a turn blocks the whole session, so it is a switch the
-               user throws rather than something Peekle decides. tech.md 6.5. -->
+          <!-- The gesture the open dialogue invites: another go at this same
+               project, in a session the island owns. -->
           <button
-            class="steer"
-            class:on={steering}
-            onclick={() => island.takeover(current.session.session_id, !steering)}
-            title={steering
-              ? 'Hand this session back to Claude Code (⌥⇧S)'
-              : 'Steer this session from the island (⌥⇧S)'}
+            class="new"
+            onclick={() => startSession(current.session.cwd)}
+            title="Start a new session in this project"
+            aria-label="Start a new session in this project"
           >
-            {steering ? 'Steering' : 'Take over'}
+            +
           </button>
           <!-- The windows in miniature. The full bars stay in the list, where
                there is room for them. tech.md 6.12. -->
@@ -408,6 +406,30 @@
     flex: none;
   }
 
+  .start {
+    padding: 0 2px 8px;
+  }
+
+  .new {
+    margin-left: auto;
+    flex: none;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1;
+    width: 20px;
+    height: 20px;
+    margin-bottom: 4px;
+    cursor: pointer;
+  }
+
+  .new:hover {
+    color: var(--text);
+  }
+
   .dials {
     display: flex;
     align-items: center;
@@ -417,30 +439,6 @@
 
   /* Off it reads as an offer, on it reads as a state, because on it is
      costing the user their extension. tech.md 6.5. */
-  .steer {
-    margin-left: auto;
-    flex: none;
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-dim);
-    font: inherit;
-    font-size: 10px;
-    padding: 2px 8px;
-    margin-bottom: 4px;
-    cursor: pointer;
-  }
-
-  .steer:hover {
-    color: var(--text);
-  }
-
-  .steer.on {
-    border-color: transparent;
-    background: var(--brand);
-    color: #000;
-  }
-
   .back {
     display: flex;
     align-items: center;
