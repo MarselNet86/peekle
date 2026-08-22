@@ -75,6 +75,58 @@ pub fn new_session_id() -> String {
     )
 }
 
+/// Where tools live when the shell never ran. Used only as the fallback, and
+/// the same reasoning as `claude_path`: these are where a Mac keeps them.
+const PATH_FALLBACK: &[&str] = &[
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+];
+
+/// The `PATH` an owned session runs with.
+///
+/// Peekle is launched by Finder, so it inherits a login environment with
+/// almost nothing on the path. An agent started from there would not find the
+/// tools the user has in their own terminal — no `pnpm`, no `cargo`, no
+/// anything they installed themselves — and would fail at work that succeeds
+/// when they run it by hand. Asking the login shell is the only way to get the
+/// path the user actually means, so ask it once and remember the answer.
+///
+/// `-l` alone is not enough: people set `PATH` in `.zshrc`, which only an
+/// interactive shell reads. A shell that hangs or prints nothing falls back to
+/// the static list rather than leaving the session with no path at all.
+fn session_path() -> String {
+    static PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PATH.get_or_init(|| {
+        let fallback = || PATH_FALLBACK.join(":");
+        let Ok(shell) = std::env::var("SHELL") else {
+            return fallback();
+        };
+        let output = std::process::Command::new(shell)
+            .args(["-lic", "printf %s \"$PATH\""])
+            .output();
+        match output {
+            Ok(output) if output.status.success() => {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if path.is_empty() {
+                    fallback()
+                } else {
+                    path
+                }
+            }
+            other => {
+                tracing::warn!(?other, "could not read the login PATH");
+                fallback()
+            }
+        }
+    })
+    .clone()
+}
+
 /// One live session and the handles that keep it alive.
 struct Owned {
     writer: Box<dyn Write + Send>,
@@ -131,6 +183,10 @@ impl PtyHost {
             command.arg(arg);
         }
         command.cwd(&spec.cwd);
+        // An interactive session needs a terminal type; a GUI process has none
+        // to inherit, and Claude Code draws a TUI.
+        command.env("TERM", "xterm-256color");
+        command.env("PATH", session_path());
 
         let child = pair
             .slave
@@ -282,6 +338,18 @@ mod tests {
         let host = PtyHost::new();
         host.end("nope");
         host.forget("nope");
+    }
+
+    /// The session must not run with the crippled path a GUI app inherits, or
+    /// the agent cannot find the tools the user works with.
+    #[test]
+    fn the_session_path_is_never_empty() {
+        let path = session_path();
+        assert!(!path.is_empty());
+        assert!(
+            path.split(':').any(|dir| dir == "/usr/bin"),
+            "a usable path at minimum: {path}"
+        );
     }
 
     #[test]
