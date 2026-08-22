@@ -341,6 +341,14 @@ impl AppState {
         self.lock(&self.sessions).claim(session_id);
     }
 
+    /// Opens the card for a session we just started, so the island has
+    /// something to draw before the first hook lands.
+    pub fn open_owned_session(&self, session: SessionRef, at: i64) -> Vec<SessionCard> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions.open_owned(session, at);
+        sessions.cards().to_vec()
+    }
+
     /// Whether the island can type into this session.
     pub fn owns_session(&self, session_id: &str) -> bool {
         self.lock(&self.sessions).is_owned(session_id)

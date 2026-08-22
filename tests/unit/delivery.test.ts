@@ -97,6 +97,22 @@ describe('the field itself', () => {
   });
 });
 
+/// The empty black island: the view named a session the feed did not have yet,
+/// so none of the render branches matched and the shape drew nothing. Falling
+/// back to the list means a click always lands somewhere. tech.md 6.5.
+describe('a view pointing at a session that is not there', () => {
+  const listing = (view: 'Sessions' | { Session: string }, known: string[]) =>
+    view === 'Sessions' || (typeof view === 'object' && !known.includes(view.Session));
+
+  it('falls back to the list rather than drawing nothing', () => {
+    expect(listing({ Session: 'brand-new' }, [])).toBe(true);
+  });
+
+  it('shows the session once its card is there', () => {
+    expect(listing({ Session: 'brand-new' }, ['brand-new'])).toBe(false);
+  });
+});
+
 describe('the resting mark', () => {
   /// A finished turn holds its own channel open and needs nobody, so it no
   /// longer pulses at the user. Only a permission request does. tech.md 6.7.

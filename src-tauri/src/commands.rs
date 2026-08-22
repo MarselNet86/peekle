@@ -280,6 +280,15 @@ pub fn start_session(
         pid: None,
         tty: None,
     };
+
+    // The card before the caller opens it. The island shows this session
+    // immediately, and the first hook is a whole agent startup away, so
+    // without the card there is nothing on screen to draw. tech.md 6.5.
+    let cards = state.open_owned_session(session.clone(), now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+
     tracing::info!(session = %spec.session_id, "started a session of our own");
     Ok(session)
 }

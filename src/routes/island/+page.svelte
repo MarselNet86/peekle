@@ -41,7 +41,12 @@
     return id ? feed.card(id) : undefined;
   });
   const rows = $derived(current?.entries ?? []);
-  const listing = $derived(island.view === 'Sessions');
+  // A view naming a session the feed does not have falls back to the list.
+  // The alternative is what it used to do: render none of the branches and
+  // leave an empty black shape on screen, which reads as a crash.
+  const listing = $derived(
+    island.view === 'Sessions' || (sessionOf(island.view) !== undefined && current === undefined),
+  );
   let query = $state('');
   const cards = $derived(searchSessions(feed.sessions, query));
 

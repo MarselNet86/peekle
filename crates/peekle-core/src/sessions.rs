@@ -222,6 +222,34 @@ impl SessionRegistry {
         }
     }
 
+    /// Opens a card for a session Peekle has just started.
+    ///
+    /// The card has to exist before the first hook arrives. The island opens a
+    /// session the moment it starts one, and a view pointing at a card that is
+    /// not there yet has nothing to draw. `Idle` because nothing is running
+    /// yet: the agent is waiting to be spoken to. tech.md 6.5.
+    pub fn open_owned(&mut self, session: SessionRef, at: i64) {
+        let id = session.session_id.clone();
+        self.owned.insert(id.clone());
+
+        if self.cards.iter().any(|c| c.session.session_id == id) {
+            self.touch(&id);
+            return;
+        }
+        self.cards.insert(
+            0,
+            SessionCard {
+                session,
+                title: String::new(),
+                status: SessionStatus::Idle,
+                origin: SessionOrigin::Owned,
+                entries: Vec::new(),
+                updated_at: at,
+            },
+        );
+        self.evict_sessions();
+    }
+
     /// Drops a claim. The card stays: the conversation is still worth reading
     /// after the process behind it is gone.
     pub fn disown(&mut self, session_id: &str) {

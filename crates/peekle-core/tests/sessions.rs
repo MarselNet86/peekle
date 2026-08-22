@@ -714,6 +714,55 @@ fn confirming_leaves_a_session_it_never_heard_of_alone() {
     assert!(registry.cards().is_empty());
 }
 
+/// The island opens a session the instant it starts one, and the first hook is
+/// a whole agent startup away. Without the card there is nothing to draw, which
+/// is what showed up as an empty black island. tech.md 6.5.
+#[test]
+fn a_session_we_start_has_a_card_before_any_hook_arrives() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+
+    registry.open_owned(session, 5);
+
+    let cards = registry.cards();
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].session.session_id, "ours");
+    assert_eq!(
+        cards[0].origin,
+        peekle_core::types::SessionOrigin::Owned,
+        "it is ours, so it has a field"
+    );
+    assert_eq!(
+        cards[0].status,
+        peekle_core::types::SessionStatus::Idle,
+        "nothing is running yet, the agent is waiting to be spoken to"
+    );
+    assert!(registry.is_owned("ours"));
+}
+
+/// Opening it twice must not stack two cards for one process.
+#[test]
+fn opening_a_session_we_already_have_moves_it_rather_than_doubling_it() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+
+    registry.open_owned(session.clone(), 1);
+    registry.open_owned(session, 2);
+    assert_eq!(registry.cards().len(), 1);
+}
+
 /// S14. Titles and hiding live beside the cards, because hooks and the
 /// backfill rebuild the cards themselves on every event.
 #[test]
