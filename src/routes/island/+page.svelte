@@ -465,6 +465,6 @@
   .reply {
     flex: none;
     border-top: 1px solid var(--hairline);
-    padding-top: 6px;
+    padding-top: 10px;
   }
 </style>

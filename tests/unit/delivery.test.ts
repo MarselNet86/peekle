@@ -82,6 +82,47 @@ describe('the field itself', () => {
     expect(screen.getByRole('textbox')).toBeDisabled();
   });
 
+  /// The main action of the product had no visible affordance: sending lived
+  /// on Enter alone. tech.md 9.
+  it('sends what the button is pressed on, same as Enter', async () => {
+    const onsubmit = vi.fn();
+    render(PromptInput, { value: 'ship it', placeholder: '', disabled: false, onsubmit });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith('ship it');
+  });
+
+  /// A button that does nothing when pressed lies about its own state.
+  it('dims the button when there is nothing to send', async () => {
+    const onsubmit = vi.fn();
+    const { rerender } = render(PromptInput, {
+      value: '',
+      placeholder: '',
+      disabled: false,
+      onsubmit,
+    });
+
+    const button = screen.getByRole('button', { name: 'Send' });
+    expect(button).toBeDisabled();
+
+    await rerender({ value: '   ' });
+    expect(button, 'whitespace is nothing to send').toBeDisabled();
+
+    await rerender({ value: 'go' });
+    expect(button).not.toBeDisabled();
+  });
+
+  it('offers nothing to press for a session it cannot type into', () => {
+    render(PromptInput, {
+      value: 'ship it',
+      placeholder: replyHint(card('Observed')),
+      disabled: true,
+      onsubmit: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
   it('accepts typing for a session the island owns', async () => {
     const onsubmit = vi.fn();
     render(PromptInput, {
