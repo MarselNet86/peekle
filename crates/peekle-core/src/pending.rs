@@ -99,6 +99,7 @@ mod tests {
             prompt_id: id.to_string(),
             choice: None,
             text: Some("go on".to_string()),
+            answers: Vec::new(),
         })
     }
 

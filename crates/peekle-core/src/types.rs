@@ -23,6 +23,11 @@ pub struct SessionRef {
 pub enum PromptKind {
     Permission,
     Idle,
+    /// `AskUserQuestion`, arriving through `/permission` in this environment
+    /// rather than through `PreToolUse` the way the plain CLI documents it.
+    /// tech.md 6.13's sibling, one to four multiple-choice questions rather
+    /// than an allow/deny pair. tech.md 6.14.
+    Question,
 }
 
 /// Where a session came from. Decides exactly one thing: whether it has an
@@ -51,8 +56,13 @@ pub struct PromptRequest {
     pub last_message: Option<String>,
     /// Tool name and input preview, 400 characters.
     pub detail: Option<String>,
-    /// Empty means free text only.
+    /// Empty means free text only. Unused for `PromptKind::Question`, which
+    /// answers through `questions` instead: its options are not a flat list,
+    /// each question carries its own. tech.md 6.14.
     pub options: Vec<ChoiceOption>,
+    /// Populated only for `PromptKind::Question`. Empty everywhere else.
+    /// tech.md 6.14.
+    pub questions: Vec<Question>,
     pub allow_free_text: bool,
     /// unix ms
     #[ts(type = "number")]
@@ -60,6 +70,28 @@ pub struct PromptRequest {
     /// unix ms
     #[ts(type = "number")]
     pub expires_at: i64,
+}
+
+/// One of the one to four multiple-choice questions an `AskUserQuestion`
+/// carries. tech.md 6.14.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Question {
+    /// Short label, for example "Framework".
+    pub header: String,
+    /// The question itself, verbatim: it is also the key the answer is
+    /// reported under, so it travels unshortened. tech.md 6.14.
+    pub question: String,
+    pub options: Vec<QuestionOption>,
+    /// More than one answer may be chosen. tech.md 6.14.
+    pub multi_select: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct QuestionOption {
+    pub label: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -80,12 +112,26 @@ pub enum ChoiceKind {
     Custom,
 }
 
+/// One question of a `PromptKind::Question` request, answered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct QuestionAnswer {
+    /// The question text this answers, matched by value against
+    /// `Question::question` on the way out. tech.md 6.14.
+    pub question: String,
+    /// More than one only when the question was `multi_select`.
+    pub labels: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PromptAnswer {
     pub prompt_id: String,
     pub choice: Option<String>,
     pub text: Option<String>,
+    /// Populated only answering a `PromptKind::Question`. Empty everywhere
+    /// else. tech.md 6.14.
+    pub answers: Vec<QuestionAnswer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

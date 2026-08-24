@@ -50,3 +50,20 @@ a two word pattern never matches.
 
 The capture wins. Fix section 6, bump the core version, and land the contract
 change before the code that depends on it. tech.md section 13.
+
+## `ask_user_question.jsonl`
+
+`AskUserQuestion` arrives through `/v1/h/{token}/permission` in this environment
+(`hook_event_name: "PermissionRequest"`, `tool_name: "AskUserQuestion"`), not
+through `PreToolUse` the way the plain `claude` CLI documents it. Captured live
+by asking a real, necessary question through this exact tool while
+`capture-hooks.sh` was running — `tool_input.questions` is the genuine wire
+shape: one to four questions, each with `question`, `header`, `options`
+(`label` plus optional `description`), and `multiSelect`.
+
+Answering it does not go through `decision.behavior` alone. Per
+[code.claude.com/docs/en/hooks](https://code.claude.com/docs/en/hooks),
+`PermissionRequest` also accepts `updatedInput` inside `decision`: echo the
+`questions` array back verbatim and add an `answers` object mapping each
+question's text to the chosen label (multi-select answers joined with a
+comma). `"allow"` alone does not answer the tool, only `updatedInput` does.
