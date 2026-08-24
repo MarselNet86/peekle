@@ -1,0 +1,22 @@
+{
+  "captured_by" : "scripts\/capture-pasteboard.sh",
+  "case" : "text-from-browser",
+  "change_count_delta" : 0,
+  "how" : "copied by hand, captured as found",
+  "items" : [
+    [
+      "public.utf8-plain-text",
+      "public.html",
+      "org.chromium.source-url",
+      "org.chromium.internal.source-rfh-token"
+    ]
+  ],
+  "types" : [
+    "public.utf8-plain-text",
+    "NSStringPboardType",
+    "public.html",
+    "Apple HTML pasteboard type",
+    "org.chromium.source-url",
+    "org.chromium.internal.source-rfh-token"
+  ]
+}

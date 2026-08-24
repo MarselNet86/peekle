@@ -1,0 +1,15 @@
+{
+  "captured_by" : "scripts\/capture-pasteboard.sh",
+  "case" : "image",
+  "change_count_delta" : 1,
+  "how" : "NSPasteboard.writeObjects with an NSImage",
+  "items" : [
+    [
+      "public.tiff"
+    ]
+  ],
+  "types" : [
+    "public.tiff",
+    "NeXT TIFF v4.0 pasteboard type"
+  ]
+}

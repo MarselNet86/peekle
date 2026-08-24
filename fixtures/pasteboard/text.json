@@ -1,0 +1,15 @@
+{
+  "captured_by" : "scripts\/capture-pasteboard.sh",
+  "case" : "text",
+  "change_count_delta" : 1,
+  "how" : "NSPasteboard.setString",
+  "items" : [
+    [
+      "public.utf8-plain-text"
+    ]
+  ],
+  "types" : [
+    "public.utf8-plain-text",
+    "NSStringPboardType"
+  ]
+}

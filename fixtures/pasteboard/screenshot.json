@@ -1,0 +1,17 @@
+{
+  "captured_by" : "scripts\/capture-pasteboard.sh",
+  "case" : "screenshot",
+  "change_count_delta" : 1,
+  "how" : "screencapture -x -c -R0,0,24,24",
+  "items" : [
+    [
+      "public.png"
+    ]
+  ],
+  "types" : [
+    "public.png",
+    "Apple PNG pasteboard type",
+    "public.tiff",
+    "NeXT TIFF v4.0 pasteboard type"
+  ]
+}
