@@ -3,6 +3,7 @@ mod events;
 mod hooks;
 mod hotkey;
 mod panel;
+mod shots;
 mod state;
 mod windows;
 
@@ -29,8 +30,16 @@ pub fn run() {
                     if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         return;
                     }
-                    let _ = shortcut;
-                    commands::toggle_enabled(app.clone());
+                    // Two keys reach this handler now, and only one of them is
+                    // held all the time. Dispatch by combination rather than by
+                    // assumption: the attach key is a bare arrow, and toggling
+                    // the whole product on it would be a bad surprise.
+                    // tech.md 6.9 and 6.13.
+                    match hotkey::role_of(app, shortcut) {
+                        Some(hotkey::Role::Toggle) => commands::toggle_enabled(app.clone()),
+                        Some(hotkey::Role::Attach) => shots::attach(app),
+                        None => tracing::debug!("a combination nobody claims fired"),
+                    }
                 })
                 .build(),
         )
@@ -55,7 +64,11 @@ pub fn run() {
             let toggle = config.hotkey.toggle.clone();
             let provider = usage_provider(&config);
 
-            let state = Arc::new(state::AppState::new(config, provider));
+            let state = Arc::new(state::AppState::new(
+                config,
+                provider,
+                Arc::new(shots::SystemPasteboard),
+            ));
             app.manage(Arc::clone(&state));
 
             match app.get_webview_window(panel::ISLAND) {
@@ -106,6 +119,11 @@ pub fn run() {
             rest_stale_sessions(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
+
+            // A screenshot lives on the pasteboard and nowhere else, so the
+            // island watches for one and offers to carry it into a session.
+            // tech.md 6.13.
+            shots::watch(app.handle(), Arc::clone(&state));
 
             poll_usage(app.handle(), Arc::clone(&state));
 

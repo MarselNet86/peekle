@@ -65,6 +65,67 @@ pub fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
     Some(Shortcut::new(Some(modifiers), code))
 }
 
+/// Which of the configured combinations fired.
+///
+/// The handler is one function for every shortcut the plugin holds, and since
+/// 6.13 there are two of them. Reading the combination rather than assuming it
+/// matters: the attach key is a bare arrow, and switching the whole product
+/// off on it would be a bad surprise. tech.md 6.9.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Toggle,
+    Attach,
+}
+
+pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let (toggle, attach) = {
+        let config = state.lock_config();
+        (config.hotkey.toggle.clone(), config.hotkey.attach.clone())
+    };
+
+    if fires(&toggle, fired) {
+        return Some(Role::Toggle);
+    }
+    if fires(&attach, fired) {
+        return Some(Role::Attach);
+    }
+    None
+}
+
+/// Whether a config spelling names the combination that fired. An unparseable
+/// spelling names nothing, which is the same answer `install` gives it.
+fn fires(spelling: &str, fired: &Shortcut) -> bool {
+    Combination::parse(spelling)
+        .ok()
+        .and_then(|combination| shortcut_of(&combination))
+        .is_some_and(|shortcut| shortcut.matches(fired.mods, fired.key))
+}
+
+/// Takes one combination, by its config spelling.
+///
+/// Used by the screenshot offer, which holds its key for seconds rather than
+/// for the life of the app: a modifierless key kept from the whole system
+/// forever would be a fault. tech.md 6.13 and R-14.
+pub fn register(app: &AppHandle, spelling: &str) -> Result<(), HotkeyError> {
+    let combination = Combination::parse(spelling)?;
+    PluginRegistrar::new(app.clone()).register(&combination)
+}
+
+/// Hands one combination back to the system. A key nobody holds is not an
+/// error: the offer settles down more than one path and each of them releases.
+pub fn unregister(app: &AppHandle, spelling: &str) {
+    let Ok(combination) = Combination::parse(spelling) else {
+        return;
+    };
+    let Some(shortcut) = shortcut_of(&combination) else {
+        return;
+    };
+    if let Err(err) = app.global_shortcut().unregister(shortcut) {
+        tracing::debug!(error = %err, "the attach key was not held");
+    }
+}
+
 /// Registers a combination. A failure is a flag and one warning, never a
 /// reason not to start. tech.md 6.9.
 pub fn install(app: &AppHandle, spelling: &str) {

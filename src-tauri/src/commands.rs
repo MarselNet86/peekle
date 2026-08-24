@@ -299,14 +299,22 @@ pub fn start_session(
 /// `UserPromptSubmit` confirms it. A write to a pty succeeds even when the
 /// process on the other end is gone, so its return value never confirms
 /// anything. tech.md 6.3.
+///
+/// `shots` are paths of screenshots the user attached. They travel as lines of
+/// the message, because Claude Code opens a file once it is named and needs
+/// nothing else. The feed row carries the same composed text: that is what the
+/// agent received, and showing anything else would show something that did not
+/// happen. tech.md 6.13.
 #[tauri::command]
 pub fn send_message(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     text: String,
+    shots: Vec<String>,
 ) -> Result<(), String> {
-    let text = text.trim();
+    let message = peekle_core::shots::compose(text.trim(), &shots);
+    let text = message.as_str();
     if text.is_empty() {
         return Ok(());
     }

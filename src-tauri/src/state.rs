@@ -2,12 +2,13 @@
 //! sends intents; it holds no authoritative state of its own. tech.md 6.3, 8.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use peekle_core::config::Config;
 use peekle_core::sessions::SessionOverrides;
+use peekle_core::shots::{OfferSlot, Pasteboard};
 use peekle_core::types::{
     IslandView, PeekleState, PromptRequest, SessionCard, SessionRef, SessionStatus, TaskItem,
     UsageSnapshot, UsageUnavailable,
@@ -23,6 +24,13 @@ pub struct AppState {
     pub config: Mutex<Config>,
     pub pending: PendingRegistry,
     pub usage_provider: Arc<dyn UsageProvider>,
+    /// The pasteboard the screenshot watch reads. Behind a trait so nothing
+    /// here reaches AppKit and no test touches the real clipboard.
+    /// tech.md 6.13 and section 7.
+    pub pasteboard: Arc<dyn Pasteboard>,
+    /// The screenshot offer standing right now. One at a time, settled once.
+    /// tech.md 6.13.
+    pub shot: OfferSlot,
 
     enabled: AtomicBool,
     view: Mutex<IslandView>,
@@ -41,6 +49,14 @@ pub struct AppState {
     /// pointer elsewhere. tech.md 6.7.
     hold_until: Mutex<Option<Instant>>,
     hotkey_ok: AtomicBool,
+    /// Whether the attach key is held right now. A second register would fail
+    /// and a missed unregister would keep the Up arrow away from every other
+    /// application, so the flag decides and AppKit is told only on a change.
+    /// tech.md 6.13 and R-14.
+    attach_key: AtomicBool,
+    /// The pasteboard change count as of the last tick. Only a change is worth
+    /// reading the types for, and nothing reads the contents.
+    seen_change: AtomicI64,
     live_sessions: AtomicU32,
     active_prompt: Mutex<Option<PromptRequest>>,
     /// Blocking requests that arrived while a prompt was already open. Not part
@@ -105,13 +121,19 @@ fn initial_reason(usage: &peekle_core::config::UsageConfig) -> UsageUnavailable 
 }
 
 impl AppState {
-    pub fn new(config: Config, usage_provider: Arc<dyn UsageProvider>) -> Self {
+    pub fn new(
+        config: Config,
+        usage_provider: Arc<dyn UsageProvider>,
+        pasteboard: Arc<dyn Pasteboard>,
+    ) -> Self {
         let usage_config = config.usage.clone();
         let enabled = config.behavior.enabled;
         Self {
             config: Mutex::new(config),
             pending: PendingRegistry::new(),
             usage_provider,
+            pasteboard,
+            shot: OfferSlot::new(),
             enabled: AtomicBool::new(enabled),
             view: Mutex::new(IslandView::default()),
             shape_bounds: Mutex::new(None),
@@ -119,6 +141,8 @@ impl AppState {
             outside_since: Mutex::new(None),
             hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
+            attach_key: AtomicBool::new(false),
+            seen_change: AtomicI64::new(0),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
             queue: Mutex::new(Vec::new()),
@@ -392,6 +416,38 @@ impl AppState {
         registry.cards().to_vec()
     }
 
+    /// Remembers where the pasteboard counter stood, so the watch starts from
+    /// what is already on it rather than offering a screenshot the user took
+    /// an hour ago.
+    pub fn seed_change_count(&self, count: i64) {
+        self.seen_change.store(count, Ordering::Relaxed);
+    }
+
+    /// Whether anything wrote to the pasteboard since the last tick.
+    pub fn pasteboard_changed(&self, count: i64) -> bool {
+        self.seen_change.swap(count, Ordering::Relaxed) != count
+    }
+
+    /// Records that the attach key is held, and reports whether that is news.
+    /// Only a change is worth an AppKit call: dropping a key nobody holds logs
+    /// an error that means nothing. tech.md 6.13.
+    pub fn set_attach_key(&self, held: bool) -> bool {
+        self.attach_key.swap(held, Ordering::SeqCst) != held
+    }
+
+    /// The freshest session the island can actually type into.
+    ///
+    /// Ownership and not recency alone: an observed session has no input field
+    /// by 6.5, so a screenshot has nowhere to go there, and an offer that
+    /// cannot be honoured is worse than silence. tech.md 6.13.
+    pub fn newest_owned_session(&self) -> Option<SessionCard> {
+        let sessions = self.lock(&self.sessions);
+        sessions
+            .cards()
+            .into_iter()
+            .find(|card| sessions.is_owned(&card.session.session_id))
+    }
+
     pub fn hotkey_ok(&self) -> bool {
         self.hotkey_ok.load(Ordering::Relaxed)
     }
@@ -495,6 +551,7 @@ impl AppState {
             sessions: self.sessions(),
             tasks: self.tasks(),
             usage: self.usage(),
+            shot: self.shot.current(),
             live_sessions: self.live_sessions(),
             hotkey_ok: self.hotkey_ok(),
         }
@@ -638,7 +695,11 @@ mod tests {
     }
 
     fn state() -> AppState {
-        AppState::new(Config::default(), Arc::new(FakeUsage::default()))
+        AppState::new(
+            Config::default(),
+            Arc::new(FakeUsage::default()),
+            Arc::new(peekle_core::shots::FakePasteboard::new()),
+        )
     }
 
     fn request(id: &str) -> PromptRequest {
@@ -756,7 +817,11 @@ mod owned_tests {
     use peekle_usage::FakeUsage;
 
     fn fresh() -> AppState {
-        AppState::new(Config::default(), Arc::new(FakeUsage::default()))
+        AppState::new(
+            Config::default(),
+            Arc::new(FakeUsage::default()),
+            Arc::new(peekle_core::shots::FakePasteboard::new()),
+        )
     }
 
     /// A session Peekle did not start is observed, and observed means no
@@ -791,5 +856,133 @@ mod owned_tests {
         state.claim_session("a");
         assert!(state.owns_session("a"));
         assert!(!state.owns_session("b"));
+    }
+}
+
+/// S15. What the screenshot watch asks this state, and what it must answer.
+/// tech.md 6.13.
+#[cfg(test)]
+mod shot_tests {
+    use super::*;
+    use peekle_core::config::Config;
+    use peekle_core::shots::FakePasteboard;
+    use peekle_core::types::ShotOffer;
+    use peekle_usage::FakeUsage;
+
+    fn state() -> (AppState, Arc<FakePasteboard>) {
+        let pasteboard = Arc::new(FakePasteboard::new());
+        let state = AppState::new(
+            Config::default(),
+            Arc::new(FakeUsage::default()),
+            pasteboard.clone(),
+        );
+        (state, pasteboard)
+    }
+
+    fn session(id: &str) -> SessionRef {
+        SessionRef {
+            session_id: id.to_string(),
+            cwd: "/tmp/project".to_string(),
+            project: "project".to_string(),
+            pid: None,
+            tty: None,
+        }
+    }
+
+    fn offer(id: &str) -> ShotOffer {
+        ShotOffer {
+            id: id.to_string(),
+            session_id: "ours".to_string(),
+            project: "project".to_string(),
+            created_at: 0,
+            expires_at: 5_000,
+        }
+    }
+
+    /// The tick is a counter read and nothing else. Looking at types on every
+    /// tick would be work for nothing; looking at contents would be a paste
+    /// prompt on every copy. tech.md R-13.
+    #[test]
+    fn only_a_write_to_the_pasteboard_is_worth_a_second_look() {
+        let (state, pasteboard) = state();
+        state.seed_change_count(pasteboard.change_count());
+
+        assert!(!state.pasteboard_changed(pasteboard.change_count()));
+
+        pasteboard.write_screenshot(b"png");
+        assert!(state.pasteboard_changed(pasteboard.change_count()));
+        assert!(
+            !state.pasteboard_changed(pasteboard.change_count()),
+            "the same write is not a second screenshot"
+        );
+        assert_eq!(pasteboard.reads(), 0, "and no contents were read");
+    }
+
+    /// Whatever the user copied before Peekle started is theirs, not an offer.
+    #[test]
+    fn the_watch_starts_from_what_is_already_on_the_pasteboard() {
+        let (state, pasteboard) = state();
+        pasteboard.write_screenshot(b"an old shot");
+
+        state.seed_change_count(pasteboard.change_count());
+        assert!(!state.pasteboard_changed(pasteboard.change_count()));
+    }
+
+    /// The key is dropped down more than one path, and telling AppKit to drop
+    /// a key nobody holds logs an error that means nothing. tech.md 6.13.
+    #[test]
+    fn the_attach_key_is_only_told_about_on_a_change() {
+        let (state, _) = state();
+
+        assert!(state.set_attach_key(true), "taking it is news");
+        assert!(!state.set_attach_key(true), "holding it already is not");
+        assert!(state.set_attach_key(false), "dropping it is news");
+        assert!(!state.set_attach_key(false), "dropping it twice is not");
+    }
+
+    /// An observed session has no input field, so a screenshot has nowhere to
+    /// go there. tech.md 6.5 and 6.13.
+    #[test]
+    fn a_screenshot_goes_to_a_session_the_island_owns() {
+        let (state, _) = state();
+        assert!(
+            state.newest_owned_session().is_none(),
+            "nothing to offer to"
+        );
+
+        state.set_session_status(&session("theirs"), SessionStatus::Working, 1);
+        assert!(
+            state.newest_owned_session().is_none(),
+            "an observed session is not a target"
+        );
+
+        state.open_owned_session(session("ours"), 2);
+        assert_eq!(
+            state.newest_owned_session().map(|c| c.session.session_id),
+            Some("ours".to_string())
+        );
+    }
+
+    /// The process behind the session exited, so there is nothing to type into
+    /// and nothing to attach to either.
+    #[test]
+    fn a_session_whose_process_is_gone_is_not_a_target() {
+        let (state, _) = state();
+        state.open_owned_session(session("ours"), 1);
+
+        state.disown_session("ours");
+        assert!(state.newest_owned_session().is_none());
+    }
+
+    #[test]
+    fn the_snapshot_carries_the_offer_that_is_standing() {
+        let (state, _) = state();
+        assert!(state.snapshot().shot.is_none());
+
+        state.shot.open(offer("01J"));
+        assert_eq!(state.snapshot().shot.map(|o| o.id), Some("01J".to_string()));
+
+        state.shot.take();
+        assert!(state.snapshot().shot.is_none());
     }
 }

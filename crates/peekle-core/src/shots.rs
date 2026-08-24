@@ -33,6 +33,11 @@ pub fn is_screenshot(items: &[Vec<String>]) -> bool {
     }
 }
 
+/// The id of one offer, which is also the name of the file it becomes.
+pub fn new_id() -> String {
+    ulid::Ulid::generate().to_string()
+}
+
 /// `~/Library/Caches/peekle/shots`.
 ///
 /// A cache and not the config directory: losing it costs nothing, and the path
