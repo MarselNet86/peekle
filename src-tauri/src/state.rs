@@ -476,6 +476,22 @@ impl AppState {
         true
     }
 
+    /// Clears the active prompt and drops everything queued behind it, handing
+    /// back whichever one was on screen.
+    ///
+    /// Used by the bypass switch: `PendingRegistry::resolve_all` settles every
+    /// channel a hook is waiting on, but it has no way to reach back into
+    /// `active_prompt` or the queue, and neither clears itself. Left alone,
+    /// the panel goes on showing a decision nothing is waiting on any more,
+    /// and a click on it later finds `pending.resolve` returning false and
+    /// does nothing at all -- the same dead end a stale timeout leaves.
+    /// tech.md rule 10 and section 8.
+    pub fn clear_prompts(&self) -> Option<PromptRequest> {
+        let active = self.lock(&self.active_prompt).take();
+        self.lock(&self.queue).clear();
+        active
+    }
+
     /// Clears the slot and hands back whatever was waiting behind it.
     pub fn release_prompt(&self, id: &str) -> Option<PromptRequest> {
         let mut active = self.lock(&self.active_prompt);
@@ -759,6 +775,33 @@ mod tests {
         state.claim_prompt(request("a"));
         assert!(state.release_prompt("gone").is_none());
         assert_eq!(state.active_prompt().map(|p| p.id), Some("a".into()));
+    }
+
+    /// The bug rule 10 exists to rule out: `PendingRegistry::resolve_all`
+    /// settles every waiting hook, but it has no way back into `active_prompt`
+    /// or the queue, and nothing else clears them either. Without this, the
+    /// bypass switch leaves the panel showing a permission nothing is waiting
+    /// on any more, and a later click finds `pending.resolve` returning false
+    /// and does nothing at all -- the exact "clicking does nothing" report.
+    #[test]
+    fn clearing_prompts_drops_the_active_one_and_everything_queued() {
+        let state = state();
+        state.claim_prompt(request("a"));
+        state.claim_prompt(request("b"));
+
+        let cleared = state.clear_prompts();
+        assert_eq!(cleared.map(|p| p.id), Some("a".into()));
+        assert!(state.active_prompt().is_none());
+
+        // The queue is empty too: releasing now must not resurrect "b".
+        assert!(state.release_prompt("a").is_none());
+        assert!(state.active_prompt().is_none());
+    }
+
+    #[test]
+    fn clearing_prompts_with_nothing_active_is_a_no_op() {
+        let state = state();
+        assert!(state.clear_prompts().is_none());
     }
 
     #[test]

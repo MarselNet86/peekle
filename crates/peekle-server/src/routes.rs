@@ -130,8 +130,14 @@ async fn blocking(
     let outcome = match tokio::time::timeout(timeout, receiver).await {
         Ok(Ok(outcome)) => outcome,
         // Timed out, or the sender was dropped without an answer. Either way
-        // the request is settled and the turn ends normally.
-        Ok(Err(_)) | Err(_) => PromptOutcome::TimedOut,
+        // the request is settled and the turn ends normally. The registry
+        // entry and the active prompt are still standing at this point --
+        // only a resolve clears them -- so the sink is told explicitly rather
+        // than left to notice on its own next time somebody clicks.
+        Ok(Err(_)) | Err(_) => {
+            state.sink.settle_timeout(&request.id);
+            PromptOutcome::TimedOut
+        }
     };
 
     (StatusCode::OK, Json(render(&outcome, &request))).into_response()

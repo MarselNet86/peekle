@@ -31,7 +31,15 @@ pub fn dismiss_prompt(app: AppHandle, state: State<'_, Arc<AppState>>, prompt_id
     settle(&app, &state, &prompt_id, PromptOutcome::Dismissed);
 }
 
-fn settle(app: &AppHandle, state: &Arc<AppState>, prompt_id: &str, outcome: PromptOutcome) {
+/// Shared by every path that settles a blocking prompt: an answer or a
+/// dismissal from the UI, and a timeout the router gave up on. tech.md 6.5
+/// and rule 10.
+pub(crate) fn settle(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    prompt_id: &str,
+    outcome: PromptOutcome,
+) {
     if !state.pending.resolve(prompt_id, outcome.clone()) {
         // Already settled by a timeout, a bypass or an earlier answer.
         return;
@@ -112,6 +120,15 @@ fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
 
     if !enabled {
         state.pending.resolve_all(PromptOutcome::Bypassed);
+
+        // `resolve_all` only settles the channels a hook is waiting on; it
+        // never touches `active_prompt` or the queue, and nothing else does
+        // either. Left alone, the panel keeps showing a permission nothing is
+        // waiting on any more, and clicking it later finds `pending.resolve`
+        // returning false and does nothing at all. tech.md rule 10.
+        if let Some(request) = state.clear_prompts() {
+            windows::close_prompt(app, &request.id, &PromptOutcome::Bypassed);
+        }
     }
 
     if let Err(err) = app.emit(events::ENABLED, serde_json::json!({ "enabled": enabled })) {

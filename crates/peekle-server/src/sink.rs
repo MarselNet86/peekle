@@ -28,6 +28,16 @@ pub trait HookSink: Send + Sync + 'static {
     /// Held below the hook timeout so Peekle always answers first.
     fn prompt_timeout(&self) -> Duration;
 
+    /// The shared timeout elapsed with nobody answering. The HTTP response
+    /// already went back to Claude Code as `TimedOut`; this is what tells the
+    /// rest of the app the same thing, so the panel does not go on showing a
+    /// decision nothing is waiting on any more and the next queued request
+    /// gets its turn. Without it the registry entry and the active prompt both
+    /// outlive the response that already settled them, and a click on the
+    /// stale panel later finds nothing left to resolve and does nothing at
+    /// all. tech.md rule 10.
+    fn settle_timeout(&self, id: &str);
+
     /// Non-blocking events. These never hold up a turn, so they take the raw
     /// payload and return nothing.
     fn on_feed(&self, payload: &Value);

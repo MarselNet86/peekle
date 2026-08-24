@@ -108,6 +108,15 @@ impl HookSink for AppSink {
         self.state.prompt_timeout()
     }
 
+    /// The router gave up waiting and already answered Claude Code as
+    /// `TimedOut`. Settles the same way an explicit answer from the island
+    /// would, through the very same function, so the panel and the queue do
+    /// not go on believing a decision is still open after the agent has
+    /// stopped waiting for one. tech.md rule 10.
+    fn settle_timeout(&self, id: &str) {
+        crate::commands::settle(&self.app, &self.state, id, PromptOutcome::TimedOut);
+    }
+
     /// One endpoint, three events. UserPromptSubmit, PreToolUse and PostToolUse
     /// all land here. tech.md 6.1.
     fn on_feed(&self, payload: &Value) {

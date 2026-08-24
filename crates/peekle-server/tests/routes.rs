@@ -36,6 +36,8 @@ struct TestSink {
     /// Every `/stop` payload the sink was handed. A Stop is an event now, so
     /// what matters is that it arrived, not what it decided. tech.md 6.2.
     stops: Mutex<Vec<Value>>,
+    /// Ids the router told the sink it gave up waiting on. tech.md rule 10.
+    timed_out: Mutex<Vec<String>>,
 }
 
 impl TestSink {
@@ -48,6 +50,7 @@ impl TestSink {
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
             stops: Mutex::new(Vec::new()),
+            timed_out: Mutex::new(Vec::new()),
         })
     }
 
@@ -60,6 +63,7 @@ impl TestSink {
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
             stops: Mutex::new(Vec::new()),
+            timed_out: Mutex::new(Vec::new()),
         })
     }
 
@@ -73,6 +77,7 @@ impl TestSink {
             feeds: Mutex::new(Vec::new()),
             held: Mutex::new(Vec::new()),
             stops: Mutex::new(Vec::new()),
+            timed_out: Mutex::new(Vec::new()),
         })
     }
 }
@@ -99,6 +104,10 @@ impl HookSink for TestSink {
 
     fn prompt_timeout(&self) -> Duration {
         self.timeout
+    }
+
+    fn settle_timeout(&self, id: &str) {
+        self.timed_out.lock().unwrap().push(id.to_string());
     }
 
     fn on_feed(&self, payload: &Value) {
@@ -299,10 +308,32 @@ async fn a_disabled_peekle_answers_empty_without_opening_a_prompt() {
 #[tokio::test]
 async fn a_prompt_that_is_never_answered_times_out_into_an_empty_body() {
     let sink = TestSink::silent();
+    let handle = Arc::clone(&sink);
     let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/permission"), "{}").await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
+
+    // The response already told Claude Code the prompt is settled, so the
+    // rest of the app has to be told the same thing: a leaked registry entry
+    // and a panel with nothing left to click for is rule 10's exact failure.
+    let request = handle.seen.lock().unwrap();
+    assert_eq!(
+        handle.timed_out.lock().unwrap().as_slice(),
+        [request[0].id.clone()],
+        "the sink must hear about the id that timed out"
+    );
+}
+
+/// A prompt somebody actually answered must not also be reported as timed
+/// out: that would settle the same request twice from two different callers.
+#[tokio::test]
+async fn an_answered_prompt_is_never_also_reported_as_timed_out() {
+    let sink = TestSink::new(Some(PromptOutcome::Dismissed));
+    let handle = Arc::clone(&sink);
+    post(app(sink), &format!("/v1/h/{TOKEN}/permission"), "{}").await;
+
+    assert!(handle.timed_out.lock().unwrap().is_empty());
 }
 
 #[tokio::test]

@@ -86,6 +86,10 @@ impl HookSink for FixtureSink {
         self.stops.lock().unwrap().push(payload.clone());
     }
 
+    /// Not exercised here: the fixture contract tests never let a prompt run
+    /// long enough to time out.
+    fn settle_timeout(&self, _id: &str) {}
+
     fn prompt_timeout(&self) -> Duration {
         Duration::from_millis(80)
     }
