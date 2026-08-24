@@ -9,6 +9,7 @@ pub mod labels;
 pub mod pending;
 pub mod pty;
 pub mod sessions;
+pub mod shots;
 pub mod time;
 pub mod transcripts;
 pub mod types;
@@ -20,6 +21,7 @@ pub use labels::classify;
 pub use pending::PendingRegistry;
 pub use pty::{PtyError, PtyHost, SharedPtyHost, SpawnSpec};
 pub use sessions::{FeedEvent, SessionRegistry};
+pub use shots::{OfferSlot, Pasteboard};
 pub use types::*;
 
 /// Where `claude` might be, in the order tech.md 6.4 gives.

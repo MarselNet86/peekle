@@ -303,6 +303,28 @@ pub struct ToastRequest {
     pub badge: Option<u32>,
 }
 
+/// A screenshot sitting on the pasteboard, offered to a session.
+///
+/// The image itself is not in here and never will be: `PeekleState` is
+/// serialized whole on every event, and the offer is answered by a key rather
+/// than by looking at a preview. tech.md 6.13.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ShotOffer {
+    /// ulid, minted by peekle. Names the file it becomes.
+    pub id: String,
+    /// The owned session it would attach to.
+    pub session_id: String,
+    /// Project of that session, so the offer names where the shot is going.
+    pub project: String,
+    /// unix ms
+    #[ts(type = "number")]
+    pub created_at: i64,
+    /// unix ms
+    #[ts(type = "number")]
+    pub expires_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PeekleState {
@@ -314,6 +336,9 @@ pub struct PeekleState {
     /// Freshest activity first, capped at 50.
     pub tasks: Vec<TaskItem>,
     pub usage: UsageSnapshot,
+    /// The screenshot offer standing right now. Lives seconds, and only
+    /// one stands at a time. tech.md 6.13.
+    pub shot: Option<ShotOffer>,
     pub live_sessions: u32,
     /// false when the combination is held by another application.
     pub hotkey_ok: bool,

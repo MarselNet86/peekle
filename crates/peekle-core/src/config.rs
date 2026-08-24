@@ -19,6 +19,12 @@ pub const PORT_FILE: &str = ".peekle/port";
 
 const OWNER_ONLY: u32 = 0o600;
 const MAX_FEED_VISIBLE_ROWS: u8 = 6;
+const MIN_SHOT_POLL_MS: u64 = 100;
+const MAX_SHOT_POLL_MS: u64 = 5_000;
+const MIN_SHOT_OFFER_SECS: u32 = 1;
+/// An offer holds the Up arrow away from every other application, so its
+/// upper bound is a product decision, not a preference. tech.md R-14.
+const MAX_SHOT_OFFER_SECS: u32 = 30;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -44,6 +50,8 @@ pub struct Config {
     pub usage: UsageConfig,
     #[serde(default)]
     pub behavior: BehaviorConfig,
+    #[serde(default)]
+    pub shots: ShotsConfig,
 
     /// Sections this build does not know. Kept so a round trip does not delete
     /// a newer Peekle's settings.
@@ -65,6 +73,11 @@ pub struct HotkeyConfig {
     pub toggle: String,
     /// Empty means do not register.
     pub recall: String,
+    /// Agreement to attach a screenshot. Held only while an offer stands, and
+    /// dropped on every path that settles one, because a modifierless key
+    /// taken from the whole system for good would be a fault. Empty switches
+    /// the offer off. tech.md 6.9 and 6.13.
+    pub attach: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +112,21 @@ pub enum UsageProviderKind {
     Off,
 }
 
+/// Watching the pasteboard for screenshots. tech.md 6.13.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShotsConfig {
+    pub enabled: bool,
+    /// How long an offer stands before it settles itself.
+    pub offer_secs: u32,
+    /// How often the pasteboard change count is read. The tick costs one call
+    /// and touches no contents; the key exists so a slow machine can slacken
+    /// it, not so it gets tuned. tech.md 6.8.
+    pub poll_ms: u64,
+    /// How many written screenshots the cache keeps.
+    pub keep: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BehaviorConfig {
@@ -131,6 +159,7 @@ impl Default for HotkeyConfig {
         Self {
             toggle: "Alt+Shift+KeyQ".to_string(),
             recall: String::new(),
+            attach: "ArrowUp".to_string(),
         }
     }
 }
@@ -152,6 +181,17 @@ impl Default for UsageConfig {
             provider: UsageProviderKind::Account,
             keychain_denied: false,
             keychain_granted: false,
+        }
+    }
+}
+
+impl Default for ShotsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            offer_secs: 5,
+            poll_ms: 400,
+            keep: 20,
         }
     }
 }
@@ -211,6 +251,14 @@ impl Config {
         if self.server.token.is_empty() {
             self.server.token = generate_token();
         }
+        // A zero poll would spin a core reading a counter, and an offer with no
+        // life at all could never be answered. Both are configuration mistakes
+        // rather than choices, so they are clamped out of the way.
+        self.shots.poll_ms = self.shots.poll_ms.clamp(MIN_SHOT_POLL_MS, MAX_SHOT_POLL_MS);
+        self.shots.offer_secs = self
+            .shots
+            .offer_secs
+            .clamp(MIN_SHOT_OFFER_SECS, MAX_SHOT_OFFER_SECS);
     }
 }
 
@@ -277,6 +325,29 @@ mod tests {
     fn feed_visible_rows_clamps_to_six() {
         let config = Config::from_toml("[ui]\nfeed_visible_rows = 40\n").unwrap();
         assert_eq!(config.ui.feed_visible_rows, 6);
+    }
+
+    #[test]
+    fn shots_defaults_are_the_ones_in_the_contract() {
+        let config = Config::default();
+        assert!(config.shots.enabled);
+        assert_eq!(config.shots.offer_secs, 5);
+        assert_eq!(config.shots.poll_ms, 400);
+        assert_eq!(config.shots.keep, 20);
+        assert_eq!(config.hotkey.attach, "ArrowUp");
+    }
+
+    /// An offer with no life could never be answered, and a zero poll would
+    /// spin a core on a counter. tech.md 6.8.
+    #[test]
+    fn a_nonsense_shot_window_is_clamped_rather_than_obeyed() {
+        let config = Config::from_toml("[shots]\npoll_ms = 0\noffer_secs = 0\n").unwrap();
+        assert_eq!(config.shots.poll_ms, 100);
+        assert_eq!(config.shots.offer_secs, 1);
+
+        let config = Config::from_toml("[shots]\npoll_ms = 90000\noffer_secs = 600\n").unwrap();
+        assert_eq!(config.shots.poll_ms, 5_000);
+        assert_eq!(config.shots.offer_secs, 30);
     }
 
     #[test]

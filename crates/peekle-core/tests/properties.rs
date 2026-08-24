@@ -3,6 +3,7 @@
 
 use peekle_core::island::{shape_rect, Rect};
 use peekle_core::labels::classify;
+use peekle_core::shots::compose;
 use peekle_core::types::{clamp_pct, UsageWindow, UsageWindowStat};
 use proptest::prelude::*;
 
@@ -90,6 +91,41 @@ proptest! {
 
         if rect.contains((px, py)) {
             prop_assert!(window.contains((px, py)));
+        }
+    }
+}
+
+proptest! {
+    /// A reply with attachments still carries the user's words exactly. The
+    /// paths are added, nothing is escaped, and nothing is rewritten: the same
+    /// rule the pty write lives by. tech.md 6.13 and 6.5.
+    #[test]
+    fn the_text_survives_any_number_of_attachments(
+        text in "[^\n]{1,80}",
+        shots in proptest::collection::vec("/tmp/[a-z0-9]{1,20}\\.png", 0..4),
+    ) {
+        let composed = compose(&text, &shots);
+        prop_assert!(composed.ends_with(&text));
+
+        let lines: Vec<&str> = composed.split('\n').collect();
+        prop_assert_eq!(lines.len(), shots.len() + 1);
+        for (line, shot) in lines.iter().zip(shots.iter()) {
+            prop_assert_eq!(line, shot);
+        }
+    }
+
+    /// Order is the contract: every path stands on its own line ahead of the
+    /// text, whichever paths they are.
+    #[test]
+    fn attachments_keep_their_order(
+        shots in proptest::collection::vec("/tmp/[a-z0-9]{1,20}\\.png", 1..5),
+    ) {
+        let composed = compose("look", &shots);
+        let mut at = 0usize;
+        for shot in &shots {
+            let found = composed[at..].find(shot.as_str());
+            prop_assert!(found.is_some());
+            at += found.unwrap_or(0) + shot.len();
         }
     }
 }

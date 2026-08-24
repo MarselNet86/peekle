@@ -2,6 +2,7 @@
 import type { IslandView } from "./IslandView";
 import type { PromptRequest } from "./PromptRequest";
 import type { SessionCard } from "./SessionCard";
+import type { ShotOffer } from "./ShotOffer";
 import type { TaskItem } from "./TaskItem";
 import type { UsageSnapshot } from "./UsageSnapshot";
 
@@ -13,7 +14,12 @@ sessions: Array<SessionCard>,
 /**
  * Freshest activity first, capped at 50.
  */
-tasks: Array<TaskItem>, usage: UsageSnapshot, live_sessions: number, 
+tasks: Array<TaskItem>, usage: UsageSnapshot, 
+/**
+ * The screenshot offer standing right now. Lives seconds, and only
+ * one stands at a time. tech.md 6.13.
+ */
+shot: ShotOffer | null, live_sessions: number, 
 /**
  * false when the combination is held by another application.
  */
