@@ -26,6 +26,7 @@ Stage 1 is in and most of stage 2 with it.
 | Hotkey               | Working, ⌥⇧Q toggles the bypass                                |
 | CLI                  | init, uninstall, doctor, status. `off` is not built            |
 | Usage bars           | Working from the account, dashes with a reason when it cannot  |
+| Screenshots          | ⌃⇧⌘4 offers to attach the shot to a session Peekle started     |
 | Packaging, first run | Not started, S10 and S11                                       |
 
 ## Requirements
@@ -125,7 +126,24 @@ src-tauri/src/       windows, panels, commands, state
 crates/peekle-core   types, config, pending registry, label classifier
 crates/peekle-server axum router for the hook endpoints
 fixtures/hooks/      captured payloads, never hand written
+fixtures/pasteboard/ captured pasteboard shapes, never hand written
 ```
+
+## Screenshots
+
+Take one with ⌃⇧⌘4, which puts it on the clipboard. The notch offers to attach
+it for five seconds; press the up arrow and it lands in the field of the
+session you were last working in, where you say what you want done with it.
+
+Only a session Peekle started can take one. There is no way to type into a
+process Peekle did not start (tech.md 6.5), so a screenshot has nowhere to go
+in a session you began in your own terminal. Start one with New session in the
+island.
+
+Detection reads the type names on the clipboard and never the contents, so
+nothing asks for permission until you press the key. The image is written to
+`~/Library/Caches/peekle/shots/` and the path travels to the agent as a line of
+the message.
 
 ## Tests
 
@@ -147,6 +165,15 @@ than no test at all.
 ```sh
 ./scripts/capture-hooks.sh 180
 ./scripts/capture-hooks.sh --restore   # after a hard kill
+```
+
+The same rule holds for the clipboard shapes behind the screenshot offer. The
+script makes macOS write each case and records the type names only; it saves
+and restores whatever you had copied.
+
+```sh
+./scripts/capture-pasteboard.sh              # every scripted case
+./scripts/capture-pasteboard.sh live <name>  # whatever is on the clipboard now
 ```
 
 The script backs up `~/.claude/settings.json`, installs capture handlers, and
