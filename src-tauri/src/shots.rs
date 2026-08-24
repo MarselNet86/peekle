@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use peekle_core::shots::{self, Pasteboard};
-use peekle_core::types::{ShotOffer, ToastRequest, ToastTone};
+use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
@@ -109,6 +109,7 @@ fn tick(app: &AppHandle, state: &Arc<AppState>) {
     if let Some(offer) = state.shot.take_expired(now) {
         tracing::debug!(id = %offer.id, "nobody answered the screenshot offer");
         close_offer(app, state);
+        put_away(app, state);
     }
 
     let count = state.pasteboard.change_count();
@@ -159,6 +160,9 @@ fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
 
     tracing::debug!(session = %offer.session_id, "offering to attach a screenshot");
     emit_offer(app, Some(&offer));
+    // The offer is one line of status, which is what `Pill` is. It runs on its
+    // own clock exactly like a toast does. tech.md 6.7.
+    windows::set_view(app, IslandView::Pill);
 }
 
 /// The user agreed. The one path that reads the contents of the pasteboard.
@@ -174,6 +178,8 @@ pub fn attach(app: &AppHandle) {
     close_offer(app, &state);
 
     let Some(png) = state.pasteboard.read_png() else {
+        // Every path from here down leaves the island where the offer left it,
+        // so the pill has to come down on its own.
         // The user copied something else between the offer and the answer.
         tracing::warn!("the screenshot left the pasteboard before it was attached");
         say(app, "The screenshot is gone");
@@ -218,6 +224,16 @@ pub fn attach(app: &AppHandle) {
 fn close_offer(app: &AppHandle, state: &Arc<AppState>) {
     release_attach_key(app, state);
     emit_offer(app, None);
+}
+
+/// Takes the pill down, and only the pill. Something more important may have
+/// opened while the offer stood, and collapsing then would throw away a
+/// session the user is reading. The agreement path skips this entirely: it
+/// opens the session next, and a collapse in between reads as a glitch.
+fn put_away(app: &AppHandle, state: &Arc<AppState>) {
+    if state.view() == IslandView::Pill {
+        windows::set_view(app, IslandView::Collapsed);
+    }
 }
 
 fn emit_offer(app: &AppHandle, offer: Option<&ShotOffer>) {
