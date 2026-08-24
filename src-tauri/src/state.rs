@@ -733,6 +733,7 @@ mod tests {
             last_message: None,
             detail: None,
             options: Vec::new(),
+            questions: Vec::new(),
             allow_free_text: true,
             created_at: 0,
             expires_at: 0,
