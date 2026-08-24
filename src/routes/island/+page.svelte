@@ -2,7 +2,7 @@
   import { commands } from '$lib/bridge';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
-  import { choiceFor, isPermission } from '$lib/features/permission/permission.svelte';
+  import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
   import {
     hideSession,
     openList,
@@ -19,6 +19,7 @@
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
+  import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
@@ -150,6 +151,7 @@
   }
 
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
+  const question = $derived(isQuestion(island.prompt) ? island.prompt : null);
 
   function answerPermission(kind: 'allow' | 'deny') {
     const choice = choiceFor(island.prompt, kind);
@@ -355,6 +357,13 @@
               request={permission}
               onallow={() => answerPermission('allow')}
               ondeny={() => answerPermission('deny')}
+            />
+          </div>
+        {:else if question}
+          <div class="reply">
+            <QuestionPrompt
+              questions={question.questions}
+              onsubmit={(answers) => island.answerQuestions(answers)}
             />
           </div>
         {:else}

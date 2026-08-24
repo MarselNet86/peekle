@@ -10,6 +10,7 @@ import { commands, events } from '$lib/bridge';
 import { readNotch, type Notch } from '$lib/logic/shape';
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
+import type { QuestionAnswer } from '$lib/types/generated/QuestionAnswer';
 import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 
 export function createIsland(search = '') {
@@ -50,7 +51,7 @@ export function createIsland(search = '') {
       prompt = null;
       // A denial is an answer to the hook, not a message, and the hook takes
       // text alone. Whatever is attached stays in the field. tech.md 6.13.
-      commands.answerPrompt({ prompt_id: open.id, choice: null, text: trimmed });
+      commands.answerPrompt({ prompt_id: open.id, choice: null, text: trimmed, answers: [] });
       return;
     }
     if (sessionId) commands.sendMessage(sessionId, trimmed, shots);
@@ -60,7 +61,15 @@ export function createIsland(search = '') {
     const open = prompt;
     if (!open) return;
     prompt = null;
-    commands.answerPrompt({ prompt_id: open.id, choice: choiceId, text: null });
+    commands.answerPrompt({ prompt_id: open.id, choice: choiceId, text: null, answers: [] });
+  }
+
+  /** Every question of an AskUserQuestion, answered at once. tech.md 6.14. */
+  function answerQuestions(answers: QuestionAnswer[]) {
+    const open = prompt;
+    if (!open) return;
+    prompt = null;
+    commands.answerPrompt({ prompt_id: open.id, choice: null, text: null, answers });
   }
 
   function dismiss() {
@@ -122,6 +131,7 @@ export function createIsland(search = '') {
     },
     answer,
     choose,
+    answerQuestions,
     dismiss,
     show,
     start,

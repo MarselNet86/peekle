@@ -6,6 +6,7 @@
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
+  import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
@@ -117,6 +118,28 @@
     },
   ];
 
+  const questions: import('$lib/types/generated/Question').Question[] = [
+    {
+      header: 'Framework',
+      question: 'Which framework should the new dashboard use?',
+      options: [
+        { label: 'SvelteKit', description: 'Already the stack everywhere else' },
+        { label: 'Next.js', description: null },
+      ],
+      multi_select: false,
+    },
+    {
+      header: 'Checks',
+      question: 'Which checks should block the merge?',
+      options: [
+        { label: 'Lint', description: null },
+        { label: 'Type check', description: null },
+        { label: 'Tests', description: null },
+      ],
+      multi_select: true,
+    },
+  ];
+
   const permission: PromptRequest = {
     id: '01J0',
     kind: 'Permission',
@@ -129,6 +152,7 @@
       { id: 'allow_always', label: 'Allow for this session', hint: null, kind: 'AllowAlways' },
       { id: 'deny', label: 'Deny', hint: null, kind: 'Deny' },
     ],
+    questions: [],
     allow_free_text: true,
     created_at: 0,
     expires_at: 0,
@@ -349,6 +373,13 @@
   <section>
     <h2>PermissionRow</h2>
     <div class="frame"><PermissionRow request={permission} /></div>
+  </section>
+
+  <section>
+    <h2>QuestionPrompt</h2>
+    <!-- AskUserQuestion answered one question at a time: single-select
+         advances on click, multiSelect needs its own Submit. tech.md 6.14. -->
+    <div class="frame"><QuestionPrompt {questions} /></div>
   </section>
 
   <section>

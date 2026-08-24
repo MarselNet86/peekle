@@ -21,3 +21,8 @@ export function choiceFor(
 export function isPermission(request: PromptRequest | null): boolean {
   return request?.kind === 'Permission';
 }
+
+/** AskUserQuestion: its own questions, not a flat allow/deny list. tech.md 6.14. */
+export function isQuestion(request: PromptRequest | null): boolean {
+  return request?.kind === 'Question';
+}

@@ -91,4 +91,42 @@ describe('OptionList', () => {
 
     expect(onselect).toHaveBeenCalledWith('allow_always');
   });
+
+  /// A permission is one choice, an AskUserQuestion multiSelect question is
+  /// several: `multiple` swaps radio-and-done for checkboxes that keep every
+  /// pick, rather than one overwriting the last. tech.md 6.14.
+  describe('multiple mode', () => {
+    it('keeps every checked option rather than replacing the last one', async () => {
+      render(OptionList, { props: { options, multiple: true } });
+
+      await userEvent.click(screen.getByText('Allow once'));
+      await userEvent.click(screen.getByText('Deny'));
+
+      // Two independent picks, not one overwriting the other.
+      expect(screen.getByText('Allow once').closest('[role="checkbox"]')).toHaveAttribute(
+        'data-state',
+        'checked',
+      );
+      expect(screen.getByText('Deny').closest('[role="checkbox"]')).toHaveAttribute(
+        'data-state',
+        'checked',
+      );
+    });
+
+    it('toggles a row on its digit instead of locking in a single answer', async () => {
+      render(OptionList, { props: { options, multiple: true } });
+
+      await userEvent.keyboard('1');
+      expect(screen.getByText('Allow once').closest('[role="checkbox"]')).toHaveAttribute(
+        'data-state',
+        'checked',
+      );
+
+      await userEvent.keyboard('1');
+      expect(screen.getByText('Allow once').closest('[role="checkbox"]')).toHaveAttribute(
+        'data-state',
+        'unchecked',
+      );
+    });
+  });
 });

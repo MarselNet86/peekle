@@ -24,6 +24,7 @@ const request: PromptRequest = {
     { id: 'allow_always', label: 'Allow for this session', hint: null, kind: 'AllowAlways' },
     { id: 'deny', label: 'Deny', hint: null, kind: 'Deny' },
   ],
+  questions: [],
   allow_free_text: true,
   created_at: 0,
   expires_at: 0,
