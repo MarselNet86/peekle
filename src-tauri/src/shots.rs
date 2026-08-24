@@ -124,6 +124,18 @@ fn tick(app: &AppHandle, state: &Arc<AppState>) {
 
 /// Puts the offer up, or decides there is nothing to offer.
 fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
+    // An active permission request already holds the view and is the
+    // stronger claim, the same way it outranks a `Stop` reveal. tech.md 6.7.
+    // Forcing the pill over it would not queue behind it: `set_view` simply
+    // overwrites the view, so the permission's own `Session` view is gone and
+    // nothing ever brings it back once the pill's five seconds are up --
+    // the pending hook is still blocking, but there is no longer any UI left
+    // that can answer it. That is the freeze this guards against.
+    if state.active_prompt().is_some() {
+        tracing::debug!("a permission request holds the view, so no screenshot offer");
+        return;
+    }
+
     let Some(card) = state.newest_owned_session() else {
         // A screenshot with nowhere to go. An observed session has no input
         // field, so there is nothing to attach it to. tech.md 6.5 and 6.13.
