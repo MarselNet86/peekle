@@ -31,7 +31,9 @@
   const NOW = 1_700_000_000;
 
   const options: ChoiceOption[] = [
-    { id: 'allow_once', label: 'Allow once', hint: null, kind: 'AllowOnce' },
+    // A trailing "(Recommended)" in the label is the badge, the same
+    // convention `AskUserQuestion` marks its own pick with. No extra field.
+    { id: 'allow_once', label: 'Allow once (Recommended)', hint: null, kind: 'AllowOnce' },
     { id: 'allow_always', label: 'Allow for this session', hint: null, kind: 'AllowAlways' },
     { id: 'deny', label: 'Deny', hint: 'Type a reason first', kind: 'Deny' },
   ];

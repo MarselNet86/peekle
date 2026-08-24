@@ -2,6 +2,7 @@
   // bits-ui 2 ships no Listbox. RadioGroup is its headless single-select with
   // roving focus, which is exactly the keyboard behaviour section 9 asks for.
   import { RadioGroup } from 'bits-ui';
+  import { parseLabel } from '$lib/logic/options';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
 
   let {
@@ -31,7 +32,13 @@
   {#each options as option, index (option.id)}
     <RadioGroup.Item value={option.id} class="row" data-kind={option.kind}>
       <span class="index">{index + 1}</span>
-      <span class="label">{option.label}</span>
+      <span class="label">{parseLabel(option.label).text}</span>
+      <!-- Claude's own pick, marked the way a recommended AskUserQuestion
+           answer already is: a trailing "(Recommended)" in the label.
+           tech.md 9. -->
+      {#if parseLabel(option.label).recommended}
+        <span class="recommended">Recommended</span>
+      {/if}
       {#if option.hint}
         <span class="hint">{option.hint}</span>
       {/if}
@@ -88,5 +95,17 @@
     margin-left: auto;
     color: var(--text-dim);
     font-size: 11px;
+  }
+
+  .recommended {
+    margin-left: auto;
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(125, 216, 143, 0.16);
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 </style>
