@@ -161,6 +161,7 @@ fn answered(choice: Option<&str>, text: Option<&str>) -> PromptOutcome {
         prompt_id: "p".to_string(),
         choice: choice.map(str::to_owned),
         text: text.map(str::to_owned),
+        answers: Vec::new(),
     })
 }
 

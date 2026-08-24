@@ -3,11 +3,15 @@
 
 use peekle_core::truncate;
 use peekle_core::types::{
-    ChoiceKind, ChoiceOption, PromptAnswer, PromptKind, PromptOutcome, PromptRequest, SessionRef,
+    ChoiceKind, ChoiceOption, PromptAnswer, PromptKind, PromptOutcome, PromptRequest, Question,
+    QuestionOption, SessionRef,
 };
 use serde_json::{json, Value};
 
 const DETAIL_LIMIT: usize = 400;
+const TITLE_LIMIT: usize = 80;
+/// Claude only ever asks one to four at once. tech.md 6.14.
+const MAX_QUESTIONS: usize = 4;
 
 /// Claude Code adds fields between versions, so every lookup is optional and
 /// a missing one degrades the panel rather than rejecting the hook.
@@ -41,6 +45,59 @@ pub fn block_body(text: &str) -> Value {
     json!({"decision": "block", "reason": text.trim()})
 }
 
+/// `AskUserQuestion`'s `tool_input.questions`, as captured live in
+/// `fixtures/hooks/ask_user_question.jsonl`. `None` for anything malformed or
+/// missing: a tool call that claims to be `AskUserQuestion` but carries no
+/// question array degrades to the generic permission treatment rather than
+/// producing a request with nothing to answer. tech.md 6.14.
+fn parse_questions(tool_input: &Value) -> Option<Vec<Question>> {
+    let raw = tool_input.get("questions")?.as_array()?;
+    if raw.is_empty() {
+        return None;
+    }
+
+    let questions: Vec<Question> = raw
+        .iter()
+        .take(MAX_QUESTIONS)
+        .filter_map(|q| {
+            let question = q.get("question")?.as_str()?.to_string();
+            let header = q
+                .get("header")
+                .and_then(Value::as_str)
+                .unwrap_or(&question)
+                .to_string();
+            let options: Vec<QuestionOption> = q
+                .get("options")?
+                .as_array()?
+                .iter()
+                .filter_map(|o| {
+                    Some(QuestionOption {
+                        label: o.get("label")?.as_str()?.to_string(),
+                        description: o
+                            .get("description")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                    })
+                })
+                .collect();
+            if options.is_empty() {
+                return None;
+            }
+            Some(Question {
+                header,
+                question,
+                options,
+                multi_select: q
+                    .get("multiSelect")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            })
+        })
+        .collect();
+
+    (!questions.is_empty()).then_some(questions)
+}
+
 pub fn permission_request(
     id: String,
     payload: &Value,
@@ -48,6 +105,36 @@ pub fn permission_request(
     expires_ms: i64,
 ) -> PromptRequest {
     let tool = string_field(payload, "tool_name").unwrap_or_else(|| "a tool".to_string());
+
+    // `AskUserQuestion` needs its own questions answered, not a generic
+    // allow/deny: an allow alone never answers it, only `updatedInput` does,
+    // per code.claude.com/docs/en/hooks. tech.md 6.14.
+    if tool == "AskUserQuestion" {
+        if let Some(questions) = payload.get("tool_input").and_then(parse_questions) {
+            // The question itself, not the header: the header is a label for
+            // a tab strip with more than one question, and alone it says
+            // nothing about what is actually being asked.
+            let title = if questions.len() == 1 {
+                truncate(&questions[0].question, TITLE_LIMIT)
+            } else {
+                format!("{} questions", questions.len())
+            };
+            return PromptRequest {
+                id,
+                kind: PromptKind::Question,
+                session: session_ref(payload),
+                title,
+                last_message: None,
+                detail: None,
+                options: Vec::new(),
+                questions,
+                allow_free_text: false,
+                created_at: now_ms,
+                expires_at: expires_ms,
+            };
+        }
+    }
+
     let detail = payload.get("tool_input").map(|input| {
         let rendered = match input {
             Value::String(text) => text.clone(),
@@ -83,6 +170,7 @@ pub fn permission_request(
                 kind: ChoiceKind::Deny,
             },
         ],
+        questions: Vec::new(),
         allow_free_text: true,
         created_at: now_ms,
         expires_at: expires_ms,
@@ -94,6 +182,10 @@ pub fn permission_body(outcome: &PromptOutcome, request: &PromptRequest) -> Valu
     let PromptOutcome::Answered(answer) = outcome else {
         return json!({});
     };
+
+    if request.kind == PromptKind::Question {
+        return question_body(answer, request);
+    }
 
     let decision = match choice_kind(request, answer) {
         Some(ChoiceKind::AllowOnce) | Some(ChoiceKind::AllowAlways) => json!({"behavior": "allow"}),
@@ -122,6 +214,69 @@ pub fn permission_body(outcome: &PromptOutcome, request: &PromptRequest) -> Valu
     })
 }
 
+/// Answers an `AskUserQuestion`. `"allow"` alone never answers it: Claude Code
+/// still needs the tool's input filled in, so the decision carries
+/// `updatedInput` echoing `questions` back verbatim plus an `answers` map from
+/// each question's own text to the label the user picked, joined with a comma
+/// when the question allowed more than one. Nothing answered at all -- the
+/// island was closed, or it timed out -- falls back to an empty body the same
+/// way a permission with no recognised choice does: Claude Code shows its own
+/// prompt instead. tech.md 6.14.
+fn question_body(answer: &PromptAnswer, request: &PromptRequest) -> Value {
+    if answer.answers.is_empty() {
+        return json!({});
+    }
+
+    let answers: serde_json::Map<String, Value> = answer
+        .answers
+        .iter()
+        .map(|qa| (qa.question.clone(), json!(qa.labels.join(", "))))
+        .collect();
+
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {
+                "behavior": "allow",
+                "updatedInput": {
+                    "questions": echo_questions(&request.questions),
+                    "answers": answers,
+                }
+            }
+        }
+    })
+}
+
+/// Rebuilds the wire shape of `tool_input.questions`, the "unchanged fields"
+/// `updatedInput` has to carry alongside `answers`. Built from `Question`
+/// rather than serialized through it: the wire uses `multiSelect`, and this
+/// struct's own derive is for the Tauri bridge, not for Claude Code's hook
+/// contract. tech.md 6.14.
+fn echo_questions(questions: &[Question]) -> Value {
+    json!(questions
+        .iter()
+        .map(|q| {
+            let options: Vec<Value> = q
+                .options
+                .iter()
+                .map(|o| {
+                    let mut option = json!({"label": o.label});
+                    if let Some(description) = &o.description {
+                        option["description"] = json!(description);
+                    }
+                    option
+                })
+                .collect();
+            json!({
+                "question": q.question,
+                "header": q.header,
+                "options": options,
+                "multiSelect": q.multi_select,
+            })
+        })
+        .collect::<Vec<_>>())
+}
+
 fn choice_kind(request: &PromptRequest, answer: &PromptAnswer) -> Option<ChoiceKind> {
     let id = answer.choice.as_deref()?;
     request
@@ -140,6 +295,7 @@ mod tests {
             prompt_id: "p".to_string(),
             choice: choice.map(str::to_owned),
             text: text.map(str::to_owned),
+            answers: Vec::new(),
         })
     }
 
@@ -235,5 +391,90 @@ mod tests {
         let request = permission_request("p".into(), &json!({}), 0, 0);
         assert_eq!(request.session.session_id, "");
         assert_eq!(request.detail, None);
+    }
+
+    fn ask(input: Value) -> PromptRequest {
+        permission_request(
+            "p".into(),
+            &json!({"tool_name": "AskUserQuestion", "tool_input": input}),
+            0,
+            0,
+        )
+    }
+
+    #[test]
+    fn a_recognised_question_becomes_prompt_kind_question() {
+        let request = ask(json!({
+            "questions": [{
+                "question": "Which framework?",
+                "header": "Framework",
+                "options": [{"label": "React"}, {"label": "Vue"}],
+                "multiSelect": false,
+            }]
+        }));
+        assert_eq!(request.kind, PromptKind::Question);
+        assert_eq!(request.questions.len(), 1);
+        assert_eq!(request.questions[0].options.len(), 2);
+        assert!(
+            request.options.is_empty(),
+            "not the generic allow/deny list"
+        );
+    }
+
+    /// A description is optional per the AskUserQuestion tool schema, and its
+    /// absence must not drop the option itself.
+    #[test]
+    fn an_option_with_no_description_still_counts() {
+        let request = ask(json!({
+            "questions": [{
+                "question": "Ship now?",
+                "header": "Ship",
+                "options": [{"label": "Yes"}],
+            }]
+        }));
+        assert_eq!(request.questions[0].options[0].description, None);
+    }
+
+    /// More than one question is the whole point of a multi-question ask, and
+    /// the header falls back to the question text when Claude omits it.
+    #[test]
+    fn every_question_survives_and_falls_back_to_its_own_text() {
+        let request = ask(json!({
+            "questions": [
+                {"question": "A?", "options": [{"label": "yes"}]},
+                {"question": "B?", "header": "B", "options": [{"label": "yes"}]},
+            ]
+        }));
+        assert_eq!(request.questions.len(), 2);
+        assert_eq!(request.questions[0].header, "A?");
+        assert_eq!(request.questions[1].header, "B");
+    }
+
+    /// A tool call that claims to be `AskUserQuestion` but carries nothing
+    /// answerable degrades to the generic permission treatment rather than
+    /// producing a prompt with nothing to answer.
+    #[test]
+    fn a_malformed_question_payload_falls_back_to_a_plain_permission() {
+        for input in [
+            json!({}),
+            json!({"questions": []}),
+            json!({"questions": "not an array"}),
+            json!({"questions": [{"header": "no question field"}]}),
+            json!({"questions": [{"question": "Q?", "options": []}]}),
+            json!({"questions": [{"question": "Q?", "options": [{"no": "label"}]}]}),
+        ] {
+            let request = ask(input.clone());
+            assert_eq!(request.kind, PromptKind::Permission, "{input}");
+            assert!(request.questions.is_empty(), "{input}");
+        }
+    }
+
+    #[test]
+    fn at_most_four_questions_are_kept() {
+        let five: Vec<Value> = (0..5)
+            .map(|i| json!({"question": format!("Q{i}"), "options": [{"label": "x"}]}))
+            .collect();
+        let request = ask(json!({"questions": five}));
+        assert_eq!(request.questions.len(), 4);
     }
 }

@@ -16,7 +16,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use peekle_core::types::{PromptAnswer, PromptOutcome, PromptRequest};
+use peekle_core::types::{PromptAnswer, PromptOutcome, PromptRequest, QuestionAnswer};
 use peekle_server::routes::ServerState;
 use peekle_server::{router, HookSink};
 use serde_json::{json, Value};
@@ -330,6 +330,7 @@ async fn each_captured_permission_choice_maps_to_its_documented_envelope() {
             prompt_id: "p".to_string(),
             choice: Some(choice.to_string()),
             text: None,
+            answers: Vec::new(),
         })));
 
         let (status, body) = post(sink, "permission", &payload("permission")).await;
@@ -354,6 +355,7 @@ async fn a_captured_permission_denied_with_a_reason_carries_it() {
         prompt_id: "p".to_string(),
         choice: Some("deny".to_string()),
         text: Some("  not on this machine  ".to_string()),
+        answers: Vec::new(),
     })));
 
     let (status, body) = post(sink, "permission", &payload("permission")).await;
@@ -450,4 +452,117 @@ async fn a_captured_notification_answers_empty() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
     assert_eq!(handle.feeds.lock().unwrap().len(), 1);
+}
+
+/// S16. `AskUserQuestion` arrives through `/permission` in this environment,
+/// not `PreToolUse` the way the plain CLI documents it -- confirmed by asking
+/// a real question through this exact tool while capturing. tech.md 6.14.
+#[tokio::test]
+async fn a_captured_ask_user_question_builds_a_renderable_prompt() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
+    let handle = Arc::clone(&sink);
+
+    post(sink, "permission", &payload("ask_user_question")).await;
+
+    let seen = handle.seen.lock().unwrap();
+    let request = seen.first().expect("a prompt was opened");
+    assert_eq!(request.kind, peekle_core::types::PromptKind::Question);
+    assert_eq!(request.questions.len(), 2);
+    assert_eq!(request.questions[0].header, "Multi-select");
+    assert_eq!(request.questions[0].options.len(), 2);
+    assert!(!request.questions[0].multi_select);
+    // Not a generic allow/deny: the flat option list belongs to permission
+    // requests, and a question answers through `questions` instead.
+    assert!(request.options.is_empty());
+}
+
+/// The wire contract from code.claude.com/docs/en/hooks: `"allow"` alone never
+/// answers `AskUserQuestion`, only `updatedInput` does, and it has to echo
+/// `questions` back verbatim alongside the `answers` map. tech.md 6.14.
+#[tokio::test]
+async fn answering_a_captured_ask_user_question_echoes_it_back_with_answers() {
+    let captured = payload("ask_user_question");
+    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+        prompt_id: "p".to_string(),
+        choice: None,
+        text: None,
+        answers: vec![
+            QuestionAnswer {
+                question: captured["tool_input"]["questions"][0]["question"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+                labels: vec!["Сразу чекбоксы".to_string()],
+            },
+            QuestionAnswer {
+                question: captured["tool_input"]["questions"][1]["question"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+                labels: vec!["Только /permission (Recommended)".to_string()],
+            },
+        ],
+    })));
+
+    let (status, body) = post(sink, "permission", &captured).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let decision = &body["hookSpecificOutput"]["decision"];
+    assert_eq!(decision["behavior"], "allow");
+
+    let echoed = &decision["updatedInput"]["questions"];
+    assert_eq!(echoed, &captured["tool_input"]["questions"]);
+
+    let answers = &decision["updatedInput"]["answers"];
+    assert_eq!(
+        answers[captured["tool_input"]["questions"][0]["question"]
+            .as_str()
+            .unwrap()],
+        "Сразу чекбоксы"
+    );
+}
+
+/// A `multiSelect` question's chosen labels join with a comma -- the wire
+/// convention `AskUserQuestion` itself documents for its own `answers` field.
+#[tokio::test]
+async fn a_multi_select_answer_joins_its_labels_with_a_comma() {
+    let captured = payload("ask_user_question");
+    let question = captured["tool_input"]["questions"][0]["question"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sink = FixtureSink::new(Some(PromptOutcome::Answered(PromptAnswer {
+        prompt_id: "p".to_string(),
+        choice: None,
+        text: None,
+        answers: vec![QuestionAnswer {
+            question: question.clone(),
+            labels: vec![
+                "Только single-select в v1 (Recommended)".to_string(),
+                "Сразу чекбоксы".to_string(),
+            ],
+        }],
+    })));
+
+    let (status, body) = post(sink, "permission", &captured).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["hookSpecificOutput"]["decision"]["updatedInput"]["answers"][&question],
+        "Только single-select в v1 (Recommended), Сразу чекбоксы"
+    );
+}
+
+/// Closed without answering -- Escape, or the timeout -- carries no decision,
+/// same as a permission with no recognised choice: Claude Code falls back to
+/// its own prompt rather than the tool call hanging on nothing.
+#[tokio::test]
+async fn an_unanswered_ask_user_question_carries_no_decision() {
+    for outcome in [PromptOutcome::Dismissed, PromptOutcome::TimedOut] {
+        let sink = FixtureSink::new(Some(outcome.clone()));
+        let (status, body) = post(sink, "permission", &payload("ask_user_question")).await;
+
+        assert_eq!(status, StatusCode::OK, "{outcome:?}");
+        assert_eq!(body, json!({}), "{outcome:?}");
+    }
 }
