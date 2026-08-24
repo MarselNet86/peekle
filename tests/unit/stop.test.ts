@@ -109,7 +109,7 @@ describe('writing while the agent is busy', () => {
     const island = createIsland('');
     island.answer('keep going', 's1');
 
-    expect(commands.sendMessage).toHaveBeenCalledExactlyOnceWith('s1', 'keep going');
+    expect(commands.sendMessage).toHaveBeenCalledExactlyOnceWith('s1', 'keep going', []);
     expect(commands.answerPrompt).not.toHaveBeenCalled();
   });
 

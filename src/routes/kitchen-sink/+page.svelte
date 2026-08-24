@@ -13,6 +13,8 @@
   import SearchField from '$lib/ui/SearchField.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
+  import ShotChip from '$lib/ui/ShotChip.svelte';
+  import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
@@ -263,6 +265,22 @@
   <section>
     <h2>TypingLine</h2>
     <div class="stage messages"><TypingLine /></div>
+  </section>
+
+  <section>
+    <h2>ShotPrompt</h2>
+    <!-- The pill as it stands through its five seconds. tech.md 6.13. -->
+    <div class="pill"><ShotPrompt project="peekle" left={1} /></div>
+    <div class="pill"><ShotPrompt project="a-long-project-name" left={0.4} /></div>
+    <div class="pill"><ShotPrompt project="peekle" left={0} /></div>
+  </section>
+
+  <section>
+    <h2>ShotChip</h2>
+    <div class="frame row">
+      <ShotChip name="01JBQ8WMKX.png" />
+      <ShotChip name="a-screenshot-with-a-very-long-name-indeed.png" />
+    </div>
   </section>
 
   <section>

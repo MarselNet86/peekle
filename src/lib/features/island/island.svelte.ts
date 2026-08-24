@@ -35,22 +35,25 @@ export function createIsland(search = '') {
   }
 
   /**
-   * Typed text goes into the session's pty and leaves at once. tech.md 6.5.
+   * Typed text goes into the session's pty and leaves at once, with whatever
+   * screenshots are attached to it. tech.md 6.5 and 6.13.
    *
    * A permission request open on screen takes precedence, because there the
    * text is the reason for a denial rather than a message.
    */
-  function answer(text: string, sessionId?: string) {
+  function answer(text: string, sessionId?: string, shots: string[] = []) {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     const open = prompt;
     if (open) {
       prompt = null;
+      // A denial is an answer to the hook, not a message, and the hook takes
+      // text alone. Whatever is attached stays in the field. tech.md 6.13.
       commands.answerPrompt({ prompt_id: open.id, choice: null, text: trimmed });
       return;
     }
-    if (sessionId) commands.sendMessage(sessionId, trimmed);
+    if (sessionId) commands.sendMessage(sessionId, trimmed, shots);
   }
 
   function choose(choiceId: string) {

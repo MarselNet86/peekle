@@ -20,6 +20,7 @@ import type { TaskItem } from '$lib/types/generated/TaskItem';
 import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { PromptOutcome } from '$lib/types/generated/PromptOutcome';
+import type { ShotOffer } from '$lib/types/generated/ShotOffer';
 
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
@@ -31,6 +32,8 @@ export const EVENTS = {
   toast: 'peekle://toast',
   view: 'peekle://view',
   notch: 'peekle://notch',
+  shot: 'peekle://shot',
+  shotAttached: 'peekle://shot-attached',
 } as const;
 
 export function hasTauri(): boolean {
@@ -54,7 +57,11 @@ export const commands = {
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
-  sendMessage: (sessionId: string, text: string) => call<void>('send_message', { sessionId, text }),
+  // `shots` are the screenshots attached to this message. They travel as
+  // lines of the message itself, and Rust composes them: what goes on the wire
+  // is a delivery detail and belongs next to the pty. tech.md 6.13.
+  sendMessage: (sessionId: string, text: string, shots: string[] = []) =>
+    call<void>('send_message', { sessionId, text, shots }),
   endSession: (sessionId: string) => call<void>('end_session', { sessionId }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
@@ -81,4 +88,8 @@ export const events = {
   onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
   onNotch: (handler: (notch: { height: number; width: number }) => void) =>
     on<{ height: number; width: number }>(EVENTS.notch, handler),
+  onShot: (handler: (payload: { offer: ShotOffer | null }) => void) =>
+    on<{ offer: ShotOffer | null }>(EVENTS.shot, handler),
+  onShotAttached: (handler: (payload: { session_id: string; path: string }) => void) =>
+    on<{ session_id: string; path: string }>(EVENTS.shotAttached, handler),
 };

@@ -13,5 +13,8 @@ src/lib/types/generated/
 tech.md
 CLAUDE.md
 
+# Captured, not written. Reformatting a fixture edits evidence. tech.md rule 6.
+fixtures/
+
 # The competitor's repository, kept for reference. Not ours to format.
 vibe-notch-main/

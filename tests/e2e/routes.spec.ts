@@ -76,6 +76,8 @@ test.describe('overlay routes', () => {
       'UsageDial',
       'Objects with a body',
       'TypingLine',
+      'ShotPrompt',
+      'ShotChip',
       'PromptInput',
       'OptionList',
       'MessageBlock',

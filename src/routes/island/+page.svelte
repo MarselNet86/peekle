@@ -10,9 +10,11 @@
     renameSession,
     sessionOf,
   } from '$lib/features/sessions/sessions.svelte';
+  import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { scrollState } from '$lib/logic/feed';
   import { searchSessions } from '$lib/logic/sessions';
+  import { shotName } from '$lib/logic/shots';
   import { clickPutsAway, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -23,6 +25,8 @@
   import SearchField from '$lib/ui/SearchField.svelte';
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
+  import ShotChip from '$lib/ui/ShotChip.svelte';
+  import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
   import Shape from '$lib/ui/Shape.svelte';
@@ -33,6 +37,7 @@
   const island = createIsland(typeof location === 'undefined' ? '' : location.search);
   const feed = createFeed();
   const usage = createUsage();
+  const shots = createShots();
 
   let host = $state<HTMLElement | null>(null);
 
@@ -152,6 +157,8 @@
   }
 
   let reply = $state('');
+  // What is waiting in the field of the session on screen. tech.md 6.13.
+  const attached = $derived(current ? shots.of(current.session.session_id) : []);
 
   // A settled request leaves nothing behind for the next one to inherit.
   $effect(() => {
@@ -159,14 +166,22 @@
   });
 
   // Queued text has left the field the moment it is in the feed.
+  //
+  // A permission request takes the text instead, and takes it alone: there is
+  // no attachment on that path, so the shots stay in the field for the message
+  // that comes after it. tech.md 6.13.
   function send(text: string) {
     if (!current) return;
-    island.answer(text, current.session.session_id);
+    const id = current.session.session_id;
+    const answering = island.prompt !== null;
+
+    island.answer(text, id, attached);
+    if (!answering) shots.clear(id);
     reply = '';
   }
 
   $effect(() => {
-    const stop = Promise.all([island.start(), feed.start(), usage.start()]);
+    const stop = Promise.all([island.start(), feed.start(), usage.start(), shots.start()]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
     commands.windowReady('island');
@@ -250,7 +265,11 @@
       <RestMark status={resting} pct={hourWindow} onopen={() => reopen()} />
     {/snippet}
 
-    {#if island.view === 'Pill' && island.toast}
+    <!-- A screenshot is waiting to be attached, and it outranks a toast: the
+         offer runs out in seconds and a toast can be read afterwards. 6.13. -->
+    {#if island.view === 'Pill' && shots.offer}
+      <ShotPrompt project={shots.offer.project} left={shots.left} />
+    {:else if island.view === 'Pill' && island.toast}
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
       <div class="feed">
@@ -343,6 +362,18 @@
                deliver. Hiding it made the island look broken; a field that
                lies about delivery would be worse. tech.md 6.5. -->
           <div class="reply">
+            <!-- Attached, not sent: the shot waits here until the user says
+                 what they want done with it. tech.md 6.13. -->
+            {#if attached.length > 0}
+              <div class="attached">
+                {#each attached as path (path)}
+                  <ShotChip
+                    name={shotName(path)}
+                    onremove={() => current && shots.remove(current.session.session_id, path)}
+                  />
+                {/each}
+              </div>
+            {/if}
             <PromptInput
               bind:value={reply}
               placeholder={replyHint}
@@ -466,5 +497,12 @@
     flex: none;
     border-top: 1px solid var(--hairline);
     padding-top: 10px;
+  }
+
+  .attached {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 2px 8px;
   }
 </style>
