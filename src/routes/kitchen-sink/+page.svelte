@@ -31,6 +31,19 @@
 
   const NOW = 1_700_000_000;
 
+  // The sink has no shots cache to read, so the tile gets a picture of its
+  // own rather than a path that resolves to nothing.
+  const SHOT =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="112" height="80">' +
+        '<rect width="112" height="80" fill="rgb(38,42,50)"/>' +
+        '<rect x="8" y="10" width="58" height="8" rx="4" fill="rgb(125,216,143)"/>' +
+        '<rect x="8" y="26" width="92" height="6" rx="3" fill="rgb(88,94,108)"/>' +
+        '<rect x="8" y="40" width="74" height="6" rx="3" fill="rgb(88,94,108)"/>' +
+        '</svg>',
+    );
+
   const options: ChoiceOption[] = [
     // A trailing "(Recommended)" in the label is the badge, the same
     // convention `AskUserQuestion` marks its own pick with. No extra field.
@@ -304,7 +317,7 @@
   <section>
     <h2>ShotChip</h2>
     <div class="frame row">
-      <ShotChip name="01JBQ8WMKX.png" />
+      <ShotChip name="01JBQ8WMKX.png" src={SHOT} />
       <ShotChip name="a-screenshot-with-a-very-long-name-indeed.png" />
     </div>
   </section>

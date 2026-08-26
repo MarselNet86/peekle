@@ -139,6 +139,31 @@ describe('the attachment beside the field', () => {
     await userEvent.click(cross);
     expect(document.activeElement).not.toBe(cross);
   });
+
+  /// The name is a ulid and says nothing about what was captured, so the shot
+  /// itself is what stands over the field. tech.md 6.13.
+  it('shows the shot rather than the name of its file', () => {
+    render(ShotChip, { props: { name: '01JB.png', src: 'asset://localhost/01JB.png' } });
+
+    expect(screen.getByRole('img', { name: '01JB.png' })).toHaveAttribute(
+      'src',
+      'asset://localhost/01JB.png',
+    );
+    expect(screen.queryByText('01JB.png')).not.toBeInTheDocument();
+  });
+
+  /// The cache is a directory the user may empty at any moment. A shot that
+  /// cannot be drawn still has to be visible and still has to be removable.
+  it('falls back to the name when the picture will not load', async () => {
+    render(ShotChip, { props: { name: '01JB.png', src: 'asset://localhost/gone.png' } });
+
+    const picture = screen.getByRole('img', { name: '01JB.png' });
+    picture.dispatchEvent(new Event('error'));
+    await Promise.resolve();
+
+    expect(screen.getByText('01JB.png')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove 01JB.png' })).toBeInTheDocument();
+  });
 });
 
 describe('the shot waiting in the field', () => {

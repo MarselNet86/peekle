@@ -7,7 +7,7 @@
  * renders on its own.
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type { IslandView } from '$lib/types/generated/IslandView';
@@ -43,6 +43,16 @@ export function hasTauri(): boolean {
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!hasTauri()) return null;
   return invoke<T>(command, args);
+}
+
+/**
+ * A file in the shots cache, as a URL the webview may load. tech.md 6.13.
+ *
+ * Outside the app shell there is no `asset:` to convert to, and an empty
+ * string is the honest answer: the chip has a frame to fall back on.
+ */
+export function fileSrc(path: string): string {
+  return hasTauri() ? convertFileSrc(path) : '';
 }
 
 export const commands = {

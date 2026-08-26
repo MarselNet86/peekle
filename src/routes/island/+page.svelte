@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commands } from '$lib/bridge';
+  import { commands, fileSrc } from '$lib/bridge';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
@@ -378,6 +378,7 @@
                 {#each attached as path (path)}
                   <ShotChip
                     name={shotName(path)}
+                    src={fileSrc(path)}
                     onremove={() => current && shots.remove(current.session.session_id, path)}
                   />
                 {/each}
