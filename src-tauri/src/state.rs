@@ -54,6 +54,10 @@ pub struct AppState {
     /// application, so the flag decides and AppKit is told only on a change.
     /// tech.md 6.13 and R-14.
     attach_key: AtomicBool,
+    /// Whether the webview is showing a screenshot at full size. The island
+    /// stays up while it is: the picture is something the user opened by hand
+    /// and closes by hand, and the pointer leaving is not that. tech.md 6.13.
+    preview: AtomicBool,
     /// The pasteboard change count as of the last tick. Only a change is worth
     /// reading the types for, and nothing reads the contents.
     seen_change: AtomicI64,
@@ -142,6 +146,7 @@ impl AppState {
             hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             attach_key: AtomicBool::new(false),
+            preview: AtomicBool::new(false),
             seen_change: AtomicI64::new(0),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -433,6 +438,16 @@ impl AppState {
     /// an error that means nothing. tech.md 6.13.
     pub fn set_attach_key(&self, held: bool) -> bool {
         self.attach_key.swap(held, Ordering::SeqCst) != held
+    }
+
+    /// The webview opened or closed a screenshot at full size. tech.md 6.13.
+    pub fn set_preview(&self, open: bool) {
+        self.preview.store(open, Ordering::Relaxed);
+    }
+
+    /// Whether a picture is standing open over the island's content.
+    pub fn preview_open(&self) -> bool {
+        self.preview.load(Ordering::Relaxed)
     }
 
     /// The freshest session the island can actually type into.
@@ -974,6 +989,21 @@ mod shot_tests {
 
     /// The key is dropped down more than one path, and telling AppKit to drop
     /// a key nobody holds logs an error that means nothing. tech.md 6.13.
+    /// The pointer timer puts an island away 800ms after the pointer leaves,
+    /// and reaching for the click that closes an open picture takes the
+    /// pointer off it first. tech.md 6.13.
+    #[test]
+    fn nothing_is_open_over_the_island_until_the_webview_says_so() {
+        let (state, _pasteboard) = state();
+        assert!(!state.preview_open());
+
+        state.set_preview(true);
+        assert!(state.preview_open());
+
+        state.set_preview(false);
+        assert!(!state.preview_open(), "a closed picture holds nothing");
+    }
+
     #[test]
     fn the_attach_key_is_only_told_about_on_a_change() {
         let (state, _) = state();

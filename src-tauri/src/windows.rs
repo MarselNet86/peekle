@@ -132,6 +132,14 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
+    // A screenshot open at full size holds the island. The user opened the
+    // picture by hand and closes it by hand, and reaching for the click that
+    // closes it takes the pointer off the shape first: without this the island
+    // was gone before the click landed. tech.md 6.13.
+    if state.preview_open() {
+        state.pointer_returned();
+        return;
+    }
     // Opened on its own and the hold is not up: it stays, and the leave clock
     // stays fresh so expiry gives the usual grace, not a snap.
     if state.held_open(Instant::now()) {

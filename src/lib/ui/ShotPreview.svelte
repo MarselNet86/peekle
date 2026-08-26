@@ -59,24 +59,27 @@
     cursor: zoom-out;
   }
 
+  /* Green, in the corner, over the picture. Grey on a screenshot of a screen
+     is lost inside the screenshot, and this is the one visible way out. */
   button {
     position: absolute;
     top: 8px;
     right: 8px;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     padding: 0;
-    border: 1px solid var(--hairline);
+    border: 1px solid var(--accent);
     border-radius: 50%;
     background: var(--notch);
-    color: var(--text-dim);
+    color: var(--accent);
     cursor: pointer;
   }
 
   button:hover {
-    color: var(--text);
+    background: var(--accent);
+    color: var(--notch);
   }
 
   img {

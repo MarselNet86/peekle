@@ -167,8 +167,18 @@
   let opened = $state<string | null>(null);
 
   // An attachment taken back, or a message sent, takes its picture with it.
+  // So does a collapse from any other cause: a picture left open would come
+  // back up over whatever the island opens on next.
   $effect(() => {
-    if (opened !== null && !attached.includes(opened)) opened = null;
+    if (opened === null) return;
+    if (!attached.includes(opened) || island.view === 'Collapsed') opened = null;
+  });
+
+  // Rust puts an island away when the pointer has been off it for 800ms, and
+  // reaching for the click that closes the picture takes the pointer off it
+  // first. A picture the user opened by hand outranks that. tech.md 6.13.
+  $effect(() => {
+    commands.setPreview(opened !== null);
   });
 
   // A settled request leaves nothing behind for the next one to inherit.

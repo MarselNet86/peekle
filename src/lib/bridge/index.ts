@@ -66,6 +66,9 @@ export const commands = {
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
   islandBounds: (width: number, height: number) => call<void>('island_bounds', { width, height }),
+  // A shot opened at full size. No view change: all it buys is the island
+  // staying up while the picture is on screen. tech.md 6.13.
+  setPreview: (open: boolean) => call<void>('set_preview', { open }),
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
   // `shots` are the screenshots attached to this message. They travel as
   // lines of the message itself, and Rust composes them: what goes on the wire

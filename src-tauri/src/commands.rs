@@ -372,6 +372,16 @@ pub fn send_message(
     Ok(())
 }
 
+/// The webview opened or closed a screenshot at full size. tech.md 6.13.
+///
+/// No view change and no window resize: the picture is a layer over content
+/// the island is already showing. All this buys is the pointer timer's right
+/// to put the island away, which a picture the user opened by hand outranks.
+#[tauri::command]
+pub fn set_preview(state: State<'_, Arc<AppState>>, open: bool) {
+    state.set_preview(open);
+}
+
 /// Ends a session the island owns.
 #[tauri::command]
 pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String) {
