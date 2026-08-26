@@ -942,3 +942,128 @@ fn restoring_applies_what_the_user_said_to_the_cards_already_there() {
     assert_eq!(registry.cards().len(), 1);
     assert_eq!(registry.cards()[0].title, "Renamed");
 }
+
+/// S17. The transcript is the record of the same conversation and carries what
+/// no hook does, so it replaces what the events assembled. tech.md 6.11.
+mod adopting_a_transcript {
+    use super::*;
+    use peekle_core::types::{FeedEntry, SessionRef};
+
+    fn session() -> SessionRef {
+        SessionRef {
+            session_id: "s".into(),
+            cwd: "/tmp/peekle".into(),
+            project: "peekle".into(),
+            pid: None,
+            tty: None,
+        }
+    }
+
+    fn row(id: &str, kind: EntryKind, text: &str) -> FeedEntry {
+        FeedEntry {
+            id: id.into(),
+            kind,
+            text: text.into(),
+            tool: None,
+            detail: None,
+            state: EntryState::Ok,
+            at: 0,
+        }
+    }
+
+    fn registry_with_a_call() -> SessionRegistry {
+        let mut registry = SessionRegistry::new();
+        registry.apply(
+            FeedEvent::ToolStarted {
+                session: session(),
+                tool_use_id: "toolu_1".into(),
+                tool: "Bash".into(),
+                preview: "ls".into(),
+            },
+            0,
+        );
+        registry
+    }
+
+    #[test]
+    fn the_file_replaces_what_the_events_assembled() {
+        let mut registry = registry_with_a_call();
+
+        assert!(registry.adopt_entries(
+            "s",
+            vec![
+                row("u-1", EntryKind::Assistant, "Here is what I found."),
+                row("u-2", EntryKind::Tool, "ls"),
+            ]
+        ));
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.entries.len(), 2);
+        assert_eq!(card.entries[0].kind, EntryKind::Assistant);
+        assert_eq!(card.entries[0].id, "u-1", "the file names its own rows");
+    }
+
+    /// A reply typed in the island sits `Running` until `UserPromptSubmit`
+    /// confirms it, and the file has not heard of it yet. Dropping it would
+    /// take a sent message off the screen. tech.md 6.11.
+    #[test]
+    fn a_reply_still_in_flight_survives_the_replacement() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "ship it", EntryState::Running, 1);
+
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::Tool, "ls")]);
+
+        let card = &registry.cards()[0];
+        let last = card.entries.last().unwrap();
+        assert_eq!(last.text, "ship it");
+        assert_eq!(last.state, EntryState::Running);
+    }
+
+    /// Once the file carries it, the local copy has done its job: two of the
+    /// same message reads as the user having sent it twice.
+    #[test]
+    fn a_reply_the_file_has_caught_up_with_is_not_kept_twice() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "ship it", EntryState::Running, 1);
+
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::User, "ship it")]);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.entries.len(), 1);
+        assert_eq!(card.entries[0].id, "u-1");
+    }
+
+    /// A confirmed reply came from the file to begin with, so keeping a local
+    /// copy of it would double every message the user ever sent.
+    #[test]
+    fn nothing_but_a_reply_in_flight_survives() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "done already", EntryState::Ok, 1);
+
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::Assistant, "hello")]);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.entries.len(), 1);
+        assert_eq!(card.entries[0].kind, EntryKind::Assistant);
+    }
+
+    /// A transcript never opens a card, the same rule the backfill lives by.
+    #[test]
+    fn a_session_nobody_knows_is_left_alone() {
+        let mut registry = SessionRegistry::new();
+        assert!(!registry.adopt_entries("nobody", vec![row("u-1", EntryKind::User, "hi")]));
+        assert!(registry.cards().is_empty());
+    }
+
+    #[test]
+    fn the_adopted_feed_is_capped_like_any_other() {
+        let mut registry = registry_with_a_call();
+        let rows: Vec<FeedEntry> = (0..(ENTRY_CAP * 2))
+            .map(|i| row(&format!("u-{i}"), EntryKind::Tool, "call"))
+            .collect();
+
+        registry.adopt_entries("s", rows);
+
+        assert_eq!(registry.cards()[0].entries.len(), ENTRY_CAP);
+    }
+}

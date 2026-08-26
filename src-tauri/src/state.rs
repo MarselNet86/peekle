@@ -448,6 +448,20 @@ impl AppState {
         registry.cards().to_vec()
     }
 
+    /// Replaces a session's feed with what its transcript says, and hands back
+    /// the cards to broadcast. `None` means nothing changed hands: no such
+    /// session, so there is nothing to replace. tech.md 6.11.
+    pub fn adopt_entries(
+        &self,
+        session_id: &str,
+        entries: Vec<peekle_core::types::FeedEntry>,
+    ) -> Option<Vec<SessionCard>> {
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .adopt_entries(session_id, entries)
+            .then(|| registry.cards().to_vec())
+    }
+
     /// The session is over. Unknown sessions are left alone rather than being
     /// invented: Peekle may have started after the session did.
     pub fn mark_session_ended(&self, session_id: &str, at: i64) -> Vec<SessionCard> {

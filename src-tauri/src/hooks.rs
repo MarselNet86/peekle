@@ -31,6 +31,48 @@ impl AppSink {
         Self { app, state }
     }
 
+    /// Re-reads the session's transcript and replaces its feed with it.
+    ///
+    /// Hooks carry events; the words an agent writes between its tool calls
+    /// are in no hook at all and only in this file. Every payload names it, so
+    /// there is nothing to guess. tech.md 6.11.
+    ///
+    /// Off the response path, always: the agent is standing still until the
+    /// hook answers, and parsing a megabyte of JSON is not something to make
+    /// it wait for. A file that will not read leaves the feed exactly as the
+    /// hooks assembled it.
+    fn refresh_from_transcript(&self, payload: &Value) {
+        let (Some(session_id), Some(path)) = (
+            payload.get("session_id").and_then(Value::as_str),
+            payload.get("transcript_path").and_then(Value::as_str),
+        ) else {
+            return;
+        };
+
+        let app = self.app.clone();
+        let state = Arc::clone(&self.state);
+        let session_id = session_id.to_string();
+        let path = path.to_string();
+
+        tauri::async_runtime::spawn_blocking(move || {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                tracing::debug!(path, "no transcript to read the words out of");
+                return;
+            };
+            let Some(card) =
+                peekle_core::transcripts::card_from_lines(text.lines(), &session_id, now_ms())
+            else {
+                return;
+            };
+            let Some(cards) = state.adopt_entries(&session_id, card.entries) else {
+                return;
+            };
+            if let Err(err) = app.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit sessions");
+            }
+        });
+    }
+
     fn emit_sessions(&self, cards: Vec<peekle_core::types::SessionCard>) {
         tracing::debug!(
             sessions = cards.len(),
@@ -89,6 +131,7 @@ impl HookSink for AppSink {
             self.state.assistant_turn(&session, &text, at);
         }
         self.emit_sessions(self.state.sessions());
+        self.refresh_from_transcript(payload);
 
         // The notch opens on the turn it belongs to, and only for a session
         // the island owns: an observed one is read in the user's editor, and
@@ -124,6 +167,9 @@ impl HookSink for AppSink {
             let cards = self.state.apply_feed(event, now_ms());
             self.emit_sessions(cards);
         }
+        // The line above is what the event knows. This is what was actually
+        // said. tech.md 6.11.
+        self.refresh_from_transcript(payload);
 
         // A TodoWrite still carries the task list, which is a separate view of
         // the same turn. tech.md 6.3 and 6.6.

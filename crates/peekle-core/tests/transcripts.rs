@@ -338,3 +338,43 @@ fn a_freshly_written_transcript_means_a_live_client() {
 
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// S17. The live feed re-reads this file after every hook, so the same file
+/// has to give the same rows: fresh keys would rebuild the whole list on every
+/// event and take the scroll position and every expanded row with it.
+/// tech.md 6.11.
+#[test]
+fn the_same_file_gives_the_same_row_ids_every_time() {
+    let first = card();
+    let again = card();
+
+    let ids: Vec<&str> = first.entries.iter().map(|e| e.id.as_str()).collect();
+    let twice: Vec<&str> = again.entries.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, twice, "a second read renamed the rows");
+    assert!(!ids.is_empty(), "the fixture carries rows");
+}
+
+#[test]
+fn every_row_of_a_transcript_is_named_apart_from_every_other() {
+    let card = card();
+    let mut ids: Vec<String> = card.entries.iter().map(|e| e.id.clone()).collect();
+    let total = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), total, "two rows share an id");
+}
+
+/// A record with no `uuid` still has to be named, and named by something that
+/// does not move: where it sits in an append-only file.
+#[test]
+fn a_record_without_a_uuid_is_named_by_its_line() {
+    let lines = [
+        r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"one"}]}}"#,
+        r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"two"}]}}"#,
+    ];
+    let card = card_from_lines(lines, "id", 0).expect("two turns");
+
+    assert_eq!(card.entries.len(), 2);
+    assert_eq!(card.entries[0].id, "line-0-1");
+    assert_eq!(card.entries[1].id, "line-1-1");
+}

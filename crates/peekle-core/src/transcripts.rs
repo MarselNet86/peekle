@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
-use ulid::Ulid;
 
 use crate::sessions::{ENTRY_CAP, SESSION_CAP};
 use crate::types::{
@@ -88,7 +87,7 @@ where
     // Where each open call sits in `entries`, so its result can find it.
     let mut open_calls: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
-    for line in lines {
+    for (number, line) in lines.into_iter().enumerate() {
         let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) else {
             // A half written last line is normal: Claude Code appends while we
             // read. One bad line is skipped, the rest of the file still counts.
@@ -105,6 +104,19 @@ where
                 cwd = dir.to_string();
             }
         }
+        // The record's own name, so a re-read of the same file gives the same
+        // rows. A record with no `uuid` falls back to where it sits in the
+        // file, which is as stable for an append-only log. tech.md 6.11.
+        let row = record
+            .get("uuid")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("line-{number}"));
+        let mut block_no = 0usize;
+        let mut next_id = move || {
+            block_no += 1;
+            format!("{row}-{block_no}")
+        };
         let at = record
             .get("timestamp")
             .and_then(Value::as_str)
@@ -158,7 +170,7 @@ where
                     if first_turn.is_empty() {
                         first_turn = truncate(&text, TITLE_LIMIT);
                     }
-                    entries.push(entry(EntryKind::User, text, at));
+                    entries.push(entry(next_id(), EntryKind::User, text, at));
                 }
             }
             Some("assistant") => {
@@ -166,15 +178,19 @@ where
                     match block.get("type").and_then(Value::as_str) {
                         Some("text") => {
                             if let Some(text) = string_at(block, "text") {
-                                entries.push(entry(EntryKind::Assistant, text, at));
+                                entries.push(entry(next_id(), EntryKind::Assistant, text, at));
                             }
                         }
                         // Collapsed to a marker with its own duration, exactly
                         // as the terminal shows it. tech.md 6.11.
                         Some("thinking") => {
                             let seconds = ((at - previous).max(0) as f64 / 1000.0).round() as i64;
-                            let mut thought =
-                                entry(EntryKind::Thought, format!("Thought for {seconds}s"), at);
+                            let mut thought = entry(
+                                next_id(),
+                                EntryKind::Thought,
+                                format!("Thought for {seconds}s"),
+                                at,
+                            );
                             thought.detail = string_at(block, "thinking");
                             entries.push(thought);
                         }
@@ -186,7 +202,7 @@ where
                                 .to_string();
                             let input = block.get("input");
 
-                            let mut call = entry(EntryKind::Tool, one_line(input), at);
+                            let mut call = entry(next_id(), EntryKind::Tool, one_line(input), at);
                             call.tool = Some(name);
                             call.detail = input.map(pretty);
                             // No result yet. A call whose result never arrives
@@ -326,9 +342,14 @@ fn texts_of(record: &Value) -> Vec<String> {
     }
 }
 
-fn entry(kind: EntryKind, text: String, at: i64) -> FeedEntry {
+/// One row, identified by where it came from rather than by chance.
+///
+/// The same file read twice has to give the same ids: the live feed re-reads
+/// it after every hook, and fresh keys would rebuild the whole list, throwing
+/// away the scroll position and every expanded row. tech.md 6.11.
+fn entry(id: String, kind: EntryKind, text: String, at: i64) -> FeedEntry {
     FeedEntry {
-        id: Ulid::generate().to_string(),
+        id,
         kind,
         text: truncate(&text, TEXT_LIMIT),
         tool: None,

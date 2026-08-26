@@ -566,3 +566,24 @@ async fn an_unanswered_ask_user_question_carries_no_decision() {
         assert_eq!(body, json!({}), "{outcome:?}");
     }
 }
+
+/// S17. The live feed re-reads the session's transcript after every event, and
+/// the path to it is never guessed: every payload carries it. tech.md 6.11.
+#[test]
+fn every_captured_hook_names_the_transcript_it_belongs_to() {
+    for name in [
+        "user_prompt_submit",
+        "pre_tool_use",
+        "post_tool_use",
+        "stop",
+        "permission",
+        "ask_user_question",
+    ] {
+        let captured = payload(name);
+        let path = captured["transcript_path"].as_str().unwrap_or_default();
+        assert!(
+            path.ends_with(".jsonl"),
+            "{name} carries no transcript to read the words out of"
+        );
+    }
+}

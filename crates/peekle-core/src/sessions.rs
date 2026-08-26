@@ -444,6 +444,49 @@ impl SessionRegistry {
         push_entry(card, entry);
     }
 
+    /// Replaces a session's feed with what its transcript says. tech.md 6.11.
+    ///
+    /// The file is the record Claude Code keeps of the same conversation, and
+    /// it carries what no hook does: the words between the tool calls. Hooks
+    /// are faster and the file is right, so the file wins on everything it
+    /// knows about.
+    ///
+    /// One thing survives it: a reply typed in the island and not yet in the
+    /// file. It sits `Running` until `UserPromptSubmit` confirms it, and
+    /// dropping it here would take a sent message off the screen. Nothing else
+    /// is kept, because everything else came from the file to begin with.
+    ///
+    /// False means there is no such session yet, so there is nothing to
+    /// replace: a transcript never opens a card, the same rule the backfill
+    /// lives by.
+    pub fn adopt_entries(&mut self, session_id: &str, entries: Vec<FeedEntry>) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+
+        let mut adopted = entries;
+        let pending: Vec<FeedEntry> = card
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::User && entry.state == EntryState::Running)
+            // Already in the file under its own id, so the local copy has done
+            // its job and would only stand there twice.
+            .filter(|entry| !adopted.iter().any(|each| each.text == entry.text))
+            .cloned()
+            .collect();
+        adopted.extend(pending);
+
+        if adopted.len() > ENTRY_CAP {
+            adopted.drain(..adopted.len() - ENTRY_CAP);
+        }
+        card.entries = adopted;
+        true
+    }
+
     /// Marks every queued reply of a session as undeliverable.
     pub fn replies_failed(&mut self, session_id: &str, at: i64) {
         self.mark_replies(session_id, EntryState::Failed, at);
