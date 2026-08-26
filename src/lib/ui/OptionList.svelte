@@ -50,6 +50,25 @@
 
 <svelte:window onkeydown={keydown} />
 
+<!-- An answer label runs as long as Claude wrote it, so a row is a stack that
+     grows down rather than a fixed line that overlaps the next one. -->
+{#snippet body(option: ChoiceOption, index: number)}
+  <span class="index">{index + 1}</span>
+  <span class="text">
+    <span class="line">
+      <span class="label">{parseLabel(option.label).text}</span>
+      <!-- Claude's own pick, marked the way a recommended AskUserQuestion
+           answer already is: a trailing "(Recommended)" in the label. -->
+      {#if parseLabel(option.label).recommended}
+        <span class="recommended">Recommended</span>
+      {/if}
+    </span>
+    {#if option.hint}
+      <span class="hint">{option.hint}</span>
+    {/if}
+  </span>
+{/snippet}
+
 {#if multiple}
   <Checkbox.Group bind:value={values} class="list">
     {#each options as option, index (option.id)}
@@ -69,14 +88,7 @@
               </svg>
             {/if}
           </span>
-          <span class="index">{index + 1}</span>
-          <span class="label">{parseLabel(option.label).text}</span>
-          {#if parseLabel(option.label).recommended}
-            <span class="recommended">Recommended</span>
-          {/if}
-          {#if option.hint}
-            <span class="hint">{option.hint}</span>
-          {/if}
+          {@render body(option, index)}
         {/snippet}
       </Checkbox.Root>
     {/each}
@@ -89,17 +101,7 @@
   >
     {#each options as option, index (option.id)}
       <RadioGroup.Item value={option.id} class="row" data-kind={option.kind}>
-        <span class="index">{index + 1}</span>
-        <span class="label">{parseLabel(option.label).text}</span>
-        <!-- Claude's own pick, marked the way a recommended AskUserQuestion
-             answer already is: a trailing "(Recommended)" in the label.
-             tech.md 9. -->
-        {#if parseLabel(option.label).recommended}
-          <span class="recommended">Recommended</span>
-        {/if}
-        {#if option.hint}
-          <span class="hint">{option.hint}</span>
-        {/if}
+        {@render body(option, index)}
       </RadioGroup.Item>
     {/each}
   </RadioGroup.Root>
@@ -115,11 +117,11 @@
 
   :global(.row) {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 8px;
     width: 100%;
-    height: var(--row);
-    padding: 0 10px;
+    min-height: var(--row);
+    padding: 7px 10px;
     border: none;
     border-radius: 8px;
     background: transparent;
@@ -140,24 +142,40 @@
   }
 
   .index {
+    flex: none;
+    width: 12px;
     color: var(--text-dim);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
-    width: 12px;
+    line-height: 18px;
+  }
+
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
   }
 
   .label {
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 18px;
   }
 
   .hint {
-    margin-left: auto;
     color: var(--text-dim);
     font-size: 11px;
+    line-height: 15px;
   }
 
   .recommended {
-    margin-left: auto;
     flex: none;
     padding: 1px 6px;
     border-radius: 999px;
@@ -174,6 +192,7 @@
     flex: none;
     width: 14px;
     height: 14px;
+    margin-top: 2px;
     border: 1px solid var(--hairline);
     border-radius: 4px;
     color: var(--notch);

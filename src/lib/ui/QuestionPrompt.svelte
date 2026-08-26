@@ -66,22 +66,28 @@
 </script>
 
 <div class="question">
-  {#if questions.length > 1}
-    <span class="progress">{index + 1} / {questions.length}</span>
-  {/if}
-  <span class="header">{question.header}</span>
+  <div class="head">
+    <span class="header">{question.header}</span>
+    {#if questions.length > 1}
+      <span class="progress">{index + 1} / {questions.length}</span>
+    {/if}
+  </div>
   <p class="text">{question.question}</p>
-  <OptionList
-    options={toOptions(question)}
-    multiple={question.multi_select}
-    bind:selected
-    bind:values
-    onselect={() => {
-      // A single choice is a complete answer to this question by itself:
-      // clicking it reads the same as pressing Next. tech.md 6.14.
-      if (!question.multi_select) advance();
-    }}
-  />
+  <!-- Pulled out by the row's own padding, so the answers line up with the
+       question above them instead of sitting in from it. -->
+  <div class="options">
+    <OptionList
+      options={toOptions(question)}
+      multiple={question.multi_select}
+      bind:selected
+      bind:values
+      onselect={() => {
+        // A single choice is a complete answer to this question by itself:
+        // clicking it reads the same as pressing Next. tech.md 6.14.
+        if (!question.multi_select) advance();
+      }}
+    />
+  </div>
   <!-- Checked boxes need an explicit confirm: unlike a click, nothing about
        checking one says the user is done choosing. tech.md 6.14. -->
   {#if question.multi_select}
@@ -101,11 +107,19 @@
   .question {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
   }
 
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
   .progress {
+    flex: none;
     color: var(--text-dim);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
@@ -113,15 +127,23 @@
 
   .header {
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .text {
-    margin: 0 0 4px;
+    margin: 0 0 2px;
     color: var(--text);
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .options {
+    margin: 0 -10px;
   }
 
   .actions {
