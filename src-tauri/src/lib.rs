@@ -37,7 +37,17 @@ pub fn run() {
                     // tech.md 6.9 and 6.13.
                     match hotkey::role_of(app, shortcut) {
                         Some(hotkey::Role::Toggle) => commands::toggle_enabled(app.clone()),
-                        Some(hotkey::Role::Attach) => shots::attach(app),
+                        // Off the handler before anything else. Attaching
+                        // releases the very key that fired, and releasing one
+                        // from in here deadlocks the app twice over: the
+                        // plugin calls this on the main thread while holding
+                        // its registry lock, and its `unregister` hops back to
+                        // the main thread and then takes that same lock.
+                        // tech.md 6.13.
+                        Some(hotkey::Role::Attach) => {
+                            let app = app.clone();
+                            tauri::async_runtime::spawn_blocking(move || shots::attach(&app));
+                        }
                         None => tracing::debug!("a combination nobody claims fired"),
                     }
                 })

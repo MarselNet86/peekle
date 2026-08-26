@@ -178,6 +178,10 @@ fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
 }
 
 /// The user agreed. The one path that reads the contents of the pasteboard.
+///
+/// Runs off the shortcut handler, never on it: releasing the key that fired is
+/// the first thing it does, and the plugin holds the main thread and its own
+/// registry lock for the length of the handler. tech.md 6.13.
 pub fn attach(app: &AppHandle) {
     let state = app.state::<Arc<AppState>>().inner().clone();
 

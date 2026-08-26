@@ -107,6 +107,9 @@ fn fires(spelling: &str, fired: &Shortcut) -> bool {
 /// Used by the screenshot offer, which holds its key for seconds rather than
 /// for the life of the app: a modifierless key kept from the whole system
 /// forever would be a fault. tech.md 6.13 and R-14.
+///
+/// Never from inside the shortcut handler. The plugin runs that on the main
+/// thread holding its registry lock, and this goes back to both. tech.md 6.13.
 pub fn register(app: &AppHandle, spelling: &str) -> Result<(), HotkeyError> {
     let combination = Combination::parse(spelling)?;
     PluginRegistrar::new(app.clone()).register(&combination)
@@ -114,6 +117,8 @@ pub fn register(app: &AppHandle, spelling: &str) -> Result<(), HotkeyError> {
 
 /// Hands one combination back to the system. A key nobody holds is not an
 /// error: the offer settles down more than one path and each of them releases.
+///
+/// Never from inside the shortcut handler, for the reason [`register`] gives.
 pub fn unregister(app: &AppHandle, spelling: &str) {
     let Ok(combination) = Combination::parse(spelling) else {
         return;
