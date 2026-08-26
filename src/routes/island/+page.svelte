@@ -15,7 +15,7 @@
   import { scrollState } from '$lib/logic/feed';
   import { searchSessions } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
-  import { clickPutsAway, restStatus } from '$lib/logic/rest';
+  import { clickSettles, restStatus } from '$lib/logic/rest';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
@@ -211,7 +211,17 @@
     if (island.view === 'Collapsed') return;
 
     const dismiss = (event: MouseEvent) => {
-      if (clickPutsAway(island.view, event.target)) commands.setView('Collapsed');
+      // An open picture is what a click beside the shape is aimed at, so it
+      // takes it: collapsing would carry off the feed and the reply with it.
+      // tech.md 6.13.
+      switch (clickSettles(island.view, event.target, opened !== null)) {
+        case 'preview':
+          opened = null;
+          break;
+        case 'island':
+          commands.setView('Collapsed');
+          break;
+      }
     };
 
     window.addEventListener('click', dismiss);

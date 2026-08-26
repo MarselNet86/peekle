@@ -42,3 +42,20 @@ export function clickPutsAway(view: IslandView, target: EventTarget | null): boo
   if (view === 'Collapsed') return false;
   return !(target instanceof Element && target.closest('.shape'));
 }
+
+/**
+ * What one click beside the shape settles, in order. tech.md 6.13.
+ *
+ * A screenshot open at full size takes it first. The click is aimed at the
+ * picture, not at the island, and collapsing would carry off the feed and the
+ * reply being typed along with it. The next such click puts the island away as
+ * it always did.
+ */
+export function clickSettles(
+  view: IslandView,
+  target: EventTarget | null,
+  previewOpen: boolean,
+): 'nothing' | 'preview' | 'island' {
+  if (!clickPutsAway(view, target)) return 'nothing';
+  return previewOpen ? 'preview' : 'island';
+}

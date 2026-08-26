@@ -173,6 +173,15 @@ describe('the shot at full size', () => {
     expect(onclose).toHaveBeenCalledOnce();
   });
 
+  /// A picture filling the island does not look pressable; a cross does.
+  it('closes on the cross', async () => {
+    const onclose = vi.fn();
+    render(ShotPreview, { props: { name: '01JB.png', src: 'asset://x.png', onclose } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close 01JB.png' }));
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
   it('closes on Escape', async () => {
     const onclose = vi.fn();
     render(ShotPreview, { props: { name: '01JB.png', src: 'asset://x.png', onclose } });

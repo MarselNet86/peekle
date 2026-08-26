@@ -23,11 +23,27 @@
   class="preview"
   role="button"
   tabindex="-1"
-  aria-label="Close {name}"
+  aria-label="Close the shot"
   onclick={() => onclose?.()}
   onkeydown={keydown}
 >
   <img {src} alt={name} />
+  <!-- The whole layer closes it, but a picture filling the island does not
+       look pressable and a cross does. -->
+  <button
+    type="button"
+    aria-label="Close {name}"
+    onmousedown={(event) => event.preventDefault()}
+    onclick={(event) => {
+      // The layer under it closes on a click too, and one press is one close.
+      event.stopPropagation();
+      onclose?.();
+    }}
+  >
+    <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+      <path d="M1 1l8 8M9 1l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" />
+    </svg>
+  </button>
 </div>
 
 <style>
@@ -41,6 +57,26 @@
     box-sizing: border-box;
     background: rgba(0, 0, 0, 0.72);
     cursor: zoom-out;
+  }
+
+  button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: 50%;
+    background: var(--notch);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  button:hover {
+    color: var(--text);
   }
 
   img {

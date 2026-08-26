@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 
-import { clickPutsAway, restStatus } from '$lib/logic/rest';
+import { clickPutsAway, clickSettles, restStatus } from '$lib/logic/rest';
 import { REST_DROP, REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
 import RestMark from '$lib/ui/RestMark.svelte';
 import Shape from '$lib/ui/Shape.svelte';
@@ -130,6 +130,26 @@ describe('closing an open island with a click', () => {
   it('does nothing while the island is already resting', () => {
     const { outside } = targets();
     expect(clickPutsAway('Collapsed', outside)).toBe(false);
+  });
+
+  /// A picture open at full size is what the click is aimed at, and collapsing
+  /// would carry off the feed and the reply with it. tech.md 6.13.
+  describe('with a shot open', () => {
+    it('spends the click on the picture and keeps the island', () => {
+      const { outside } = targets();
+      expect(clickSettles('Sessions', outside, true)).toBe('preview');
+    });
+
+    it('puts the island away on the next one', () => {
+      const { outside } = targets();
+      expect(clickSettles('Sessions', outside, false)).toBe('island');
+    });
+
+    it('leaves a click on the shape alone either way', () => {
+      const { inside } = targets();
+      expect(clickSettles('Sessions', inside, true)).toBe('nothing');
+      expect(clickSettles('Sessions', inside, false)).toBe('nothing');
+    });
   });
 });
 
