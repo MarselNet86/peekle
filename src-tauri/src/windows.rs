@@ -132,8 +132,8 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
-    // Opened by a request and the ten seconds are not up: it stays, and the
-    // leave clock stays fresh so expiry gives the usual grace, not a snap.
+    // Opened on its own and the hold is not up: it stays, and the leave clock
+    // stays fresh so expiry gives the usual grace, not a snap.
     if state.held_open(Instant::now()) {
         state.pointer_returned();
         return;
@@ -238,15 +238,25 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(request.session.session_id.clone()));
 
-    // Shown, now the user decides whether it is worth their attention. Ten
-    // quiet seconds means it was not, and the island puts itself away with the
-    // request still pending. tech.md 6.7.
+    // Shown, and now it waits, because a hook is pending and this form is the
+    // only place it gets answered. Quiet all the way through means the user is
+    // not there, and the island puts itself away with the request still
+    // pending. tech.md 6.7.
     state.hold_open(Instant::now() + PROMPT_HOLD);
 }
 
-/// How long a request-opened island waits for the user before putting itself
-/// away. tech.md 6.7.
-const PROMPT_HOLD: Duration = Duration::from_secs(10);
+/// How long an island opened by a blocking request waits for the user before
+/// putting itself away.
+///
+/// Long enough to read the request and reach it: an `AskUserQuestion` carries
+/// its own question, up to four options and a description under each, and ten
+/// seconds ran out while the user was still reading. tech.md 6.7.
+const PROMPT_HOLD: Duration = Duration::from_secs(45);
+
+/// The same for an island opened by a turn that just ended. Shorter on purpose:
+/// nothing is pending, so an unread notice is not a reason to sit on top of the
+/// screen. tech.md 6.7.
+const NOTICE_HOLD: Duration = Duration::from_secs(10);
 
 /// Opens the island on a session whose turn just ended. tech.md 6.2.
 ///
@@ -269,7 +279,7 @@ pub async fn reveal_turn(app: &AppHandle, session_id: &str) {
     let gate = state.ready_gate(panel::ISLAND);
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(session_id.to_string()));
-    state.hold_open(Instant::now() + PROMPT_HOLD);
+    state.hold_open(Instant::now() + NOTICE_HOLD);
 }
 
 /// Tells the webview which outcome settled the request and collapses the
@@ -329,4 +339,31 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
             set_view(&handle, IslandView::Collapsed);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD};
+    use std::time::Duration;
+
+    /// The v44.1 rule: what waits on the user stays up longer than what only
+    /// reports. Equal holds are the bug this split fixed — a question was gone
+    /// before it could be read. tech.md 6.7.
+    #[test]
+    fn a_request_is_held_longer_than_a_turn_notice() {
+        assert!(PROMPT_HOLD > NOTICE_HOLD);
+        assert!(
+            PROMPT_HOLD >= Duration::from_secs(45),
+            "reading a question with four described options takes longer than a glance"
+        );
+        assert_eq!(NOTICE_HOLD, Duration::from_secs(10));
+    }
+
+    /// The hold is the opening grace, the leave clock runs after it. A hold
+    /// shorter than the leave clock would invert the two and put the island
+    /// away while the pointer was still on its way.
+    #[test]
+    fn the_hold_outlasts_the_leave_clock() {
+        assert!(NOTICE_HOLD > DISMISS_AFTER);
+    }
 }
