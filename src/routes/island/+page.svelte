@@ -241,12 +241,16 @@
   // Rust records what the shape actually measured and changes nothing with it:
   // the window never resizes. Sampled until the spring stops moving, because a
   // size read mid flight describes a frame that no longer exists. tech.md 6.7.
+  //
+  // Watched rather than tied to the view: content moves the shape too. A row
+  // of attachments appearing after a screenshot makes the island a row taller
+  // at the same view, and a rectangle measured before it leaves the bottom
+  // strip -- the field and the chips in it -- outside the island as far as the
+  // pointer tracker is concerned, which then puts the island away under a
+  // pointer that never left it.
   $effect(() => {
     const box = host?.querySelector('.shape');
     if (!(box instanceof HTMLElement)) return;
-
-    // Re-run on every view change: that is what starts the spring.
-    void island.view;
 
     let frame = 0;
     let last = { width: -1, height: -1 };
@@ -259,14 +263,28 @@
 
       // Two identical frames mean the spring has come to rest.
       if (still >= 2) {
+        frame = 0;
         commands.islandBounds(size.width, size.height);
         return;
       }
       frame = requestAnimationFrame(sample);
     };
-    frame = requestAnimationFrame(sample);
 
-    return () => cancelAnimationFrame(frame);
+    // Idle until something moves, so a resting island costs no frames.
+    const measure = () => {
+      if (frame) return;
+      still = 0;
+      frame = requestAnimationFrame(sample);
+    };
+
+    const watch = new ResizeObserver(measure);
+    watch.observe(box);
+    measure();
+
+    return () => {
+      watch.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
   });
 </script>
 

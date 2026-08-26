@@ -192,8 +192,9 @@ impl AppState {
         *self.lock(&self.shape_bounds)
     }
 
-    pub fn set_shape_bounds(&self, bounds: (f64, f64)) {
-        *self.lock(&self.shape_bounds) = Some(bounds);
+    /// Records the measured shape and reports whether it moved. tech.md 6.7.
+    pub fn set_shape_bounds(&self, bounds: (f64, f64)) -> bool {
+        self.lock(&self.shape_bounds).replace(bounds) != Some(bounds)
     }
 
     /// Records where the pointer is and reports whether it crossed the edge.
@@ -660,8 +661,27 @@ mod tests {
         let state = state();
         assert_eq!(state.shape_bounds(), None);
 
-        state.set_shape_bounds((185.0, 47.0));
+        assert!(state.set_shape_bounds((185.0, 47.0)));
         assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+    }
+
+    /// A shape that moved is what clears the leave clock, so a shape that
+    /// reported the same size again must not read as movement: content settles
+    /// and re-reports, and every one of those would hand an island the pointer
+    /// really has left another 800ms. tech.md 6.7.
+    #[test]
+    fn only_a_shape_that_moved_reads_as_movement() {
+        let state = state();
+
+        assert!(state.set_shape_bounds((420.0, 180.0)), "the first is news");
+        assert!(
+            !state.set_shape_bounds((420.0, 180.0)),
+            "the same size is not"
+        );
+        assert!(
+            state.set_shape_bounds((420.0, 146.0)),
+            "a row of attachments gone is"
+        );
     }
 
     /// S12 follow up. Before the user grants access there is nothing to fetch,

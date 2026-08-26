@@ -449,7 +449,13 @@ pub fn hide_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id:
 #[tauri::command]
 pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     tracing::debug!(width, height, "island reported its bounds");
-    state.set_shape_bounds((width, height));
+    if state.set_shape_bounds((width, height)) {
+        // The shape moved, and a shape that shrank out from under a pointer
+        // standing still is not a pointer walking away. Charging that to the
+        // leave clock puts the island away for something the user did inside
+        // it, like taking an attachment back. tech.md 6.7.
+        state.pointer_returned();
+    }
 }
 
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
