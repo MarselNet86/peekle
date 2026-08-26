@@ -107,7 +107,7 @@
   .question {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     min-width: 0;
   }
 
@@ -136,10 +136,10 @@
   }
 
   .text {
-    margin: 0 0 2px;
+    margin: 0;
     color: var(--text);
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 14px;
+    line-height: 20px;
   }
 
   .options {
@@ -147,6 +147,6 @@
   }
 
   .actions {
-    padding-top: 4px;
+    padding-top: 2px;
   }
 </style>

@@ -111,17 +111,17 @@
   :global(.list) {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     outline: none;
   }
 
   :global(.row) {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
     min-height: var(--row);
-    padding: 7px 10px;
+    padding: 9px 10px;
     border: none;
     border-radius: 8px;
     background: transparent;
@@ -153,7 +153,7 @@
   .text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
   }
 
@@ -172,7 +172,7 @@
   .hint {
     color: var(--text-dim);
     font-size: 11px;
-    line-height: 15px;
+    line-height: 16px;
   }
 
   .recommended {
@@ -192,7 +192,7 @@
     flex: none;
     width: 14px;
     height: 14px;
-    margin-top: 2px;
+    margin-top: 3px;
     border: 1px solid var(--hairline);
     border-radius: 4px;
     color: var(--notch);
