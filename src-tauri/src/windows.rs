@@ -85,6 +85,12 @@ pub fn track_pointer(app: &AppHandle) {
 /// island does not sit on the screen after the user has moved on. tech.md 6.7.
 const DISMISS_AFTER: Duration = Duration::from_millis(800);
 
+/// How far the pointer travels before it counts as having moved at all.
+///
+/// Physical pixels, and small: a hand resting on a mouse jitters, and jitter
+/// is not a decision to walk away from the island. tech.md 6.7.
+const POINTER_MOVED: f64 = 10.0;
+
 fn update_hover(app: &AppHandle) {
     let state = app.state::<Arc<AppState>>().inner().clone();
 
@@ -129,6 +135,17 @@ fn update_hover(app: &AppHandle) {
         // Engaged, so the opening hold has done its job and ordinary leave
         // rules take over. tech.md 6.7.
         state.clear_hold();
+        state.pointer_returned();
+        return;
+    }
+    // The shape moved under the pointer, so the point it stands on is what
+    // "did not move" means from here until it does. tech.md 6.7.
+    if state.take_shape_moved() {
+        state.anchor_pointer((pointer.x, pointer.y));
+    }
+    // Still on that point: the island shrank, the hand did not walk away, and
+    // there is nothing to charge to the leave clock. tech.md 6.7.
+    if state.pointer_pinned((pointer.x, pointer.y), POINTER_MOVED) {
         state.pointer_returned();
         return;
     }

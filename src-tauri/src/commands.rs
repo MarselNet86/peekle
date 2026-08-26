@@ -450,11 +450,13 @@ pub fn hide_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id:
 pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     tracing::debug!(width, height, "island reported its bounds");
     if state.set_shape_bounds((width, height)) {
-        // The shape moved, and a shape that shrank out from under a pointer
-        // standing still is not a pointer walking away. Charging that to the
-        // leave clock puts the island away for something the user did inside
-        // it, like taking an attachment back. tech.md 6.7.
+        // A shape that shrank leaves a hand that never moved outside itself,
+        // and that is the island moving rather than the user walking away.
+        // Clearing the clock is not enough: the next one runs out just as
+        // surely. So the pointer is pinned where it stands until it moves.
+        // tech.md 6.7.
         state.pointer_returned();
+        state.mark_shape_moved();
     }
 }
 

@@ -54,6 +54,12 @@ pub struct AppState {
     /// application, so the flag decides and AppKit is told only on a change.
     /// tech.md 6.13 and R-14.
     attach_key: AtomicBool,
+    /// Where the pointer stood when the shape last moved, until it moves off
+    /// that point. A shape that shrank leaves a still hand outside itself, and
+    /// that is the island moving rather than the user leaving. tech.md 6.7.
+    anchor: Mutex<Option<(f64, f64)>>,
+    /// A shape move waiting for the next hover tick to anchor the pointer.
+    shape_moved: AtomicBool,
     /// Whether the webview is showing a screenshot at full size. The island
     /// stays up while it is: the picture is something the user opened by hand
     /// and closes by hand, and the pointer leaving is not that. tech.md 6.13.
@@ -146,6 +152,8 @@ impl AppState {
             hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             attach_key: AtomicBool::new(false),
+            anchor: Mutex::new(None),
+            shape_moved: AtomicBool::new(false),
             preview: AtomicBool::new(false),
             seen_change: AtomicI64::new(0),
             live_sessions: AtomicU32::new(0),
@@ -195,6 +203,40 @@ impl AppState {
     /// Records the measured shape and reports whether it moved. tech.md 6.7.
     pub fn set_shape_bounds(&self, bounds: (f64, f64)) -> bool {
         self.lock(&self.shape_bounds).replace(bounds) != Some(bounds)
+    }
+
+    /// The shape moved. Where the pointer stands is read on the next hover
+    /// tick, because only the main thread may ask AppKit for it.
+    pub fn mark_shape_moved(&self) {
+        self.shape_moved.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether a move is waiting to be anchored, clearing it as it answers.
+    pub fn take_shape_moved(&self) -> bool {
+        self.shape_moved.swap(false, Ordering::Relaxed)
+    }
+
+    /// Pins the pointer where it stands, because the shape moved under it.
+    pub fn anchor_pointer(&self, at: (f64, f64)) {
+        *self.lock(&self.anchor) = Some(at);
+    }
+
+    /// Whether the pointer is still where the shape left it.
+    ///
+    /// Clears itself the moment the pointer travels further than `slack`: from
+    /// then on the user is moving and the ordinary leave rules apply. Slack
+    /// rather than an exact point, because a hand resting on a mouse jitters
+    /// and jitter is not a decision to walk away. tech.md 6.7.
+    pub fn pointer_pinned(&self, at: (f64, f64), slack: f64) -> bool {
+        let mut anchor = self.lock(&self.anchor);
+        let Some((x, y)) = *anchor else {
+            return false;
+        };
+        if (at.0 - x).abs() <= slack && (at.1 - y).abs() <= slack {
+            return true;
+        }
+        *anchor = None;
+        false
     }
 
     /// Records where the pointer is and reports whether it crossed the edge.
@@ -663,6 +705,37 @@ mod tests {
 
         assert!(state.set_shape_bounds((185.0, 47.0)));
         assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+    }
+
+    /// Taking an attachment back makes the island a row shorter, and the hand
+    /// that pressed the cross is then below its edge without having moved. The
+    /// island moved, not the user, and it must not put itself away for that.
+    /// tech.md 6.7.
+    #[test]
+    fn a_pointer_the_shape_left_behind_is_not_a_pointer_walking_away() {
+        let state = state();
+        assert!(!state.take_shape_moved(), "nothing moved yet");
+        assert!(
+            !state.pointer_pinned((100.0, 100.0), 10.0),
+            "and nothing is pinned"
+        );
+
+        state.mark_shape_moved();
+        assert!(state.take_shape_moved());
+        assert!(!state.take_shape_moved(), "answered exactly once");
+
+        state.anchor_pointer((100.0, 100.0));
+        assert!(state.pointer_pinned((100.0, 100.0), 10.0), "stood still");
+        assert!(state.pointer_pinned((106.0, 94.0), 10.0), "a hand jitters");
+
+        assert!(
+            !state.pointer_pinned((100.0, 140.0), 10.0),
+            "walked away, so the ordinary rules take it from here"
+        );
+        assert!(
+            !state.pointer_pinned((100.0, 100.0), 10.0),
+            "and coming back to the point does not pin it again"
+        );
     }
 
     /// A shape that moved is what clears the leave clock, so a shape that
