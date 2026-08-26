@@ -81,7 +81,7 @@ export function shapeBounds(view: IslandView, notch: Notch): ShapeBounds {
       : view === 'Pill'
         ? { width: 420, height: height + 44, radius: 20 }
         : view === 'Sessions'
-          ? { width: 460, height: height + 300, radius: 24 }
+          ? { width: 460, height: height + 380, radius: 24 }
           : { width: 560, height: height + 420, radius: 24 };
 
   return clamp(bounds);

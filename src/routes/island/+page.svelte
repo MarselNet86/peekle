@@ -29,7 +29,6 @@
   import ShotChip from '$lib/ui/ShotChip.svelte';
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
-  import UsageBar from '$lib/ui/UsageBar.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
@@ -288,11 +287,13 @@
   });
 </script>
 
-<!-- The windows are the same fact in both views: how much of the hour is gone
-     is as much a part of reading a dialogue as of picking one. tech.md S7. -->
-{#snippet usage_bars()}
-  <div class="usage">
-    {#if usage.connectLabel}
+<!-- Only the offer to connect. The numbers themselves live as dials in the
+     dialogue header and as the ring on the resting mark, and a third copy of
+     them under the session list was costing the list the rows it is for.
+     tech.md S7. -->
+{#snippet connect()}
+  {#if usage.connectLabel}
+    <div class="usage">
       <Button
         label={usage.connecting ? 'Connecting' : usage.connectLabel}
         variant="connect"
@@ -300,12 +301,8 @@
         wide
         onclick={() => usage.connect()}
       />
-    {:else}
-      {#each usage.bars as bar (bar.label)}
-        <UsageBar label={bar.label} pct={bar.pct} resetsAt={bar.resetsAt} reason={usage.reason} />
-      {/each}
-    {/if}
-  </div>
+    </div>
+  {/if}
 {/snippet}
 
 <div class="island" bind:this={host}>
@@ -355,7 +352,7 @@
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
-        {@render usage_bars()}
+        {@render connect()}
       </div>
     {:else if current}
       <div class="feed">
@@ -403,9 +400,7 @@
           {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
-        {#if usage.connectLabel}
-          {@render usage_bars()}
-        {/if}
+        {@render connect()}
 
         {#if permission}
           <div class="reply">
