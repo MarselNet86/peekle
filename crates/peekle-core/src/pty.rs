@@ -57,9 +57,27 @@ pub fn spawn_args(session_id: &str) -> Vec<String> {
 /// told apart from the newlines the user typed. The text itself goes as-is,
 /// with no parsing and no escaping — a pty is a stream, not a list of key
 /// names, so the whole `send-keys` quoting problem does not exist here.
+///
+/// Separate in time too, by [`ENTER_GAP`]. See there for why.
 pub fn message_writes(text: &str) -> Vec<Vec<u8>> {
     vec![text.as_bytes().to_vec(), b"\r".to_vec()]
 }
+
+/// How long the newline waits behind the text.
+///
+/// Two writes with nothing between them arrive as one read, and the TUI reads
+/// bulk input as a paste — a carriage return inside a paste is not a send. The
+/// text lands in the input box and stays there until some later write pulls the
+/// TUI out of paste mode, which is the bug where the first message only goes
+/// when the second is typed.
+///
+/// Measured against a live session through the transcript: a short reply is
+/// submitted with no gap at all, a long one is never submitted, and 50ms is
+/// enough. 120ms is clear of that and invisible to a person.
+///
+/// tmux got this for free, because `send-keys Enter` was a separate process.
+/// tech.md 6.5.
+pub const ENTER_GAP: std::time::Duration = std::time::Duration::from_millis(120);
 
 /// A session id Claude Code accepts: it insists on a UUID.
 pub fn new_session_id() -> String {
@@ -263,19 +281,29 @@ impl PtyHost {
     /// Refuses anything we do not own rather than dropping it silently: an
     /// observed session has no input field, and a swallowed message would be
     /// exactly the lie the field is meant not to tell.
+    /// The gap is held under this lock on purpose: released between the two
+    /// writes, a second reply would wedge between the first one's text and its
+    /// newline, and the agent would receive the two glued together.
     pub fn send(&self, session_id: &str, text: &str) -> Result<(), PtyError> {
         let mut sessions = self.lock();
         let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
-        for chunk in message_writes(text) {
+
+        for (index, chunk) in message_writes(text).into_iter().enumerate() {
+            // Each half is flushed on its own, or the gap buys nothing: both
+            // would still reach the far end in a single read.
+            if index > 0 {
+                std::thread::sleep(ENTER_GAP);
+            }
             owned
                 .writer
                 .write_all(&chunk)
                 .map_err(|err| PtyError::Pty(err.to_string()))?;
+            owned
+                .writer
+                .flush()
+                .map_err(|err| PtyError::Pty(err.to_string()))?;
         }
-        owned
-            .writer
-            .flush()
-            .map_err(|err| PtyError::Pty(err.to_string()))
+        Ok(())
     }
 
     /// Ends a session Peekle owns. Unknown ids are a no-op: the process may
@@ -322,6 +350,14 @@ mod tests {
         assert_eq!(writes.len(), 2);
         assert_eq!(writes[0], b"build it");
         assert_eq!(writes[1], b"\r");
+    }
+
+    /// Below the measured threshold the two writes arrive as one read, the TUI
+    /// takes them for a paste, and a long reply never leaves the field.
+    #[test]
+    fn newline_waits_out_the_paste_window() {
+        assert!(ENTER_GAP >= std::time::Duration::from_millis(50));
+        assert!(ENTER_GAP <= std::time::Duration::from_millis(250));
     }
 
     /// The class of bug `send-keys` had without `-l`: the word Enter, braces,
