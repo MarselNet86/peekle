@@ -4,8 +4,9 @@
   let {
     name,
     src = '',
+    onopen,
     onremove,
-  }: { name: string; src?: string; onremove?: () => void } = $props();
+  }: { name: string; src?: string; onopen?: () => void; onremove?: () => void } = $props();
 
   // No src outside the app shell, and a cache the user may empty at any
   // moment. Either way the attachment stays visible and stays removable.
@@ -15,7 +16,17 @@
 
 <span class="chip" class:thumb>
   {#if thumb}
-    <img {src} alt={name} title={name} onerror={() => (broken = true)} />
+    <!-- Forty pixels say which shot this is, not what is on it, and "is that
+         the one I meant" is answered by the picture. tech.md 6.13. -->
+    <button
+      type="button"
+      class="open"
+      aria-label="Open {name}"
+      onmousedown={(event) => event.preventDefault()}
+      onclick={() => onopen?.()}
+    >
+      <img {src} alt={name} title={name} onerror={() => (broken = true)} />
+    </button>
   {:else}
     <svg viewBox="0 0 12 10" width="12" height="10" aria-hidden="true">
       <rect
@@ -86,6 +97,18 @@
     white-space: nowrap;
   }
 
+  /* Sized by the picture inside it, not by the cross rule below. */
+  .open {
+    display: block;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+  }
+
   button {
     display: grid;
     place-items: center;
@@ -104,7 +127,7 @@
     color: var(--text);
   }
 
-  .chip.thumb button {
+  .chip.thumb button:not(.open) {
     position: absolute;
     top: -5px;
     right: -5px;

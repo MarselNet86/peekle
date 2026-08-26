@@ -27,6 +27,7 @@
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
+  import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
@@ -161,6 +162,14 @@
   let reply = $state('');
   // What is waiting in the field of the session on screen. tech.md 6.13.
   const attached = $derived(current ? shots.of(current.session.session_id) : []);
+  // Which attachment is open at full size. A layer over the content, so it is
+  // the route's and not Rust's: no view changes and the window keeps its size.
+  let opened = $state<string | null>(null);
+
+  // An attachment taken back, or a message sent, takes its picture with it.
+  $effect(() => {
+    if (opened !== null && !attached.includes(opened)) opened = null;
+  });
 
   // A settled request leaves nothing behind for the next one to inherit.
   $effect(() => {
@@ -270,7 +279,7 @@
     <!-- A screenshot is waiting to be attached, and it outranks a toast: the
          offer runs out in seconds and a toast can be read afterwards. 6.13. -->
     {#if island.view === 'Pill' && shots.offer}
-      <ShotPrompt project={shots.offer.project} left={shots.left} />
+      <ShotPrompt project={shots.offer.project} left={shots.left} secs={shots.secs} />
     {:else if island.view === 'Pill' && island.toast}
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
@@ -312,6 +321,15 @@
       </div>
     {:else if current}
       <div class="feed">
+        <!-- Over the dialogue rather than instead of it: the reply being
+             written stays where it was. tech.md 6.13. -->
+        {#if opened}
+          <ShotPreview
+            name={shotName(opened)}
+            src={fileSrc(opened)}
+            onclose={() => (opened = null)}
+          />
+        {/if}
         <div class="head">
           <button class="back" onclick={() => openList()} aria-label="Back to the session list">
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
@@ -379,6 +397,7 @@
                   <ShotChip
                     name={shotName(path)}
                     src={fileSrc(path)}
+                    onopen={() => (opened = path)}
                     onremove={() => current && shots.remove(current.session.session_id, path)}
                   />
                 {/each}
@@ -406,6 +425,7 @@
   }
 
   .feed {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;

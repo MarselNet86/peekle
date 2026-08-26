@@ -5,7 +5,8 @@
     project,
     keys = ['↑'],
     left = 1,
-  }: { project: string; keys?: string[]; left?: number } = $props();
+    secs = 0,
+  }: { project: string; keys?: string[]; left?: number; secs?: number } = $props();
 </script>
 
 <!-- Content of the pill only. The black fill, the corners and the movement
@@ -27,8 +28,14 @@
   </svg>
   <span class="text">Screenshot to {project}</span>
   <Kbd {keys} />
-  <!-- The offer answers itself in five seconds, so it shows the five seconds
-       going. A countdown in numbers would be read as an alarm. tech.md 6.13. -->
+  <!-- The one question of the moment is whether there is time to reach the
+       key, and only a number answers it. Zero is never shown: at zero there is
+       no offer left to show it on. tech.md 6.13. -->
+  {#if secs > 0}
+    <span class="secs">{secs}s</span>
+  {/if}
+  <!-- The same deadline as a line, moved by a frame of the screen rather than
+       by a timer, so it flows instead of stepping. tech.md 6.13. -->
   <span class="fuse" style="--left: {Math.min(1, Math.max(0, left))}"></span>
 </div>
 
@@ -56,6 +63,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .secs {
+    flex: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
   }
 
   .fuse {

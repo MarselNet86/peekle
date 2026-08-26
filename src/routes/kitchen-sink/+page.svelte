@@ -15,6 +15,7 @@
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
+  import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
@@ -310,7 +311,7 @@
     <h2>ShotPrompt</h2>
     <!-- The pill as it stands through its five seconds. tech.md 6.13. -->
     <div class="pill"><ShotPrompt project="peekle" left={1} /></div>
-    <div class="pill"><ShotPrompt project="a-long-project-name" left={0.4} /></div>
+    <div class="pill"><ShotPrompt project="a-long-project-name" left={0.4} secs={2} /></div>
     <div class="pill"><ShotPrompt project="peekle" left={0} /></div>
   </section>
 
@@ -320,6 +321,11 @@
       <ShotChip name="01JBQ8WMKX.png" src={SHOT} />
       <ShotChip name="a-screenshot-with-a-very-long-name-indeed.png" />
     </div>
+  </section>
+
+  <section>
+    <h2>ShotPreview</h2>
+    <div class="frame preview"><ShotPreview name="01JBQ8WMKX.png" src={SHOT} /></div>
   </section>
 
   <section>
@@ -474,6 +480,13 @@
     border: 1px solid var(--hairline);
     border-radius: var(--radius);
     padding: 12px 14px;
+  }
+
+  /* The preview is a layer over content, so the sink gives it something to
+     lie over rather than showing it against the page. */
+  .preview {
+    position: relative;
+    height: 200px;
   }
 
   .views {

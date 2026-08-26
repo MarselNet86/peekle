@@ -10,30 +10,39 @@
  */
 
 import { commands, events } from '$lib/bridge';
-import { timeLeft } from '$lib/logic/shots';
+import { secondsLeft, timeLeft } from '$lib/logic/shots';
 import type { ShotOffer } from '$lib/types/generated/ShotOffer';
-
-/** How often the fuse on the offer is redrawn. Five seconds of bar. */
-const TICK_MS = 100;
 
 export function createShots() {
   let offer = $state<ShotOffer | null>(null);
   let left = $state(1);
+  let secs = $state(0);
   let attached = $state<Record<string, string[]>>({});
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let frame = 0;
+
+  // A frame of the screen and not a timer of a hundred milliseconds: fifty
+  // steps across a five second bar are visible as steps. tech.md 6.13.
+  function stop() {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+  }
 
   function show(next: ShotOffer | null) {
-    clearInterval(timer);
+    stop();
     offer = next;
     if (!next) return;
 
-    left = timeLeft(next, Date.now());
     // Rust settles the offer on the same deadline and says so with an event.
-    // The bar is only the picture of that clock, so it never settles anything
-    // itself: two owners of one deadline disagree the moment either drifts.
-    timer = setInterval(() => {
-      left = timeLeft(next, Date.now());
-    }, TICK_MS);
+    // The bar and the number are only the picture of that clock, so they never
+    // settle anything themselves: two owners of one deadline disagree the
+    // moment either drifts.
+    const draw = () => {
+      const now = Date.now();
+      left = timeLeft(next, now);
+      secs = secondsLeft(next, now);
+      frame = requestAnimationFrame(draw);
+    };
+    draw();
   }
 
   async function start(): Promise<() => void> {
@@ -49,7 +58,7 @@ export function createShots() {
     if (state?.shot) show(state.shot);
 
     return () => {
-      clearInterval(timer);
+      stop();
       offShot();
       offAttached();
     };
@@ -61,6 +70,10 @@ export function createShots() {
     },
     get left() {
       return left;
+    },
+    /** Whole seconds left on the offer. Zero once there is nothing standing. */
+    get secs() {
+      return secs;
     },
     /** What is waiting in the field of this session. */
     of(sessionId: string): string[] {

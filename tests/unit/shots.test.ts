@@ -12,8 +12,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, events } from '$lib/bridge';
 import { createIsland } from '$lib/features/island/island.svelte';
 import { createShots } from '$lib/features/shots/shots.svelte';
-import { shotName, timeLeft } from '$lib/logic/shots';
+import { secondsLeft, shotName, timeLeft } from '$lib/logic/shots';
 import ShotChip from '$lib/ui/ShotChip.svelte';
+import ShotPreview from '$lib/ui/ShotPreview.svelte';
 import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
 import type { ShotOffer } from '$lib/types/generated/ShotOffer';
 
@@ -118,6 +119,66 @@ describe('the offer in the notch', () => {
 
     expect(fuse).toBeInstanceOf(HTMLElement);
     expect((fuse as HTMLElement).style.getPropertyValue('--left')).toBe('0.25');
+  });
+});
+
+/// The offer runs out in five seconds, and the only question is whether there
+/// is time to reach the key. tech.md 6.13.
+describe('the seconds on the offer', () => {
+  const five: ShotOffer = {
+    id: '01JB',
+    session_id: 's',
+    project: 'peekle',
+    created_at: 1000,
+    expires_at: 6000,
+  };
+
+  it('rounds up, so a part of a second still reads as one', () => {
+    expect(secondsLeft(five, 1000)).toBe(5);
+    expect(secondsLeft(five, 1001)).toBe(5);
+    expect(secondsLeft(five, 5999)).toBe(1);
+  });
+
+  it('never goes below zero, whatever the clock says', () => {
+    expect(secondsLeft(five, 6000)).toBe(0);
+    expect(secondsLeft(five, 60000)).toBe(0);
+  });
+
+  it('says nothing on the pill once it is out', () => {
+    render(ShotPrompt, { props: { project: 'peekle', left: 0, secs: 0 } });
+    expect(screen.queryByText('0s')).not.toBeInTheDocument();
+  });
+
+  it('names the seconds beside the key', () => {
+    render(ShotPrompt, { props: { project: 'peekle', left: 0.6, secs: 3 } });
+    expect(screen.getByText('3s')).toBeInTheDocument();
+  });
+});
+
+describe('the shot at full size', () => {
+  /// Forty pixels say which shot it is, not what is on it. tech.md 6.13.
+  it('opens from the chip', async () => {
+    const onopen = vi.fn();
+    render(ShotChip, { props: { name: '01JB.png', src: 'asset://x.png', onopen } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open 01JB.png' }));
+    expect(onopen).toHaveBeenCalledOnce();
+  });
+
+  it('closes on a click anywhere over it', async () => {
+    const onclose = vi.fn();
+    render(ShotPreview, { props: { name: '01JB.png', src: 'asset://x.png', onclose } });
+
+    await userEvent.click(screen.getByRole('img', { name: '01JB.png' }));
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
+  it('closes on Escape', async () => {
+    const onclose = vi.fn();
+    render(ShotPreview, { props: { name: '01JB.png', src: 'asset://x.png', onclose } });
+
+    await userEvent.keyboard('{Escape}');
+    expect(onclose).toHaveBeenCalledOnce();
   });
 });
 
