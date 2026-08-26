@@ -8,7 +8,7 @@ import { render, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import fc from 'fast-check';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { clickPutsAway, clickSettles, restStatus } from '$lib/logic/rest';
 import { REST_DROP, REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
@@ -96,14 +96,22 @@ describe('RestMark', () => {
 });
 
 describe('closing an open island with a click', () => {
+  const built: HTMLElement[] = [];
+
+  afterEach(() => {
+    for (const node of built.splice(0)) node.remove();
+  });
+
+  // In the document, because a real click lands on a node that is in it, and
+  // being out of it is the separate fact this rule now reads. tech.md 6.7.
   function targets() {
     const shape = document.createElement('div');
     shape.className = 'shape';
     const inside = document.createElement('button');
     shape.append(inside);
-    // Detached on purpose: `closest` walks the tree it is given, and appending
-    // to the document would leak these into every later test.
     const outside = document.createElement('div');
+    document.body.append(shape, outside);
+    built.push(shape, outside);
     return { shape, inside, outside };
   }
 
@@ -130,6 +138,21 @@ describe('closing an open island with a click', () => {
   it('does nothing while the island is already resting', () => {
     const { outside } = targets();
     expect(clickPutsAway('Collapsed', outside)).toBe(false);
+  });
+
+  /// The cross on an attachment deletes its own chip, and Svelte applies that
+  /// before the click reaches the window. A detached node has no ancestors at
+  /// all, so it read as a click beside the shape and took the whole island
+  /// with it. tech.md 6.7.
+  it('leaves the island alone when the click removed its own target', () => {
+    const { shape } = targets();
+    const cross = document.createElement('button');
+    shape.appendChild(cross);
+    expect(clickPutsAway('Sessions', cross)).toBe(false);
+
+    cross.remove();
+    expect(clickPutsAway('Sessions', cross)).toBe(false);
+    expect(clickSettles('Sessions', cross, false)).toBe('nothing');
   });
 
   /// A picture open at full size is what the click is aimed at, and collapsing

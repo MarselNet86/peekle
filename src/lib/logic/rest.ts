@@ -40,6 +40,12 @@ export function restStatus(cards: SessionCard[], awaitingPermission = false): Re
  */
 export function clickPutsAway(view: IslandView, target: EventTarget | null): boolean {
   if (view === 'Collapsed') return false;
+  // A target the island removed on this very click. Svelte applies state
+  // synchronously after a delegated handler, so a button that deletes itself
+  // -- the cross on an attachment -- reaches the window already detached, and
+  // a detached node has no ancestors at all, `.shape` among them. That is a
+  // click on the island's own content, not beside it. tech.md 6.7.
+  if (target instanceof Element && !target.isConnected) return false;
   return !(target instanceof Element && target.closest('.shape'));
 }
 
