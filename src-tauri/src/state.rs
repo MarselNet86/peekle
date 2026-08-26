@@ -721,6 +721,22 @@ mod tests {
         assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
     }
 
+    /// S17 follow up. The end of an observed turn is one line in the notch,
+    /// and it is prose: the notch is one line wide, and the rest of the
+    /// message is in that session's feed. tech.md 6.2.
+    #[test]
+    fn a_closing_message_is_announced_by_its_first_line_with_words_on_it() {
+        use crate::hooks::first_line;
+
+        assert_eq!(first_line("Built and running."), "Built and running.");
+        assert_eq!(
+            first_line("\n\n  Built and running.\nThe cause was structural."),
+            "Built and running."
+        );
+        assert_eq!(first_line("   \n\t\n"), "", "nothing said, nothing shown");
+        assert_eq!(first_line(""), "");
+    }
+
     /// Taking an attachment back makes the island a row shorter, and the hand
     /// that pressed the cross is then below its edge without having moved. The
     /// island moved, not the user, and it must not put itself away for that.

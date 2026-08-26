@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use peekle_core::labels::classify;
 use peekle_core::types::{
-    PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest, ToastTone,
+    IslandView, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest,
+    ToastTone,
 };
 use peekle_core::FeedEvent;
 use peekle_server::HookSink;
@@ -20,6 +21,12 @@ use tokio::sync::oneshot;
 use crate::events;
 use crate::state::AppState;
 use crate::windows;
+
+/// How long the end of an observed turn stands in the notch.
+///
+/// A line of prose to read and a decision to make about it, so longer than the
+/// 2.6s a status toast gets, and far short of the panel's ten. tech.md 6.2.
+const TURN_NOTICE_MS: u32 = 4500;
 
 pub struct AppSink {
     app: AppHandle,
@@ -71,6 +78,39 @@ impl AppSink {
                 tracing::warn!(error = %err, "failed to emit sessions");
             }
         });
+    }
+
+    /// One line in the notch: an observed turn ended, and this is what it
+    /// said. tech.md 6.2.
+    ///
+    /// Only on a resting island. A notice that covers what the user is reading
+    /// -- an open request, an open dialogue -- is worse than no notice, and
+    /// `toast` takes the view outright rather than queueing behind it.
+    fn say_turn_ended(&self, session: &peekle_core::types::SessionRef, payload: &Value) {
+        let Some(said) = payload
+            .get("last_assistant_message")
+            .and_then(Value::as_str)
+            .map(first_line)
+            .filter(|line| !line.is_empty())
+        else {
+            return;
+        };
+        if self.state.view() != IslandView::Collapsed || self.state.active_prompt().is_some() {
+            tracing::debug!("something is on screen already, so the turn stays quiet");
+            return;
+        }
+
+        windows::toast(
+            &self.app,
+            ToastRequest {
+                // Which project said it, because more than one runs at a time
+                // and the badge on a toast is a count rather than a name.
+                text: format!("{} · {said}", session.project),
+                tone: ToastTone::Neutral,
+                ttl_ms: TURN_NOTICE_MS,
+                badge: None,
+            },
+        );
     }
 
     fn emit_sessions(&self, cards: Vec<peekle_core::types::SessionCard>) {
@@ -133,15 +173,22 @@ impl HookSink for AppSink {
         self.emit_sessions(self.state.sessions());
         self.refresh_from_transcript(payload);
 
-        // The notch opens on the turn it belongs to, and only for a session
-        // the island owns: an observed one is read in the user's editor, and
-        // surfacing there on every turn boundary is noise. tech.md 6.2.
+        // Two origins, two notices. The island owns this one, so the notch
+        // opens on the dialogue: the user wrote their reply here and waits for
+        // the answer here. tech.md 6.2.
         if self.state.owns_session(&session.session_id) {
             let app = self.app.clone();
             let session_id = session.session_id.clone();
             tauri::async_runtime::spawn(async move {
                 windows::reveal_turn(&app, &session_id).await;
             });
+        } else {
+            // An observed one is read in the editor, so a panel over half the
+            // screen is a hindrance. Silence is wrong too: the user walks away
+            // and learns the work finished only by going back to look, which
+            // is the context switch this product exists to remove. One line in
+            // the notch is enough to decide whether to go and look.
+            self.say_turn_ended(&session, payload);
         }
 
         tracing::debug!(session = %session.session_id, "the turn ended");
@@ -237,6 +284,16 @@ impl HookSink for AppSink {
             },
         );
     }
+}
+
+/// The first line with anything on it. A closing message is prose and the
+/// notch is one line wide; the rest of it is in the feed of that session.
+pub(crate) fn first_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn now_ms() -> i64 {
