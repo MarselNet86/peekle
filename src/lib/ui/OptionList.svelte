@@ -128,7 +128,15 @@
     color: var(--text);
     font: inherit;
     text-align: left;
-    cursor: default;
+    cursor: pointer;
+  }
+
+  /* A row answers the question on a click, so it has to read as pressable
+     before the pointer is on it. Lighter than the checked state on purpose:
+     hover says "this one is under the pointer", checked says "this one is the
+     answer", and they are on screen together. */
+  :global(.row:hover) {
+    background: rgba(255, 255, 255, 0.05);
   }
 
   :global(.row:focus-visible),
