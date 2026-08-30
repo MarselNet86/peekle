@@ -16,6 +16,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   status: 'Idle',
   origin: 'Observed',
   entries: [],
+  agent: null,
   updated_at: 0,
 });
 

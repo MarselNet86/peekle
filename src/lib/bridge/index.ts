@@ -13,6 +13,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
+import type { Effort } from '$lib/types/generated/Effort';
+import type { ModelChoice } from '$lib/types/generated/ModelChoice';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 import type { SessionRef } from '$lib/types/generated/SessionRef';
@@ -79,6 +81,13 @@ export const commands = {
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
   hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
+  // The row under the field. A slash command is text, so all three take the
+  // channel a reply takes: written into the pty of a session we own.
+  // tech.md 6.15.
+  getModels: () => call<ModelChoice[]>('get_models'),
+  setModel: (sessionId: string, model: string) => call<void>('set_model', { sessionId, model }),
+  setEffort: (sessionId: string, effort: Effort) => call<void>('set_effort', { sessionId, effort }),
+  compactSession: (sessionId: string) => call<void>('compact_session', { sessionId }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

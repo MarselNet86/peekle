@@ -20,6 +20,7 @@ const card = (
   status,
   origin,
   entries: [],
+  agent: null,
   updated_at: 0,
 });
 

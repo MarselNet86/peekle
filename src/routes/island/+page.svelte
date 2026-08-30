@@ -1,5 +1,6 @@
 <script lang="ts">
   import { commands, fileSrc } from '$lib/bridge';
+  import { createAgent } from '$lib/features/agent/agent.svelte';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
@@ -16,6 +17,7 @@
   import { searchSessions } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
+  import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
@@ -39,6 +41,7 @@
   const feed = createFeed();
   const usage = createUsage();
   const shots = createShots();
+  const agent = createAgent();
 
   let host = $state<HTMLElement | null>(null);
 
@@ -150,6 +153,11 @@
     }
   }
 
+  // What answers in the session on screen, and which of the three controls is
+  // still waiting on the agent to confirm a pick. tech.md 6.15.
+  const setup = $derived(current?.agent ?? null);
+  const waiting = $derived(agent.pendingFor(current?.session.session_id ?? '', setup));
+
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
   const question = $derived(isQuestion(island.prompt) ? island.prompt : null);
 
@@ -201,7 +209,13 @@
   }
 
   $effect(() => {
-    const stop = Promise.all([island.start(), feed.start(), usage.start(), shots.start()]);
+    const stop = Promise.all([
+      island.start(),
+      feed.start(),
+      usage.start(),
+      shots.start(),
+      agent.start(),
+    ]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
     commands.windowReady('island');
@@ -442,6 +456,22 @@
               disabled={!reachable}
               onsubmit={send}
               onescape={() => island.dismiss()}
+            />
+            <!-- Under the field, where Claude Code draws it too: the question
+                 it answers is asked exactly here. tech.md 6.15. -->
+            {#if agent.error}
+              <p class="empty">{agent.error}</p>
+            {/if}
+            <AgentBar
+              agent={setup}
+              models={agent.models}
+              live={owned}
+              pendingModel={waiting.model}
+              pendingEffort={waiting.effort}
+              pendingCompact={waiting.compact}
+              onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
+              oneffort={(level) => current && agent.setEffort(current.session.session_id, level)}
+              oncompact={() => current && agent.compact(current.session.session_id, setup)}
             />
           </div>
         {/if}

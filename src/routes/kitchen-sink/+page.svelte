@@ -21,8 +21,13 @@
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
+  import { effortOptions, modelOptions } from '$lib/logic/agent';
+  import AgentBar from '$lib/ui/AgentBar.svelte';
+  import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
+  import type { AgentSetup } from '$lib/types/generated/AgentSetup';
+  import type { ModelChoice } from '$lib/types/generated/ModelChoice';
   import type { SessionCard } from '$lib/types/generated/SessionCard';
   import type { TaskItem } from '$lib/types/generated/TaskItem';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
@@ -172,6 +177,37 @@
     expires_at: 0,
   };
 
+  const modelRows: ModelChoice[] = [
+    { alias: 'fable', label: 'Fable 5', id: 'claude-fable-5' },
+    { alias: 'opus', label: 'Opus 5', id: 'claude-opus-5' },
+    { alias: 'sonnet', label: 'Sonnet 5', id: 'claude-sonnet-5' },
+    { alias: 'haiku', label: 'Haiku 4.5', id: 'claude-haiku-4-5' },
+  ];
+  const modelPicks = modelOptions(modelRows);
+  const effortPicks = effortOptions({
+    levels: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+  } as AgentSetup);
+
+  const opus: AgentSetup = {
+    model: 'claude-opus-5',
+    label: 'Opus 5',
+    effort: 'High',
+    levels: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+    context_tokens: 612_000,
+    context_window: 1_000_000,
+    context_pct: 61.2,
+  };
+  // A model that takes no effort at all is not offered a dead menu. 6.15.
+  const haiku: AgentSetup = {
+    model: 'claude-haiku-4-5',
+    label: 'Haiku 4.5',
+    effort: null,
+    levels: [],
+    context_tokens: 24_000,
+    context_window: 200_000,
+    context_pct: 12,
+  };
+
   const cards: SessionCard[] = (['Working', 'Idle', 'Ended'] as const).map((status, i) => ({
     session: {
       session_id: `s${i}`,
@@ -184,6 +220,7 @@
     status,
     origin: i === 0 ? 'Owned' : 'Observed',
     entries: [],
+    agent: null,
     updated_at: 0,
   }));
 
@@ -260,6 +297,25 @@
   <section>
     <h2>SearchField</h2>
     <div class="frame"><SearchField bind:value={search} /></div>
+  </section>
+
+  <section>
+    <h2>AgentBar</h2>
+    <!-- Live, waiting on a pick it has sent, a model that takes no effort, and
+         a session nobody can type into. tech.md 6.15. -->
+    <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
+    <AgentBar agent={opus} models={modelRows} live pendingModel pendingCompact />
+    <AgentBar agent={haiku} models={modelRows} live />
+    <AgentBar agent={opus} models={modelRows} />
+  </section>
+
+  <section>
+    <h2>PickerMenu</h2>
+    <div class="row">
+      <PickerMenu label="Opus 5" options={modelPicks} value="opus" onpick={() => {}} />
+      <PickerMenu label="High" options={effortPicks} value="High" pending onpick={() => {}} />
+      <PickerMenu label="Opus 5" options={modelPicks} disabled onpick={() => {}} />
+    </div>
   </section>
 
   <section>

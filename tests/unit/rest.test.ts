@@ -24,6 +24,7 @@ const card = (status: SessionStatus, id = 's1'): SessionCard => ({
   status,
   origin: 'Observed',
   entries: [],
+  agent: null,
   updated_at: 0,
 });
 
