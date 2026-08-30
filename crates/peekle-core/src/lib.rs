@@ -1,6 +1,7 @@
 //! Core types, pending registry, config, label classifier.
 //! tech.md sections 6.1, 6.3 and 6.8 are the source of truth for this crate.
 
+pub mod agent;
 pub mod config;
 pub mod feed;
 pub mod hooks;

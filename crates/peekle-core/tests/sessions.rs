@@ -911,6 +911,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         status: peekle_core::types::SessionStatus::Idle,
         origin: peekle_core::types::SessionOrigin::Observed,
         entries: Vec::new(),
+        agent: None,
         updated_at: 2,
     }]);
     assert!(registry.cards().is_empty(), "the backfill may not raise it");
@@ -994,7 +995,8 @@ mod adopting_a_transcript {
             vec![
                 row("u-1", EntryKind::Assistant, "Here is what I found."),
                 row("u-2", EntryKind::Tool, "ls"),
-            ]
+            ],
+            None
         ));
 
         let card = &registry.cards()[0];
@@ -1011,7 +1013,7 @@ mod adopting_a_transcript {
         let mut registry = registry_with_a_call();
         registry.user_turn(session(), "ship it", EntryState::Running, 1);
 
-        registry.adopt_entries("s", vec![row("u-1", EntryKind::Tool, "ls")]);
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::Tool, "ls")], None);
 
         let card = &registry.cards()[0];
         let last = card.entries.last().unwrap();
@@ -1026,7 +1028,7 @@ mod adopting_a_transcript {
         let mut registry = registry_with_a_call();
         registry.user_turn(session(), "ship it", EntryState::Running, 1);
 
-        registry.adopt_entries("s", vec![row("u-1", EntryKind::User, "ship it")]);
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::User, "ship it")], None);
 
         let card = &registry.cards()[0];
         assert_eq!(card.entries.len(), 1);
@@ -1040,7 +1042,7 @@ mod adopting_a_transcript {
         let mut registry = registry_with_a_call();
         registry.user_turn(session(), "done already", EntryState::Ok, 1);
 
-        registry.adopt_entries("s", vec![row("u-1", EntryKind::Assistant, "hello")]);
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::Assistant, "hello")], None);
 
         let card = &registry.cards()[0];
         assert_eq!(card.entries.len(), 1);
@@ -1051,7 +1053,7 @@ mod adopting_a_transcript {
     #[test]
     fn a_session_nobody_knows_is_left_alone() {
         let mut registry = SessionRegistry::new();
-        assert!(!registry.adopt_entries("nobody", vec![row("u-1", EntryKind::User, "hi")]));
+        assert!(!registry.adopt_entries("nobody", vec![row("u-1", EntryKind::User, "hi")], None));
         assert!(registry.cards().is_empty());
     }
 
@@ -1062,7 +1064,7 @@ mod adopting_a_transcript {
             .map(|i| row(&format!("u-{i}"), EntryKind::Tool, "call"))
             .collect();
 
-        registry.adopt_entries("s", rows);
+        registry.adopt_entries("s", rows, None);
 
         assert_eq!(registry.cards()[0].entries.len(), ENTRY_CAP);
     }

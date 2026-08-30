@@ -254,6 +254,9 @@ impl SessionRegistry {
                 status: SessionStatus::Idle,
                 origin: SessionOrigin::Owned,
                 entries: Vec::new(),
+                // Nothing has answered yet, so there is nothing to say about
+                // the model. tech.md 6.15.
+                agent: None,
                 updated_at: at,
             },
         );
@@ -459,7 +462,12 @@ impl SessionRegistry {
     /// False means there is no such session yet, so there is nothing to
     /// replace: a transcript never opens a card, the same rule the backfill
     /// lives by.
-    pub fn adopt_entries(&mut self, session_id: &str, entries: Vec<FeedEntry>) -> bool {
+    pub fn adopt_entries(
+        &mut self,
+        session_id: &str,
+        entries: Vec<FeedEntry>,
+        agent: Option<crate::types::AgentSetup>,
+    ) -> bool {
         let Some(card) = self
             .cards
             .iter_mut()
@@ -484,6 +492,13 @@ impl SessionRegistry {
             adopted.drain(..adopted.len() - ENTRY_CAP);
         }
         card.entries = adopted;
+        // What the file says the session answers with. A file that names no
+        // model leaves the row as it stood: the transcript is written after
+        // the fact, and a gap in it is not a session that lost its model.
+        // tech.md 6.15.
+        if agent.is_some() {
+            card.agent = agent;
+        }
         true
     }
 
@@ -636,6 +651,7 @@ impl SessionRegistry {
                         SessionOrigin::Observed
                     },
                     entries: Vec::new(),
+                    agent: None,
                     updated_at: at,
                 },
             );

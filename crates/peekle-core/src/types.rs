@@ -246,7 +246,9 @@ pub enum SessionStatus {
     Ended,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+// No `Eq`: the card now carries a percentage, and a float has no total
+// equality. Nothing compares cards for identity anyway. tech.md 6.15.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SessionCard {
     pub session: SessionRef,
@@ -256,9 +258,84 @@ pub struct SessionCard {
     pub origin: SessionOrigin,
     /// Tail of the feed, capped at 200 per session.
     pub entries: Vec<FeedEntry>,
+    /// What this session is answering with. `None` until its transcript names
+    /// a model, which is every session that has not had a turn yet.
+    /// tech.md 6.15.
+    pub agent: Option<AgentSetup>,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,
+}
+
+/// The model of a session, the effort it answers with, and how full its
+/// context window is. Read out of the transcript: no hook carries any of the
+/// three. tech.md 6.15.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AgentSetup {
+    /// "claude-opus-5", exactly as the transcript writes it.
+    pub model: Option<String>,
+    /// "Opus 5", from the captured catalog. `None` for a model the catalog
+    /// does not know, and then the id is all the row can show.
+    pub label: Option<String>,
+    /// `None` when the model takes no effort at all, and when the file never
+    /// said. tech.md 6.15.
+    pub effort: Option<Effort>,
+    /// What the agent's last request took of the window.
+    pub context_tokens: u32,
+    /// What it is measured against. Never zero: a ring divided by zero is a
+    /// ring that shows nothing. tech.md 6.15.
+    pub context_window: u32,
+    /// 0.0 .. 100.0
+    pub context_pct: f32,
+}
+
+impl AgentSetup {
+    /// The only constructor, so the percentage is never computed twice in two
+    /// different ways.
+    pub fn new(
+        model: Option<String>,
+        label: Option<String>,
+        effort: Option<Effort>,
+        context_tokens: u32,
+        context_window: u32,
+    ) -> Self {
+        // A window of zero would come from a catalog we failed to read, and
+        // dividing by it is worse than measuring against the default.
+        let context_window = context_window.max(1);
+        Self {
+            model,
+            label,
+            effort,
+            context_tokens,
+            context_window,
+            context_pct: clamp_pct(context_tokens as f32 / context_window as f32 * 100.0),
+        }
+    }
+
+    /// The same reading against a window the user pinned by hand.
+    /// `[behavior] context_window`, tech.md 6.8 and 6.15.
+    pub fn with_window(self, context_window: u32) -> Self {
+        Self::new(
+            self.model,
+            self.label,
+            self.effort,
+            self.context_tokens,
+            context_window,
+        )
+    }
+}
+
+/// How hard the model is asked to think. The list is `claude --effort`, and
+/// nothing outside it is sent. tech.md 6.15.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum Effort {
+    Low,
+    Medium,
+    High,
+    XHigh,
+    Max,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

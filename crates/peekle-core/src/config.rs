@@ -143,6 +143,10 @@ pub struct BehaviorConfig {
     /// The keys exist so a zero size can be ruled out. tech.md 6.5 and 6.8.
     pub pty_cols: u16,
     pub pty_rows: u16,
+    /// What the context ring is measured against. Zero means the catalog
+    /// decides, which is what it does for everyone who has not pinned their
+    /// own window. tech.md 6.15.
+    pub context_window: u32,
 }
 
 impl Default for ServerConfig {
@@ -204,6 +208,7 @@ impl Default for BehaviorConfig {
             delivery_confirm_secs: 20,
             pty_cols: 120,
             pty_rows: 40,
+            context_window: 0,
         }
     }
 }

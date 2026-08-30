@@ -15,7 +15,8 @@ use serde_json::Value;
 
 use crate::sessions::{ENTRY_CAP, SESSION_CAP};
 use crate::types::{
-    EntryKind, EntryState, FeedEntry, SessionCard, SessionOrigin, SessionRef, SessionStatus,
+    AgentSetup, EntryKind, EntryState, FeedEntry, SessionCard, SessionOrigin, SessionRef,
+    SessionStatus,
 };
 
 /// Same limits the live feed applies, so a backfilled row and a live row of the
@@ -65,6 +66,104 @@ pub fn default_root() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|home| Path::new(&home).join(".claude").join("projects"))
 }
 
+/// What the transcript says the session is answering with, gathered as the
+/// file is read. tech.md 6.15.
+///
+/// The last `assistant` record wins: it describes the request the agent sent
+/// most recently, which is the state the session is in now. Everything before
+/// it is history, and history is what the feed is for.
+#[derive(Debug, Default)]
+struct AgentReader {
+    model: Option<String>,
+    effort: Option<String>,
+    context_tokens: u32,
+    /// Where an automatic compact fired, which is the only observable evidence
+    /// of the window this account actually has. tech.md 6.15.
+    auto_compact_at: Option<u32>,
+}
+
+impl AgentReader {
+    fn read(&mut self, record: &Value) {
+        if let Some(meta) = record.get("compactMetadata") {
+            if meta.get("trigger").and_then(Value::as_str) == Some("auto") {
+                if let Some(pre) = meta.get("preTokens").and_then(Value::as_u64) {
+                    self.auto_compact_at = Some(pre.min(u32::MAX as u64) as u32);
+                }
+            }
+        }
+
+        if record.get("type").and_then(Value::as_str) != Some("assistant") {
+            return;
+        }
+        let Some(message) = record.get("message") else {
+            return;
+        };
+        // Only a record that carries a reading replaces the last one. A
+        // record without usage says nothing about the window, and taking it
+        // would drop the ring to zero mid conversation.
+        let Some(usage) = message.get("usage") else {
+            return;
+        };
+
+        self.model = message
+            .get("model")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        self.effort = record
+            .get("effort")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        self.context_tokens = tokens_of(usage);
+    }
+
+    fn finish(&self) -> Option<AgentSetup> {
+        // Nothing answered in this file yet, so there is nothing to report.
+        // Zeroes would be a claim that the context is empty, which is a
+        // different statement from not knowing.
+        self.model.as_ref()?;
+        Some(crate::agent::setup(
+            self.model.as_deref(),
+            self.effort.as_deref(),
+            self.context_tokens,
+            self.auto_compact_at,
+        ))
+    }
+}
+
+/// What one request took of the window: everything that went in, cached or
+/// not. The output is left out on purpose -- it lands in the input of the next
+/// request and is counted there. tech.md 6.15.
+fn tokens_of(usage: &Value) -> u32 {
+    const FIELDS: &[&str] = &[
+        "input_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ];
+    let total: u64 = FIELDS
+        .iter()
+        .filter_map(|field| usage.get(*field).and_then(Value::as_u64))
+        .sum();
+    total.min(u32::MAX as u64) as u32
+}
+
+/// The model, the effort and the context of a transcript, without its feed.
+///
+/// The same pass the card makes, for the paths that want the row and not the
+/// dialogue. tech.md 6.15.
+pub fn agent_from_lines<I, S>(lines: I) -> Option<AgentSetup>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut reader = AgentReader::default();
+    for line in lines {
+        if let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) {
+            reader.read(&record);
+        }
+    }
+    reader.finish()
+}
+
 /// Builds one card out of the lines of a transcript.
 ///
 /// Returns nothing when the file carries no dialogue at all: a session that
@@ -81,6 +180,7 @@ where
     let mut first_turn = String::new();
     let mut entries: Vec<FeedEntry> = Vec::new();
     let mut latest = 0i64;
+    let mut agent = AgentReader::default();
     // The timestamp of the record before this one, so a thought can report how
     // long it took. Assigned on every iteration before it is read.
     let mut previous;
@@ -93,6 +193,8 @@ where
             // read. One bad line is skipped, the rest of the file still counts.
             continue;
         };
+
+        agent.read(&record);
 
         if session_id.is_empty() {
             if let Some(id) = record.get("sessionId").and_then(Value::as_str) {
@@ -254,6 +356,7 @@ where
         // nobody can type into it whoever started it. tech.md 6.11.
         origin: SessionOrigin::Observed,
         entries,
+        agent: agent.finish(),
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }
