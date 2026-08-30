@@ -406,7 +406,7 @@ pub fn set_effort(
     effort: peekle_core::types::Effort,
 ) -> Result<(), String> {
     command_session(
-        &state,
+        state.inner(),
         &session_id,
         &peekle_core::agent::effort_command(effort),
     )
@@ -416,7 +416,11 @@ pub fn set_effort(
 /// tech.md 6.15.
 #[tauri::command]
 pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> Result<(), String> {
-    command_session(&state, &session_id, peekle_core::agent::COMPACT_COMMAND)
+    command_session(
+        state.inner(),
+        &session_id,
+        peekle_core::agent::COMPACT_COMMAND,
+    )
 }
 
 /// Writes one slash command into a session's pty.
@@ -424,11 +428,7 @@ pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> R
 /// Refuses everything `send_message` refuses, and for the same reason: an
 /// observed session has no channel at all, and a setting that silently goes
 /// nowhere is worse than one that says it could not.
-fn command_session(
-    state: &State<'_, Arc<AppState>>,
-    session_id: &str,
-    line: &str,
-) -> Result<(), String> {
+fn command_session(state: &Arc<AppState>, session_id: &str, line: &str) -> Result<(), String> {
     if !state.owns_session(session_id) {
         tracing::warn!(
             session_id,
@@ -549,4 +549,52 @@ pub async fn dev_emit_prompt(
         windows::open_prompt(&app, &request).await;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use peekle_core::config::Config;
+    use peekle_usage::FakeUsage;
+
+    fn fresh() -> Arc<AppState> {
+        Arc::new(AppState::new(
+            Config::default(),
+            Arc::new(FakeUsage::default()),
+            Arc::new(peekle_core::shots::FakePasteboard::new()),
+        ))
+    }
+
+    /// A setting for a session the island did not start refuses, exactly the
+    /// way a message to it refuses. Writing it nowhere and saying nothing
+    /// would leave the row showing a model the agent never heard of.
+    /// tech.md 6.15.
+    #[test]
+    fn a_setting_for_a_session_we_do_not_own_is_refused() {
+        let state = fresh();
+        for line in [
+            "/model opus",
+            "/effort high",
+            peekle_core::agent::COMPACT_COMMAND,
+        ] {
+            let refused = command_session(&state, "someone-elses", line);
+            assert_eq!(
+                refused,
+                Err("Peekle can only talk to sessions it started".to_string()),
+                "{line}"
+            );
+        }
+    }
+
+    /// Claimed but with no pty behind it: the process died between the claim
+    /// and the click. Still a refusal, and still not a silent one.
+    #[test]
+    fn a_setting_for_a_session_that_stopped_listening_is_refused() {
+        let state = fresh();
+        state.claim_session("ours");
+        assert_eq!(
+            command_session(&state, "ours", peekle_core::agent::COMPACT_COMMAND),
+            Err("That session is no longer listening".to_string())
+        );
+    }
 }
