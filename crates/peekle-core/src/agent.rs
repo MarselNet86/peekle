@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use crate::types::{AgentSetup, Effort};
+use crate::types::{AgentSetup, Effort, ModelChoice};
 
 /// Claude Code's own model catalog, captured from the binary by
 /// `scripts/capture-models.sh`. The window a ring measures against is written
@@ -94,17 +94,6 @@ pub fn model_of(id: &str) -> Option<&'static Model> {
         .iter()
         .filter(|model| model.id == id || id.starts_with(&model.id))
         .max_by_key(|model| model.id.len())
-}
-
-/// One row of the model menu.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelChoice {
-    /// What travels in the command: `opus`.
-    pub alias: String,
-    /// What the row says: `Opus 5`.
-    pub label: String,
-    /// The catalog id behind it, so the menu can mark the current one.
-    pub id: String,
 }
 
 /// The models the menu offers: the newest of each family, exactly the four
@@ -251,6 +240,7 @@ pub fn setup(
         model.map(str::to_string),
         known.map(|model| model.label.clone()),
         effort,
+        known.map(Model::levels).unwrap_or_default(),
         context_tokens,
         window_for(model, auto_compact_at),
     )

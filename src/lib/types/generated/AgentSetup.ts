@@ -22,6 +22,12 @@ label: string | null,
  */
 effort: Effort | null, 
 /**
+ * What this model accepts, weakest first. Empty means it takes no effort
+ * at all, and then the menu is not offered rather than offered dead.
+ * tech.md 6.15.
+ */
+levels: Array<Effort>, 
+/**
  * What the agent's last request took of the window.
  */
 context_tokens: number, 

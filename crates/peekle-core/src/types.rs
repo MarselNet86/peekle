@@ -281,6 +281,10 @@ pub struct AgentSetup {
     /// `None` when the model takes no effort at all, and when the file never
     /// said. tech.md 6.15.
     pub effort: Option<Effort>,
+    /// What this model accepts, weakest first. Empty means it takes no effort
+    /// at all, and then the menu is not offered rather than offered dead.
+    /// tech.md 6.15.
+    pub levels: Vec<Effort>,
     /// What the agent's last request took of the window.
     pub context_tokens: u32,
     /// What it is measured against. Never zero: a ring divided by zero is a
@@ -297,6 +301,7 @@ impl AgentSetup {
         model: Option<String>,
         label: Option<String>,
         effort: Option<Effort>,
+        levels: Vec<Effort>,
         context_tokens: u32,
         context_window: u32,
     ) -> Self {
@@ -307,6 +312,7 @@ impl AgentSetup {
             model,
             label,
             effort,
+            levels,
             context_tokens,
             context_window,
             context_pct: clamp_pct(context_tokens as f32 / context_window as f32 * 100.0),
@@ -320,6 +326,7 @@ impl AgentSetup {
             self.model,
             self.label,
             self.effort,
+            self.levels,
             self.context_tokens,
             context_window,
         )
@@ -336,6 +343,20 @@ pub enum Effort {
     High,
     XHigh,
     Max,
+}
+
+/// One row of the model menu, from the catalog of 6.15. Handed to the island
+/// by `get_models` rather than typed into the markup, so a model that arrives
+/// in a captured catalog arrives in the menu with it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ModelChoice {
+    /// What travels in the command: "opus".
+    pub alias: String,
+    /// What the row says: "Opus 5".
+    pub label: String,
+    /// The catalog id behind it, so the menu can mark the current one.
+    pub id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

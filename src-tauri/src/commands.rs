@@ -372,6 +372,14 @@ pub fn send_message(
     Ok(())
 }
 
+/// The rows of the model menu, from the catalog. Called once on mount: the
+/// catalog is captured with the build and does not move under a session.
+/// tech.md 6.15.
+#[tauri::command]
+pub fn get_models() -> Vec<peekle_core::types::ModelChoice> {
+    peekle_core::agent::choices()
+}
+
 /// Changes the model of a session the island owns. tech.md 6.15.
 ///
 /// A slash command is text, so it travels the one channel text has: written
