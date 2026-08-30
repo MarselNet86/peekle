@@ -99,6 +99,54 @@ describe('the row of a live session', () => {
   });
 });
 
+describe('a session that has not answered yet', () => {
+  /** A model is chosen before the first turn, not after it, so the row stands
+   * on Claude Code's own defaults until the transcript names one. 6.15. */
+  const defaults: AgentSetup = {
+    model: 'claude-opus-5',
+    label: 'Opus 5',
+    effort: 'Low',
+    levels: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+    context_tokens: 0,
+    context_window: 1_000_000,
+    context_pct: 0,
+  };
+
+  it('can be aimed before it speaks', async () => {
+    const onmodel = vi.fn();
+    render(AgentBar, { props: { agent: null, defaults, models, live: true, onmodel } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Opus 5' }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Haiku 4.5/ }));
+
+    expect(onmodel).toHaveBeenCalledExactlyOnceWith('haiku');
+  });
+
+  /** Nothing has been asked of the window, and an empty ring says that. A
+   * drawn zero would be a measurement nobody made. */
+  it('leaves the ring empty and refuses to compact', async () => {
+    const oncompact = vi.fn();
+    render(AgentBar, { props: { agent: null, defaults, models, live: true, oncompact } });
+
+    const ring = screen.getByRole('button', { name: 'Nothing in the context yet' });
+    expect(ring).toBeDisabled();
+    await userEvent.click(ring);
+    expect(oncompact).not.toHaveBeenCalled();
+  });
+
+  /** Settings that name no model still leave a working picker: it is for
+   * choosing one, not for confirming one. */
+  it('offers the picker even when nothing is known', async () => {
+    const onmodel = vi.fn();
+    const unknown: AgentSetup = { ...defaults, model: null, label: null, effort: null };
+    render(AgentBar, { props: { agent: null, defaults: unknown, models, live: true, onmodel } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Model' }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Opus 5/ }));
+    expect(onmodel).toHaveBeenCalledExactlyOnceWith('opus');
+  });
+});
+
 describe('the row of a session the island cannot type into', () => {
   it('reads, and calls nothing', async () => {
     const handlers = { onmodel: vi.fn(), oneffort: vi.fn(), oncompact: vi.fn() };
@@ -114,10 +162,12 @@ describe('the row of a session the island cannot type into', () => {
     expect(handlers.oncompact).not.toHaveBeenCalled();
   });
 
-  /** A session whose transcript names no model has no row at all. Zeroes
-   * would claim an empty context, which is a different statement. */
-  it('draws nothing at all without a reading', () => {
-    const { container } = render(AgentBar, { props: { agent: null, models, live: true } });
+  /** With nothing to stand on -- no transcript, no defaults -- there is no
+   * row. Zeroes would claim an empty context, which is a different claim. */
+  it('draws nothing at all with neither a reading nor a default', () => {
+    const { container } = render(AgentBar, {
+      props: { agent: null, defaults: null, models, live: true },
+    });
     expect(container.querySelector('.agent-bar')).toBeNull();
   });
 });

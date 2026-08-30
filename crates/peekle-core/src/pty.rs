@@ -79,6 +79,14 @@ pub fn message_writes(text: &str) -> Vec<Vec<u8>> {
 /// tech.md 6.5.
 pub const ENTER_GAP: std::time::Duration = std::time::Duration::from_millis(120);
 
+/// How long a setting written ahead of a message waits before the message.
+///
+/// `/model` and `/effort` are local commands: the TUI runs one and redraws
+/// before it is ready for the next line. The reply is what carries the
+/// setting up to a session that has not spoken yet (tech.md 6.15), so the two
+/// travel together, and this is the distance between them.
+pub const SETTING_GAP: std::time::Duration = std::time::Duration::from_millis(400);
+
 /// A session id Claude Code accepts: it insists on a UUID.
 pub fn new_session_id() -> String {
     let raw = ulid::Ulid::generate().to_bytes();

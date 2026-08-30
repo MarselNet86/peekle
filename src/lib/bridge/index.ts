@@ -13,6 +13,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
+import type { AgentSetup } from '$lib/types/generated/AgentSetup';
 import type { Effort } from '$lib/types/generated/Effort';
 import type { ModelChoice } from '$lib/types/generated/ModelChoice';
 import type { PromptRequest } from '$lib/types/generated/PromptRequest';
@@ -85,6 +86,9 @@ export const commands = {
   // channel a reply takes: written into the pty of a session we own.
   // tech.md 6.15.
   getModels: () => call<ModelChoice[]>('get_models'),
+  // What a session that has not answered yet is running as, so the row can be
+  // aimed before the first turn rather than after it. tech.md 6.15.
+  getDefaults: () => call<AgentSetup>('get_defaults'),
   setModel: (sessionId: string, model: string) => call<void>('set_model', { sessionId, model }),
   setEffort: (sessionId: string, effort: Effort) => call<void>('set_effort', { sessionId, effort }),
   compactSession: (sessionId: string) => call<void>('compact_session', { sessionId }),

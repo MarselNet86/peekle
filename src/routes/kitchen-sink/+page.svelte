@@ -208,6 +208,16 @@
     context_pct: 12,
   };
 
+  const fresh: AgentSetup = {
+    model: 'claude-opus-5',
+    label: 'Opus 5',
+    effort: 'Low',
+    levels: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+    context_tokens: 0,
+    context_window: 1_000_000,
+    context_pct: 0,
+  };
+
   const cards: SessionCard[] = (['Working', 'Idle', 'Ended'] as const).map((status, i) => ({
     session: {
       session_id: `s${i}`,
@@ -307,6 +317,8 @@
     <AgentBar agent={opus} models={modelRows} live pendingModel pendingCompact />
     <AgentBar agent={haiku} models={modelRows} live />
     <AgentBar agent={opus} models={modelRows} />
+    <!-- Not answered yet: standing on the defaults, ring empty. 6.15. -->
+    <AgentBar agent={null} defaults={fresh} models={modelRows} live />
   </section>
 
   <section>

@@ -28,6 +28,7 @@ const NOTHING: Picked = { model: null, effort: null, compactFrom: null };
 
 export function createAgent() {
   let models = $state<ModelChoice[]>([]);
+  let defaults = $state<AgentSetup | null>(null);
   let picked = $state<Record<string, Picked>>({});
   let error = $state<string | null>(null);
 
@@ -53,6 +54,10 @@ export function createAgent() {
   return {
     get models() {
       return models;
+    },
+    /** What a session runs as before it has answered once. tech.md 6.15. */
+    get defaults() {
+      return defaults;
     },
     get error() {
       return error;
@@ -87,9 +92,12 @@ export function createAgent() {
       );
     },
 
-    /** The menu rows, once. The catalog ships with the build. */
+    /** The menu rows and the defaults, once: the catalog ships with the
+     * build, and the defaults are read off Claude Code's own settings. */
     async start(): Promise<() => void> {
-      models = (await commands.getModels()) ?? [];
+      const [rows, saved] = await Promise.all([commands.getModels(), commands.getDefaults()]);
+      models = rows ?? [];
+      defaults = saved;
       return () => {};
     },
   };

@@ -20,6 +20,21 @@ use tokio::sync::Notify;
 /// Freshest activity first, capped. tech.md 6.3.
 const TASK_CAP: usize = 50;
 
+/// Which of the two settings a held line is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeldKind {
+    Model,
+    Effort,
+}
+
+/// What one session has picked and not yet sent. One of each: the user chose
+/// a model, not a sequence of models. tech.md 6.15.
+#[derive(Debug, Clone, Default)]
+pub struct HeldSettings {
+    model: Option<String>,
+    effort: Option<String>,
+}
+
 pub struct AppState {
     pub config: Mutex<Config>,
     pub pending: PendingRegistry,
@@ -31,6 +46,10 @@ pub struct AppState {
     /// The screenshot offer standing right now. One at a time, settled once.
     /// tech.md 6.13.
     pub shot: OfferSlot,
+
+    /// Settings picked before a session ever answered, waiting to travel with
+    /// its first message. tech.md 6.15.
+    held: Mutex<std::collections::HashMap<String, HeldSettings>>,
 
     enabled: AtomicBool,
     view: Mutex<IslandView>,
@@ -144,6 +163,7 @@ impl AppState {
             usage_provider,
             pasteboard,
             shot: OfferSlot::new(),
+            held: Mutex::new(std::collections::HashMap::new()),
             enabled: AtomicBool::new(enabled),
             view: Mutex::new(IslandView::default()),
             shape_bounds: Mutex::new(None),
@@ -471,6 +491,35 @@ impl AppState {
         registry
             .adopt_entries(session_id, entries, agent)
             .then(|| registry.cards().to_vec())
+    }
+
+    /// Holds a setting picked before the session has answered, to travel with
+    /// the first message. Last pick of each kind wins: the user chose a model,
+    /// not a sequence of models. tech.md 6.15.
+    pub fn hold_setting(&self, session_id: &str, kind: HeldKind, line: String) {
+        let mut held = self.lock(&self.held);
+        let entry = held.entry(session_id.to_string()).or_default();
+        match kind {
+            HeldKind::Model => entry.model = Some(line),
+            HeldKind::Effort => entry.effort = Some(line),
+        }
+    }
+
+    /// The held settings of a session, taken as they are handed over: they go
+    /// on the wire once, ahead of the message, and are gone whichever way that
+    /// write ends. tech.md 6.15.
+    pub fn take_settings(&self, session_id: &str) -> Vec<String> {
+        let held = self.lock(&self.held).remove(session_id).unwrap_or_default();
+        [held.model, held.effort].into_iter().flatten().collect()
+    }
+
+    /// Whether this session has ever said what it answers with. Everything
+    /// before that first answer is aimed rather than changed. tech.md 6.15.
+    pub fn session_has_answered(&self, session_id: &str) -> bool {
+        self.lock(&self.sessions)
+            .cards()
+            .iter()
+            .any(|card| card.session.session_id == session_id && card.agent.is_some())
     }
 
     /// The reading, measured against the window the user pinned by hand.

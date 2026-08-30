@@ -107,10 +107,7 @@ pub fn choices() -> Vec<ModelChoice> {
     FAMILIES
         .iter()
         .filter_map(|family| {
-            let model = catalog()
-                .iter()
-                .filter(|model| model.family == *family)
-                .max_by(|left, right| left.id.cmp(&right.id))?;
+            let model = newest_of(family)?;
             Some(ModelChoice {
                 alias: (*family).to_string(),
                 label: model.label.clone(),
@@ -220,6 +217,62 @@ pub fn window_for(model: Option<&str>, auto_compact_at: Option<u32>) -> u32 {
 fn step(tokens: u32) -> u32 {
     const STEP: u32 = 100_000;
     tokens.div_ceil(STEP).max(1).saturating_mul(STEP)
+}
+
+/// Where Claude Code keeps the model and the effort a new session starts with.
+pub fn settings_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        std::path::Path::new(&home)
+            .join(".claude")
+            .join("settings.json")
+    })
+}
+
+/// What a session that has not answered yet is running as.
+///
+/// Claude Code saves every `/model` and `/effort` here as the default for new
+/// sessions, and the island passes no `--model`, so this is what the session
+/// it just started is actually using. A missing file or a missing key names
+/// nothing rather than guessing: the picker is for choosing a model, not for
+/// confirming one. tech.md 6.15.
+pub fn defaults_from_settings(settings: &str) -> AgentSetup {
+    let parsed: serde_json::Value =
+        serde_json::from_str(settings).unwrap_or(serde_json::Value::Null);
+    let alias = parsed
+        .get("model")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|alias| !alias.is_empty());
+    // The key holds what `/model` took: an alias like `opus`, or a full id.
+    let known = alias.and_then(|alias| model_of(alias).or_else(|| newest_of(alias)));
+    let effort = parsed
+        .get("effortLevel")
+        .and_then(serde_json::Value::as_str);
+
+    AgentSetup::new(
+        known
+            .map(|model| model.id.clone())
+            .or(alias.map(str::to_string)),
+        known.map(|model| model.label.clone()),
+        effort
+            .and_then(Effort::parse)
+            .filter(|_| known.is_none_or(Model::takes_effort)),
+        known.map(Model::levels).unwrap_or_default(),
+        // Nothing has been asked of the window yet, and the ring says so by
+        // standing empty rather than by drawing a zero. tech.md 6.15.
+        0,
+        known
+            .map(|model| model.context_window)
+            .unwrap_or(DEFAULT_WINDOW),
+    )
+}
+
+/// The newest model of a family, which is what an alias like `opus` means.
+fn newest_of(family: &str) -> Option<&'static Model> {
+    catalog()
+        .iter()
+        .filter(|model| model.family == family)
+        .max_by(|left, right| left.id.cmp(&right.id))
 }
 
 /// Everything the row shows, from what the transcript said.
@@ -346,6 +399,39 @@ mod tests {
             let window = window_for(Some("claude-haiku-4-5"), Some(pre));
             assert!(window <= 200_000, "grew to {window} on {pre}");
             assert!(window > 0);
+        }
+    }
+
+    /// The alias Claude Code saves is what `/model` took, and it names the
+    /// newest model of that family, exactly as the CLI resolves it.
+    #[test]
+    fn the_defaults_name_the_model_a_new_session_starts_with() {
+        let setup = defaults_from_settings(r#"{"model": "opus", "effortLevel": "low"}"#);
+        assert_eq!(setup.label.as_deref(), Some("Opus 5"));
+        assert_eq!(setup.effort, Some(Effort::Low));
+        assert_eq!(setup.context_window, 1_000_000);
+        // Nothing has been asked of the window yet.
+        assert_eq!(setup.context_tokens, 0);
+    }
+
+    #[test]
+    fn a_full_id_in_the_settings_is_named_too() {
+        let setup = defaults_from_settings(r#"{"model": "claude-haiku-4-5"}"#);
+        assert_eq!(setup.label.as_deref(), Some("Haiku 4.5"));
+        assert_eq!(setup.effort, None);
+        assert!(setup.levels.is_empty());
+    }
+
+    /// A file that is missing, empty or silent about the model names nothing.
+    /// The picker still works: it is for choosing one, not confirming one.
+    #[test]
+    fn settings_that_say_nothing_claim_nothing() {
+        for settings in ["", "{}", "not json at all", r#"{"model": "   "}"#] {
+            let setup = defaults_from_settings(settings);
+            assert_eq!(setup.model, None, "{settings}");
+            assert_eq!(setup.label, None);
+            assert_eq!(setup.context_window, DEFAULT_WINDOW);
+            assert_eq!(setup.context_pct, 0.0);
         }
     }
 

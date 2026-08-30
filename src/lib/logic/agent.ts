@@ -32,11 +32,12 @@ export function effortLabel(effort: Effort | null): string {
  *
  * The catalog names every model it knows; one it does not is shown by its own
  * id rather than by a blank, because a session that answers with something is
- * never honestly described by nothing. tech.md 6.15.
+ * never honestly described by nothing. Nothing at all -- a settings file that
+ * names no model -- comes back empty, and the row says `Model`: there is a
+ * choice to make and nothing to report. tech.md 6.15.
  */
 export function modelLabel(agent: AgentSetup | null): string {
-  if (!agent) return '';
-  return agent.label ?? agent.model ?? 'Unknown model';
+  return agent?.label ?? agent?.model ?? '';
 }
 
 export function modelOptions(models: ModelChoice[]): PickOption[] {

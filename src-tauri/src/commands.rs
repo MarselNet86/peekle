@@ -9,7 +9,7 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
-use crate::state::AppState;
+use crate::state::{AppState, HeldKind};
 use crate::windows;
 
 #[tauri::command]
@@ -322,8 +322,11 @@ pub fn start_session(
 /// nothing else. The feed row carries the same composed text: that is what the
 /// agent received, and showing anything else would show something that did not
 /// happen. tech.md 6.13.
+/// Async because the write is a sleep: 120ms for the newline, and another
+/// `SETTING_GAP` for each setting riding ahead of the message. That belongs on
+/// a blocking thread rather than on the one drawing the island.
 #[tauri::command]
-pub fn send_message(
+pub async fn send_message(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -364,12 +367,36 @@ pub fn send_message(
         tracing::warn!(error = %err, "failed to emit sessions");
     }
 
-    if let Err(err) = state.pty().send(&session_id, text) {
-        tracing::warn!(error = %err, session_id, "the pty refused the write");
-        fail_replies(&app, state.inner(), &session_id);
-        return Err("That session is no longer listening".to_string());
+    // A model or an effort picked before this session ever answered has been
+    // waiting for exactly this write: it goes first, one line of its own, and
+    // the message follows a `SETTING_GAP` later. tech.md 6.15.
+    let held = state.take_settings(&session_id);
+    let owner = state.inner().clone();
+    let id = session_id.clone();
+    let body = text.to_string();
+
+    let wrote = tauri::async_runtime::spawn_blocking(move || {
+        for line in held {
+            owner.pty().send(&id, &line)?;
+            std::thread::sleep(peekle_core::pty::SETTING_GAP);
+        }
+        owner.pty().send(&id, &body)
+    })
+    .await;
+
+    match wrote {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(err)) => {
+            tracing::warn!(error = %err, session_id, "the pty refused the write");
+            fail_replies(&app, state.inner(), &session_id);
+            Err("That session is no longer listening".to_string())
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, session_id, "the write never ran");
+            fail_replies(&app, state.inner(), &session_id);
+            Err("That session is no longer listening".to_string())
+        }
     }
-    Ok(())
 }
 
 /// The rows of the model menu, from the catalog. Called once on mount: the
@@ -378,6 +405,17 @@ pub fn send_message(
 #[tauri::command]
 pub fn get_models() -> Vec<peekle_core::types::ModelChoice> {
     peekle_core::agent::choices()
+}
+
+/// What a session that has not answered yet is running as: Claude Code's own
+/// defaults, which is what it started with, because the island passes no
+/// `--model`. tech.md 6.15.
+#[tauri::command]
+pub fn get_defaults() -> peekle_core::types::AgentSetup {
+    let settings = peekle_core::agent::settings_path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
+    peekle_core::agent::defaults_from_settings(&settings)
 }
 
 /// Changes the model of a session the island owns. tech.md 6.15.
@@ -395,7 +433,7 @@ pub fn set_model(
 ) -> Result<(), String> {
     let line = peekle_core::agent::model_command(&model)
         .map_err(|_| "That is not a model name".to_string())?;
-    command_session(&state, &session_id, &line)
+    command_session(state.inner(), &session_id, Some(HeldKind::Model), &line)
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.
@@ -408,6 +446,7 @@ pub fn set_effort(
     command_session(
         state.inner(),
         &session_id,
+        Some(HeldKind::Effort),
         &peekle_core::agent::effort_command(effort),
     )
 }
@@ -419,6 +458,7 @@ pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> R
     command_session(
         state.inner(),
         &session_id,
+        None,
         peekle_core::agent::COMPACT_COMMAND,
     )
 }
@@ -428,13 +468,31 @@ pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> R
 /// Refuses everything `send_message` refuses, and for the same reason: an
 /// observed session has no channel at all, and a setting that silently goes
 /// nowhere is worse than one that says it could not.
-fn command_session(state: &Arc<AppState>, session_id: &str, line: &str) -> Result<(), String> {
+fn command_session(
+    state: &Arc<AppState>,
+    session_id: &str,
+    held: Option<HeldKind>,
+    line: &str,
+) -> Result<(), String> {
     if !state.owns_session(session_id) {
         tracing::warn!(
             session_id,
             "a setting for a session the island does not own"
         );
         return Err("Peekle can only talk to sessions it started".to_string());
+    }
+
+    // A session that has never answered is being aimed rather than changed,
+    // and a line written into a TUI that is still coming up disappears without
+    // a trace. So the pick waits and travels with the first message, which is
+    // the write that proves the far end is listening. tech.md 6.15.
+    if !state.session_has_answered(session_id) {
+        let Some(kind) = held else {
+            return Err("There is nothing to compact yet".to_string());
+        };
+        tracing::debug!(session_id, "holding a setting for the first message");
+        state.hold_setting(session_id, kind, line.to_string());
+        return Ok(());
     }
 
     state.pty().send(session_id, line).map_err(|err| {
@@ -577,7 +635,7 @@ mod tests {
             "/effort high",
             peekle_core::agent::COMPACT_COMMAND,
         ] {
-            let refused = command_session(&state, "someone-elses", line);
+            let refused = command_session(&state, "someone-elses", Some(HeldKind::Model), line);
             assert_eq!(
                 refused,
                 Err("Peekle can only talk to sessions it started".to_string()),
@@ -586,15 +644,46 @@ mod tests {
         }
     }
 
-    /// Claimed but with no pty behind it: the process died between the claim
-    /// and the click. Still a refusal, and still not a silent one.
+    /// A session that has never answered is being aimed, not changed: the pick
+    /// waits for the first message rather than going into a TUI that may still
+    /// be coming up. tech.md 6.15.
     #[test]
-    fn a_setting_for_a_session_that_stopped_listening_is_refused() {
+    fn a_pick_made_before_the_first_answer_waits_for_it() {
+        let state = fresh();
+        state.claim_session("ours");
+
+        assert_eq!(
+            command_session(&state, "ours", Some(HeldKind::Model), "/model opus"),
+            Ok(())
+        );
+        assert_eq!(
+            command_session(&state, "ours", Some(HeldKind::Effort), "/effort max"),
+            Ok(())
+        );
+        // Last pick of each kind wins: a model was chosen, not a sequence.
+        assert_eq!(
+            command_session(&state, "ours", Some(HeldKind::Model), "/model haiku"),
+            Ok(())
+        );
+
+        assert_eq!(
+            state.take_settings("ours"),
+            vec!["/model haiku".to_string(), "/effort max".to_string()]
+        );
+        // Handed over once: they go on the wire with that message and nowhere
+        // else.
+        assert!(state.take_settings("ours").is_empty());
+    }
+
+    /// There is nothing to compact in a session that has not answered, and the
+    /// ring is not a thing to hold for later.
+    #[test]
+    fn a_compact_before_the_first_answer_is_refused() {
         let state = fresh();
         state.claim_session("ours");
         assert_eq!(
-            command_session(&state, "ours", peekle_core::agent::COMPACT_COMMAND),
-            Err("That session is no longer listening".to_string())
+            command_session(&state, "ours", None, peekle_core::agent::COMPACT_COMMAND),
+            Err("There is nothing to compact yet".to_string())
         );
     }
 }

@@ -450,20 +450,11 @@
                 {/each}
               </div>
             {/if}
-            <PromptInput
-              bind:value={reply}
-              placeholder={replyHint}
-              disabled={!reachable}
-              onsubmit={send}
-              onescape={() => island.dismiss()}
-            />
-            <!-- Under the field, where Claude Code draws it too: the question
-                 it answers is asked exactly here. tech.md 6.15. -->
-            {#if agent.error}
-              <p class="empty">{agent.error}</p>
-            {/if}
+            <!-- On the divider, above the field: a session is aimed before it
+                 is spoken to, not after. tech.md 6.15. -->
             <AgentBar
               agent={setup}
+              defaults={agent.defaults}
               models={agent.models}
               live={owned}
               pendingModel={waiting.model}
@@ -472,6 +463,16 @@
               onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
               oneffort={(level) => current && agent.setEffort(current.session.session_id, level)}
               oncompact={() => current && agent.compact(current.session.session_id, setup)}
+            />
+            {#if agent.error}
+              <p class="empty">{agent.error}</p>
+            {/if}
+            <PromptInput
+              bind:value={reply}
+              placeholder={replyHint}
+              disabled={!reachable}
+              onsubmit={send}
+              onescape={() => island.dismiss()}
             />
           </div>
         {/if}

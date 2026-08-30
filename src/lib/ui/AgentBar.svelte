@@ -22,6 +22,7 @@
 
   let {
     agent,
+    defaults = null,
     models = [],
     live = false,
     pendingModel = false,
@@ -32,6 +33,10 @@
     oncompact,
   }: {
     agent: AgentSetup | null;
+    /** What the session runs as before it has answered once: Claude Code's
+     * own defaults. The row stands on these so a session can be aimed before
+     * it speaks. tech.md 6.15. */
+    defaults?: AgentSetup | null;
     models?: ModelChoice[];
     /** Whether anything here can be changed: an owned session, still running.
      * An observed one has no channel at all, so its row reads and nothing
@@ -45,15 +50,22 @@
     oncompact?: () => void;
   } = $props();
 
+  // What the row is standing on: the transcript when there is one, the
+  // defaults until then. tech.md 6.15.
+  const shown = $derived(agent ?? defaults);
+  // Whether anything has been measured. `null` and zero are different claims:
+  // one is "nothing has been asked of the window", the other is a number.
+  const measured = $derived(agent !== null);
+
   const modelRows = $derived<PickOption[]>(modelOptions(models));
-  const effortRows = $derived<PickOption[]>(effortOptions(agent));
-  const picked = $derived(currentModel(agent, models));
+  const effortRows = $derived<PickOption[]>(effortOptions(shown));
+  const picked = $derived(currentModel(shown, models));
 </script>
 
-{#if agent}
+{#if shown}
   <div class="agent-bar">
     <PickerMenu
-      label={modelLabel(agent)}
+      label={modelLabel(shown) || 'Model'}
       options={modelRows}
       value={picked}
       disabled={!live}
@@ -64,9 +76,9 @@
     <!-- A model that takes no effort is not offered a dead menu. 6.15. -->
     {#if effortRows.length > 0}
       <PickerMenu
-        label={effortLabel(agent.effort) || 'Effort'}
+        label={effortLabel(shown.effort) || 'Effort'}
         options={effortRows}
-        value={agent.effort ?? ''}
+        value={shown.effort ?? ''}
         disabled={!live}
         pending={pendingEffort}
         onpick={(level) => oneffort?.(level as Effort)}
@@ -78,23 +90,26 @@
     <button
       class="context"
       class:pending={pendingCompact}
-      disabled={!live}
-      title={contextLabel(agent)}
-      aria-label={contextLabel(agent)}
+      disabled={!live || !measured}
+      title={contextLabel(agent) || 'Nothing in the context yet'}
+      aria-label={contextLabel(agent) || 'Nothing in the context yet'}
       onclick={() => oncompact?.()}
     >
-      <UsageDial pct={agent.context_pct} size={13} />
+      <UsageDial pct={measured ? shown.context_pct : null} size={13} />
     </button>
   </div>
 {/if}
 
 <style>
+  /* On the divider above the field: the question it answers -- what will
+     reply to what I am about to type -- is asked before the reply, so it has
+     to be seen before one is typed. tech.md 6.15. */
   .agent-bar {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 2px;
-    padding: 6px 2px 0;
+    padding: 0 2px 8px;
   }
 
   .context {
