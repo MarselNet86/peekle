@@ -1,0 +1,208 @@
+{
+  "captured_from": "2.1.220 (Claude Code)",
+  "models": [
+    {
+      "id": "claude-3-5-haiku",
+      "family": "haiku",
+      "label": "Haiku 3.5",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": []
+    },
+    {
+      "id": "claude-3-5-sonnet",
+      "family": "sonnet",
+      "label": "Sonnet 3.5",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": []
+    },
+    {
+      "id": "claude-3-7-sonnet",
+      "family": "sonnet",
+      "label": "Sonnet 3.7",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": []
+    },
+    {
+      "id": "claude-fable-5",
+      "family": "fable",
+      "label": "Fable 5",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "xhigh_effort",
+        "adaptive_thinking",
+        "rejects_disabled_thinking",
+        "mid_conv_system",
+        "context_management",
+        "lean_prompt",
+        "fable_5_mitigations",
+        "refusal_fallback"
+      ]
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "family": "haiku",
+      "label": "Haiku 4.5",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-mythos-5",
+      "family": "mythos",
+      "label": "Mythos 5",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": []
+    },
+    {
+      "id": "claude-opus-4-0",
+      "family": "opus",
+      "label": "Opus 4",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-opus-4-1",
+      "family": "opus",
+      "label": "Opus 4.1",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-opus-4-5",
+      "family": "opus",
+      "label": "Opus 4.5",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-opus-4-6",
+      "family": "opus",
+      "label": "Opus 4.6",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "adaptive_thinking",
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-opus-4-7",
+      "family": "opus",
+      "label": "Opus 4.7",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "xhigh_effort",
+        "adaptive_thinking",
+        "context_management",
+        "fast_mode"
+      ]
+    },
+    {
+      "id": "claude-opus-4-8",
+      "family": "opus",
+      "label": "Opus 4.8",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "xhigh_effort",
+        "adaptive_thinking",
+        "mid_conv_system",
+        "context_management",
+        "fast_mode",
+        "lean_prompt"
+      ]
+    },
+    {
+      "id": "claude-opus-5",
+      "family": "opus",
+      "label": "Opus 5",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "xhigh_effort",
+        "adaptive_thinking",
+        "mid_conv_system",
+        "context_management",
+        "fast_mode",
+        "lean_prompt",
+        "refusal_fallback",
+        "opus_5_prompt_bundle"
+      ]
+    },
+    {
+      "id": "claude-sonnet-4-0",
+      "family": "sonnet",
+      "label": "Sonnet 4",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "family": "sonnet",
+      "label": "Sonnet 4.5",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "family": "sonnet",
+      "label": "Sonnet 4.6",
+      "context_window": 200000,
+      "native_1m": false,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "adaptive_thinking",
+        "context_management"
+      ]
+    },
+    {
+      "id": "claude-sonnet-5",
+      "family": "sonnet",
+      "label": "Sonnet 5",
+      "context_window": 1000000,
+      "native_1m": true,
+      "capabilities": [
+        "effort",
+        "max_effort",
+        "xhigh_effort",
+        "adaptive_thinking",
+        "mid_conv_system",
+        "context_management"
+      ]
+    }
+  ]
+}

@@ -7,12 +7,18 @@
 # length survives; the text does not. The parser is checked against the shape,
 # which is the part Claude Code can change under us.
 #
-#     scripts/capture-transcript.sh <session_id|path> [name]
+#     scripts/capture-transcript.sh <session_id|path> [name] [types]
+#
+# `types` is an optional comma separated list of record types to keep, for the
+# case where the shape worth capturing sits in a file too large to be a
+# fixture: a compact record lives in a session of tens of megabytes, and the
+# hundred `system` records around it are the part a parser is checked against.
 
 set -euo pipefail
 
 SOURCE="${1:?usage: capture-transcript.sh <session_id|path> [name]}"
 NAME="${2:-session}"
+TYPES="${3:-}"
 OUT="$(cd "$(dirname "$0")/.." && pwd)/fixtures/transcripts/${NAME}.jsonl"
 
 if [ ! -f "$SOURCE" ]; then
@@ -20,10 +26,11 @@ if [ ! -f "$SOURCE" ]; then
 fi
 [ -f "$SOURCE" ] || { echo "no transcript found" >&2; exit 1; }
 
-python3 - "$SOURCE" "$OUT" <<'PY'
+python3 - "$SOURCE" "$OUT" "$TYPES" <<'PY'
 import json, sys, re
 
 src, out = sys.argv[1], sys.argv[2]
+types = {kind for kind in sys.argv[3].split(",") if kind} if len(sys.argv) > 3 else set()
 
 # Same length, no meaning. A shorter placeholder would hide a truncation bug.
 def redact(text):
@@ -41,7 +48,9 @@ def walk(node, key=None):
         # them is the conversation.
         if key in {"sessionId", "uuid", "parentUuid", "timestamp", "cwd", "version",
                    "gitBranch", "leafUuid", "requestId", "id", "model", "promptId",
-                   "tool_use_id", "signature"}:
+                   "tool_use_id", "signature",
+                   # What the session is running as, not what it said. tech.md 6.15.
+                   "effort", "trigger", "subtype"}:
             return node
         return redact(node)
     return node
@@ -55,6 +64,8 @@ with open(src, encoding="utf-8") as source, open(out, "w", encoding="utf-8") as 
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if types and record.get("type") not in types:
             continue
         target.write(json.dumps(walk(record), ensure_ascii=False) + "\n")
         lines += 1
