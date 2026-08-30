@@ -284,6 +284,15 @@ impl AppState {
     /// Adds past dialogues the hooks never saw. A live session is never
     /// overwritten by a file. tech.md 6.11.
     pub fn seed_sessions(&self, cards: Vec<SessionCard>) -> Vec<SessionCard> {
+        // The backfill reads the same files the live path does, so it is
+        // measured against the same window. tech.md 6.15.
+        let cards: Vec<SessionCard> = cards
+            .into_iter()
+            .map(|card| SessionCard {
+                agent: self.pinned(card.agent),
+                ..card
+            })
+            .collect();
         let mut sessions = self.lock(&self.sessions);
         sessions.seed(cards);
         sessions.cards().to_vec()
@@ -455,11 +464,28 @@ impl AppState {
         &self,
         session_id: &str,
         entries: Vec<peekle_core::types::FeedEntry>,
+        agent: Option<peekle_core::types::AgentSetup>,
     ) -> Option<Vec<SessionCard>> {
+        let agent = self.pinned(agent);
         let mut registry = self.lock(&self.sessions);
         registry
-            .adopt_entries(session_id, entries)
+            .adopt_entries(session_id, entries, agent)
             .then(|| registry.cards().to_vec())
+    }
+
+    /// The reading, measured against the window the user pinned by hand.
+    ///
+    /// Zero means the catalog decides, which is the case for everyone who has
+    /// not pinned one. tech.md 6.8 and 6.15.
+    pub fn pinned(
+        &self,
+        agent: Option<peekle_core::types::AgentSetup>,
+    ) -> Option<peekle_core::types::AgentSetup> {
+        let window = self.lock_config().behavior.context_window;
+        match window {
+            0 => agent,
+            window => agent.map(|agent| agent.with_window(window)),
+        }
     }
 
     /// The session is over. Unknown sessions are left alone rather than being

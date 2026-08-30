@@ -175,6 +175,9 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::end_session,
             commands::rename_session,
             commands::hide_session,
+            commands::set_model,
+            commands::set_effort,
+            commands::compact_session,
             commands::dev_emit_prompt,
         ]
     }
@@ -197,6 +200,9 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::end_session,
             commands::rename_session,
             commands::hide_session,
+            commands::set_model,
+            commands::set_effort,
+            commands::compact_session,
         ]
     }
 }

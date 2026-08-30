@@ -372,6 +372,69 @@ pub fn send_message(
     Ok(())
 }
 
+/// Changes the model of a session the island owns. tech.md 6.15.
+///
+/// A slash command is text, so it travels the one channel text has: written
+/// into the pty exactly the way a reply is. Nothing goes into the feed with
+/// it -- a setting is not something the user said, and Claude Code writes it
+/// into the transcript as a `<command-name>` record, which the synthetic
+/// filter of 6.11 already drops.
+#[tauri::command]
+pub fn set_model(
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    model: String,
+) -> Result<(), String> {
+    let line = peekle_core::agent::model_command(&model)
+        .map_err(|_| "That is not a model name".to_string())?;
+    command_session(&state, &session_id, &line)
+}
+
+/// Changes how hard the session is asked to think. tech.md 6.15.
+#[tauri::command]
+pub fn set_effort(
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    effort: peekle_core::types::Effort,
+) -> Result<(), String> {
+    command_session(
+        &state,
+        &session_id,
+        &peekle_core::agent::effort_command(effort),
+    )
+}
+
+/// Frees up context by summarising the conversation. The ring is the button.
+/// tech.md 6.15.
+#[tauri::command]
+pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> Result<(), String> {
+    command_session(&state, &session_id, peekle_core::agent::COMPACT_COMMAND)
+}
+
+/// Writes one slash command into a session's pty.
+///
+/// Refuses everything `send_message` refuses, and for the same reason: an
+/// observed session has no channel at all, and a setting that silently goes
+/// nowhere is worse than one that says it could not.
+fn command_session(
+    state: &State<'_, Arc<AppState>>,
+    session_id: &str,
+    line: &str,
+) -> Result<(), String> {
+    if !state.owns_session(session_id) {
+        tracing::warn!(
+            session_id,
+            "a setting for a session the island does not own"
+        );
+        return Err("Peekle can only talk to sessions it started".to_string());
+    }
+
+    state.pty().send(session_id, line).map_err(|err| {
+        tracing::warn!(error = %err, session_id, "the pty refused the setting");
+        "That session is no longer listening".to_string()
+    })
+}
+
 /// The webview opened or closed a screenshot at full size. tech.md 6.13.
 ///
 /// No view change and no window resize: the picture is a layer over content

@@ -71,7 +71,7 @@ impl AppSink {
             else {
                 return;
             };
-            let Some(cards) = state.adopt_entries(&session_id, card.entries) else {
+            let Some(cards) = state.adopt_entries(&session_id, card.entries, card.agent) else {
                 return;
             };
             if let Err(err) = app.emit(events::SESSIONS, &cards) {
