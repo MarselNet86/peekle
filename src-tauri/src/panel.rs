@@ -134,11 +134,21 @@ pub fn notch_for(size: (f64, f64)) -> Option<Notch> {
     })?;
 
     // A display without a notch reports a zero top inset. One with a notch
-    // reports its height, which is what the island has to cover.
-    let height = screen.safeAreaInsets().top;
-    if height <= 0.0 {
+    // reports the height of the cutout, which is not quite the height of the
+    // black band: the strip the system reserves for the menu bar is a point
+    // taller here (34 against 33), and an island as tall as the cutout ends a
+    // pixel above the menu bar with a seam of wallpaper under it. The eye
+    // reads the band, so the taller of the two wins. A hidden menu bar zeroes
+    // the second and leaves the cutout, which the first still describes.
+    // tech.md 6.7.
+    let inset = screen.safeAreaInsets().top;
+    if inset <= 0.0 {
         return None;
     }
+    let frame = screen.frame().size.height;
+    let visible = screen.visibleFrame();
+    let menu_bar = frame - visible.size.height - visible.origin.y;
+    let height = inset.max(menu_bar);
 
     let left = screen.auxiliaryTopLeftArea().size.width;
     let right = screen.auxiliaryTopRightArea().size.width;
