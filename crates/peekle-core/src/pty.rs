@@ -31,6 +31,13 @@ pub struct SpawnSpec {
     /// continues that conversation under `session_id` and leaves the original
     /// transcript alone. tech.md 6.5.
     pub resume: Option<String>,
+    /// The first message, handed to the spawn rather than typed into it.
+    ///
+    /// A freshly started TUI is not ready to receive a line for many seconds,
+    /// and a line written before it is ready disappears without a trace
+    /// (tech.md 6.15, v46.2). As an argument the prompt cannot be missed: the
+    /// agent runs it as its first turn. tech.md 6.5.
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -57,12 +64,17 @@ pub enum PtyError {
 /// hooks are recognised as ours, and `--session-id=<new>` is that id. The
 /// original transcript is left untouched; the fork grows in a new file.
 /// tech.md 6.5.
-pub fn spawn_args(session_id: &str, resume: Option<&str>) -> Vec<String> {
+pub fn spawn_args(session_id: &str, resume: Option<&str>, prompt: Option<&str>) -> Vec<String> {
     let mut args = vec!["--session-id".to_string(), session_id.to_string()];
     if let Some(old) = resume {
         args.push("--resume".to_string());
         args.push(old.to_string());
         args.push("--fork-session".to_string());
+    }
+    // Positional, and last: it is the prompt, not a flag. Handed over rather
+    // than typed, so the startup of the TUI cannot swallow it.
+    if let Some(prompt) = prompt.map(str::trim).filter(|text| !text.is_empty()) {
+        args.push(prompt.to_string());
     }
     args
 }
@@ -247,7 +259,11 @@ impl PtyHost {
             .map_err(|err| PtyError::Pty(err.to_string()))?;
 
         let mut command = CommandBuilder::new(binary);
-        for arg in spawn_args(&spec.session_id, spec.resume.as_deref()) {
+        for arg in spawn_args(
+            &spec.session_id,
+            spec.resume.as_deref(),
+            spec.prompt.as_deref(),
+        ) {
             command.arg(arg);
         }
         command.cwd(&spec.cwd);
@@ -364,7 +380,7 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc", None),
+            spawn_args("abc", None, None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
     }
@@ -374,7 +390,7 @@ mod tests {
     /// resume id is the chat being continued. tech.md 6.5.
     #[test]
     fn a_fork_carries_the_new_id_and_the_old_one_once_each() {
-        let args = spawn_args("new-id", Some("old-id"));
+        let args = spawn_args("new-id", Some("old-id"), None);
         assert_eq!(
             args,
             vec![
@@ -390,6 +406,22 @@ mod tests {
         // The assigned id, not the resumed one, is what a hook will carry.
         let idx = args.iter().position(|a| a == "--session-id").unwrap();
         assert_eq!(args[idx + 1], "new-id");
+    }
+
+    /// The first message of a fork rides as an argument, because a TUI that is
+    /// still starting swallows anything written into it. tech.md 6.5.
+    #[test]
+    fn the_first_message_is_handed_over_rather_than_typed() {
+        let args = spawn_args("new-id", Some("old-id"), Some("what did I say?"));
+        assert_eq!(args.last().map(String::as_str), Some("what did I say?"));
+        // Positional: it carries no flag of its own and cannot be read as one.
+        assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
+
+        // Nothing to say means nothing appended, not an empty argument.
+        for empty in [Some(""), Some("   "), None] {
+            let args = spawn_args("new-id", None, empty);
+            assert_eq!(args, vec!["--session-id".to_string(), "new-id".to_string()]);
+        }
     }
 
     #[test]
@@ -499,6 +531,7 @@ mod tests {
             cols: 120,
             rows: 40,
             resume: None,
+            prompt: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
@@ -515,6 +548,7 @@ mod tests {
             cols: 120,
             rows: 40,
             resume: None,
+            prompt: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(Path::new("/bin/echo"), &spec, move |id| {

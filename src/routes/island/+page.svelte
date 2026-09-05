@@ -137,22 +137,16 @@
   const owned = $derived(
     current !== undefined && current.origin === 'Owned' && current.status !== 'Ended',
   );
-  const reachable = $derived(island.prompt !== null || owned);
-
-  // An observed chat that nobody owns and no live client is writing can be
-  // forked into an owned one, the way Desktop opens an existing chat. There is
-  // no live-client signal in the webview, so Rust makes the final call and
-  // refuses if it is being written; here it is offered whenever the session is
-  // not already ours. tech.md 6.5.
+  // An observed chat is answerable too: the first reply forks it into one we
+  // own, which is what Desktop does when you type into an old chat. No button
+  // and no ceremony -- a chat is a chat. tech.md 6.5.
   const canContinue = $derived(canContinueCard(current));
+  const reachable = $derived(island.prompt !== null || owned || canContinue);
 
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
-    if (owned) return 'Message Claude';
-    if (current?.status === 'Ended') return 'This session has finished';
-    // No lie about delivery and no dead field without a reason: Peekle cannot
-    // type into a process it did not start, and says which one it is.
-    return 'Started outside Peekle, so this one is read-only';
+    if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
+    return 'Message Claude';
   });
   // Starting a session is what makes one talkable-to, so the island needs a
   // way to do it. The folder comes from a project the island already knows,
@@ -171,15 +165,23 @@
     }
   }
 
-  // Fork this observed chat into one we own and open it. The original card
+  // Forks this observed chat into one we own and opens it, returning the new
+  // id so the reply that triggered the fork can go there. The original card
   // stays in the list as history. tech.md 6.5.
-  async function continueSession(sessionId: string) {
+  async function continueSession(
+    sessionId: string,
+    text: string,
+    paths: string[],
+  ): Promise<string | null> {
     startError = null;
     try {
-      const session = await commands.continueSession(sessionId);
-      if (session) openSession(session.session_id);
+      const session = await commands.continueSession(sessionId, text, paths);
+      if (!session) return null;
+      openSession(session.session_id);
+      return session.session_id;
     } catch (err) {
       startError = String(err);
+      return null;
     }
   }
 
@@ -228,10 +230,24 @@
   // A permission request takes the text instead, and takes it alone: there is
   // no attachment on that path, so the shots stay in the field for the message
   // that comes after it. tech.md 6.13.
-  function send(text: string) {
+  async function send(text: string) {
     if (!current) return;
-    const id = current.session.session_id;
     const answering = island.prompt !== null;
+
+    // Typing into an observed chat is what continues it: the reply forks it
+    // into a session we own and lands there. The fork is invisible on purpose
+    // -- Desktop has no button for this either, a chat is just a chat. The
+    // text is only cleared once it has somewhere to go. tech.md 6.5.
+    const id = current.session.session_id;
+    if (!answering && canContinue) {
+      // The fork carries this message itself, so nothing is sent after it: the
+      // new session runs it as its first turn. tech.md 6.5.
+      const forked = await continueSession(id, text, attached);
+      if (!forked) return;
+      shots.clear(id);
+      reply = '';
+      return;
+    }
 
     island.answer(text, id, attached);
     if (!answering) shots.clear(id);
@@ -500,24 +516,13 @@
             {#if startError}
               <p class="empty">{startError}</p>
             {/if}
-            <!-- An observed chat has no field, but it can be forked into one we
-                 own, the way Desktop opens an existing chat. Rust refuses if a
-                 live client is writing it. tech.md 6.5. -->
-            {#if canContinue}
-              <Button
-                label="Continue this chat"
-                onclick={() => current && continueSession(current.session.session_id)}
-                wide
-              />
-            {:else}
-              <PromptInput
-                bind:value={reply}
-                placeholder={replyHint}
-                disabled={!reachable}
-                onsubmit={send}
-                onescape={() => island.dismiss()}
-              />
-            {/if}
+            <PromptInput
+              bind:value={reply}
+              placeholder={replyHint}
+              disabled={!reachable}
+              onsubmit={send}
+              onescape={() => island.dismiss()}
+            />
           </div>
         {/if}
       </div>

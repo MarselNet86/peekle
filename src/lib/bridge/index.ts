@@ -75,7 +75,10 @@ export const commands = {
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
   // Forks an observed chat into an owned one, the way Desktop opens an
   // existing chat: claude --resume=<id> in a pty of our own. tech.md 6.5.
-  continueSession: (sessionId: string) => call<SessionRef>('continue_session', { sessionId }),
+  // The first message rides with the fork: a TUI that is still starting
+  // swallows anything written into it, so it is handed to the spawn.
+  continueSession: (sessionId: string, text: string, shots: string[] = []) =>
+    call<SessionRef>('continue_session', { sessionId, text, shots }),
   // `shots` are the screenshots attached to this message. They travel as
   // lines of the message itself, and Rust composes them: what goes on the wire
   // is a delivery detail and belongs next to the pty. tech.md 6.13.

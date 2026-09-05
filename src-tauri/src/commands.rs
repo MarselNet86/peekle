@@ -322,7 +322,7 @@ pub fn start_session(
     state: State<'_, Arc<AppState>>,
     cwd: String,
 ) -> Result<peekle_core::types::SessionRef, String> {
-    spawn_owned(&app, state.inner(), cwd, None)
+    spawn_owned(&app, state.inner(), cwd, None, None)
 }
 
 /// Forks an observed chat into one the island owns. tech.md 6.5.
@@ -341,6 +341,8 @@ pub fn continue_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
+    text: String,
+    shots: Vec<String>,
 ) -> Result<peekle_core::types::SessionRef, String> {
     let Some(card) = state
         .sessions()
@@ -368,12 +370,34 @@ pub fn continue_session(
         }
     }
 
-    spawn_owned(
+    // The first message is handed to the spawn rather than typed into it: a
+    // TUI that is still starting swallows a written line without a trace.
+    // tech.md 6.5.
+    let message = peekle_core::shots::compose(text.trim(), &shots);
+    let session = spawn_owned(
         &app,
         state.inner(),
         card.session.cwd.clone(),
         Some(session_id),
-    )
+        Some(message.clone()),
+    )?;
+
+    // Into the feed at once, the way a reply is: it is already on its way, and
+    // a message the user cannot see is a message they will type twice.
+    // `UserPromptSubmit` confirms it like any other. tech.md 6.3.
+    if !message.is_empty() {
+        let cards = state.user_turn(
+            &session,
+            &message,
+            peekle_core::types::EntryState::Running,
+            now_ms(),
+        );
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+    }
+
+    Ok(session)
 }
 
 /// How recently a transcript was written for its client to count as live.
@@ -387,6 +411,7 @@ fn spawn_owned(
     state: &Arc<AppState>,
     cwd: String,
     resume: Option<String>,
+    prompt: Option<String>,
 ) -> Result<peekle_core::types::SessionRef, String> {
     let Some(binary) = peekle_core::claude_path() else {
         return Err("Claude Code is not installed where Peekle can find it".to_string());
@@ -402,6 +427,7 @@ fn spawn_owned(
         cols,
         rows,
         resume,
+        prompt,
     };
 
     state.claim_session(&spec.session_id);
