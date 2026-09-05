@@ -19,6 +19,37 @@ test.describe('overlay routes', () => {
     });
   }
 
+  /// A drag that crosses the window used to select its markup, and the
+  /// highlight paints elements rather than text: the transparent parts of the
+  /// window went grey with it, a sheet across half the screen. tech.md 9.
+  test('the overlay itself cannot be selected', async ({ page }) => {
+    await page.goto('/island/');
+    // Vite injects the styles as its modules run, so the shape being on
+    // screen is what says the stylesheet has arrived.
+    await expect(page.locator('.shape')).toBeVisible();
+
+    const selectable = await page.evaluate(() => {
+      const style = getComputedStyle(document.body);
+      return style.userSelect || style.webkitUserSelect;
+    });
+    expect(selectable).toBe('none');
+  });
+
+  /// Off by default, back on where text is taken by hand.
+  test('a message stays selectable', async ({ page }) => {
+    await page.goto('/kitchen-sink/');
+    await expect(page.locator('.bubble').first()).toBeVisible();
+
+    const message = await page
+      .locator('.bubble')
+      .first()
+      .evaluate((node) => {
+        const style = getComputedStyle(node);
+        return style.userSelect || style.webkitUserSelect;
+      });
+    expect(message).toBe('text');
+  });
+
   test('the island route survives having no Tauri host', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));

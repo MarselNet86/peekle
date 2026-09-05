@@ -66,6 +66,17 @@
 {/if}
 
 <style>
+  /* A message is there to be read and quoted, so it is one of the few places
+     the island lets a selection happen at all. tech.md 9. */
+  .bubble,
+  .prose,
+  .code,
+  .detail,
+  .text {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   .line {
     display: flex;
     padding: 3px 2px;
