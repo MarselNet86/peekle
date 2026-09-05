@@ -28,3 +28,7 @@ src-tauri/gen/
 .env
 .env.*
 !.env.example
+
+# Project notes kept out of the repository, by the owner's decision
+CLAUDE.md
+tech.md
