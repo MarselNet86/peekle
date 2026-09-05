@@ -13,7 +13,7 @@
   } from '$lib/features/sessions/sessions.svelte';
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
-  import { scrollState } from '$lib/logic/feed';
+  import { scrollAim, scrollState } from '$lib/logic/feed';
   import { searchSessions } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
@@ -77,6 +77,17 @@
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }
 
+  function toTop() {
+    scroller?.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  /** The list opens on its freshest row, a dialogue on its last message. Both
+   * live in the same scroller, so the view decides. tech.md 6.12. */
+  function land(aim: ReturnType<typeof scrollAim>) {
+    if (aim === 'bottom') toBottom(false);
+    if (aim === 'top') toTop();
+  }
+
   // Opening a session lands on the last message: a messenger that opens on the
   // first one reads as broken. Standing at the bottom is a fact about one feed,
   // so switching feeds forgets it; carrying it over opens the next session
@@ -92,15 +103,15 @@
     void cards.length;
     if (!scroller) return;
 
-    const follow = switched || atBottom;
+    const aim = scrollAim(listing ? 'list' : 'feed', switched, atBottom);
     // Twice: once for the rows, once after the spring has finished growing the
     // shape around them. A single frame lands halfway up a still opening feed.
     requestAnimationFrame(() => {
-      if (follow) toBottom(false);
+      land(aim);
       readScroll();
     });
     const settle = setTimeout(() => {
-      if (follow) toBottom(false);
+      land(aim);
       readScroll();
     }, 260);
     return () => clearTimeout(settle);

@@ -7,7 +7,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { clampPct, resetCountdown, usageTone } from '$lib/logic/usage';
-import { scrollState } from '$lib/logic/feed';
+import { scrollAim, scrollState } from '$lib/logic/feed';
 
 describe('usage math', () => {
   it('lands in 0..100 for any number the headers can produce', () => {
@@ -105,5 +105,35 @@ describe('feed scrolling', () => {
   it('survives the numbers a detached element reports', () => {
     expect(scrollState(NaN, NaN, NaN)).toEqual({ atBottom: true, showHint: false });
     expect(scrollState(-10, 0, 0)).toEqual({ atBottom: true, showHint: false });
+  });
+});
+
+/**
+ * The list and the dialogue share one scroller and want opposite ends of it.
+ * tech.md 6.12.
+ */
+describe('where the scroller lands', () => {
+  it('opens a dialogue on its last message', () => {
+    expect(scrollAim('feed', true, false)).toBe('bottom');
+    expect(scrollAim('feed', true, true)).toBe('bottom');
+  });
+
+  /** The list is sorted freshest first, so its end is the oldest thing it
+   * has, and landing there hides the row the user came for. */
+  it('opens the session list on its freshest row', () => {
+    expect(scrollAim('list', true, false)).toBe('top');
+    expect(scrollAim('list', true, true)).toBe('top');
+  });
+
+  it('follows new rows down only while the reader stood at the bottom', () => {
+    expect(scrollAim('feed', false, true)).toBe('bottom');
+    expect(scrollAim('feed', false, false)).toBe('stay');
+  });
+
+  /** A list that jumps under a reader who scrolled is a list that cannot be
+   * read at all: rows arrive on every hook. */
+  it('leaves a list alone once it is open', () => {
+    expect(scrollAim('list', false, true)).toBe('stay');
+    expect(scrollAim('list', false, false)).toBe('stay');
   });
 });

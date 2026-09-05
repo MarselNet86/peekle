@@ -30,3 +30,22 @@ export function scrollState(
   const atBottom = below <= 1;
   return { atBottom, showHint: !atBottom };
 }
+
+/** Where a scroller should stand after a view change or a new row. */
+export type ScrollAim = 'top' | 'bottom' | 'stay';
+
+/**
+ * Where the island's one scroller lands.
+ *
+ * The list and the feed share it, and they want opposite ends. A dialogue
+ * opens on its last message, because that is what it was opened for, and it
+ * follows new rows down only while the reader was already at the bottom. A
+ * list opens on its first row, because it is sorted freshest first and its
+ * end is the oldest thing it has. Neither is followed anywhere while the
+ * reader has scrolled off on their own. tech.md 6.12.
+ */
+export function scrollAim(kind: 'list' | 'feed', switched: boolean, atBottom: boolean): ScrollAim {
+  if (kind === 'list') return switched ? 'top' : 'stay';
+  if (switched) return 'bottom';
+  return atBottom ? 'bottom' : 'stay';
+}
