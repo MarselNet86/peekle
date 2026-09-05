@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import {
   FALLBACK_NOTCH,
   readNotch,
-  REST_DROP,
   REST_PILL,
   REST_SIDE,
   shapeBounds,
@@ -72,7 +71,9 @@ describe('shape bounds', () => {
         // Wider than the cutout on purpose: the overhangs are the only pixels
         // a resting island has to draw on. tech.md 6.7.
         expect(bounds.width).toBeCloseTo(width + 2 * REST_SIDE);
-        expect(bounds.height).toBeCloseTo(32 + REST_DROP);
+        // And exactly as tall as the cutout: a resting island that hangs
+        // below it draws a second notch under the real one. tech.md 6.7.
+        expect(bounds.height).toBeCloseTo(32);
       }),
     );
   });

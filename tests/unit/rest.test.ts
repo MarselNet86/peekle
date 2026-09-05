@@ -11,7 +11,7 @@ import fc from 'fast-check';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { clickPutsAway, clickSettles, restStatus } from '$lib/logic/rest';
-import { REST_DROP, REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
+import { REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
 import RestMark from '$lib/ui/RestMark.svelte';
 import Shape from '$lib/ui/Shape.svelte';
 import type { IslandView } from '$lib/types/generated/IslandView';
@@ -63,10 +63,10 @@ describe('the status the resting mark carries', () => {
 describe('the collapsed shape', () => {
   /// A notch is the absence of pixels, so a mark drawn across its width cannot
   /// be seen at all. The overhang is the whole point. tech.md 6.7.
-  it('overhangs the notch on both sides, where the pixels actually are', () => {
+  it('overhangs the notch on both sides and never below it', () => {
     const bounds = shapeBounds('Collapsed', { width: 200, height: 32 });
     expect(bounds.width).toBe(200 + 2 * REST_SIDE);
-    expect(bounds.height).toBe(32 + REST_DROP);
+    expect(bounds.height).toBe(32);
   });
 
   it('floats a small pill on a display with no bezel to hang from', () => {

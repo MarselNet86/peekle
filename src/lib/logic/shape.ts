@@ -14,11 +14,6 @@ export const WINDOW = { width: 720, height: 560 } as const;
 export const FALLBACK_NOTCH = { width: 200, height: 0 } as const;
 
 /**
- * How far the collapsed island hangs below the notch. tech.md 6.7.
- */
-export const REST_DROP = 14;
-
-/**
  * How far it overhangs the notch on each side.
  *
  * A notch is the absence of pixels, so anything drawn across its width cannot
@@ -73,10 +68,14 @@ export function shapeBounds(view: IslandView, notch: Notch): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
 
+  // Collapsed keeps exactly the height of the cutout and spends every pixel of
+  // its growth on the sides. A strip hanging below the notch reads as a second
+  // notch painted under the real one, which is the one giveaway the island
+  // exists to avoid. tech.md 6.7.
   const bounds =
     view === 'Collapsed'
       ? height > 0
-        ? { width: width + 2 * REST_SIDE, height: height + REST_DROP, radius: 12 }
+        ? { width: width + 2 * REST_SIDE, height, radius: 12 }
         : { width: REST_PILL.width, height: REST_PILL.height, radius: REST_PILL.height / 2 }
       : view === 'Pill'
         ? { width: 420, height: height + 44, radius: 20 }

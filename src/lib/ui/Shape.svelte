@@ -77,8 +77,9 @@
     box-sizing: border-box;
   }
 
-  /* Collapsed is the notch plus the resting drop. The bezel hides everything
-     above the cutout, so what shows is the strip carrying the mark. */
+  /* Collapsed is exactly the notch: the bezel hides the cutout itself, so what
+     shows is the overhang on either side of it, and nothing hangs below.
+     tech.md 6.7. */
   .shape.collapsed {
     pointer-events: none;
   }
