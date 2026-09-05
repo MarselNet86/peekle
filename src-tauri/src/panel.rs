@@ -159,6 +159,43 @@ pub fn notch_for(size: (f64, f64)) -> Option<Notch> {
     (width > 0.0 && width < screen.frame().size.width).then_some((height, width))
 }
 
+/// Calls back whenever the pointer moves anywhere on screen.
+///
+/// The resting island ignores the cursor, so it never sees a `mousemove` of
+/// its own, and a poll is always one tick behind: a click landing inside that
+/// tick goes through to the menu bar, and the mark reads as a button that
+/// needs pressing twice. A pointer cannot reach the mark without moving, and
+/// movement is an event. tech.md 6.7.
+///
+/// Global means events that went to other applications, which is every move
+/// over a resting island. The monitor is installed once and lives as long as
+/// the app: dropping the returned object removes it. No Accessibility grant is
+/// involved -- that is required for keyboard events, not for mouse ones.
+pub fn watch_pointer<F>(app: &AppHandle, moved: F) -> Result<(), String>
+where
+    F: Fn(&AppHandle) + 'static,
+{
+    use block2::RcBlock;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+
+    let handle = app.clone();
+    let block = RcBlock::new(move |_event: core::ptr::NonNull<NSEvent>| {
+        moved(&handle);
+    });
+
+    let monitor =
+        NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved, &block);
+    match monitor {
+        // Held for the life of the process on purpose: the island watches the
+        // pointer for as long as it is on screen, which is always.
+        Some(monitor) => {
+            std::mem::forget(monitor);
+            Ok(())
+        }
+        None => Err("the system refused a mouse monitor".to_string()),
+    }
+}
+
 /// The notch of the display the pointer is on. tech.md 6.7.
 pub fn active_notch(app: &AppHandle) -> Option<Notch> {
     notch_for(active_screen(app)?.1)

@@ -56,10 +56,12 @@ pub fn send_notch(app: &AppHandle) {
 
 /// How often Rust asks where the pointer is while the island rests.
 ///
-/// The webview cannot answer this: a window that ignores the cursor never sees
-/// a `mousemove`, so the only way to know the pointer reached the resting mark
-/// is to look. Ten times a second is under the threshold where a user notices
-/// the mark lighting up late, and the tick costs a rectangle test.
+/// The safety net, not the mechanism: `panel::watch_pointer` hands the mouse
+/// over the moment the pointer moves onto the mark, because a poll is always
+/// one tick behind and a click inside that tick went through to the menu bar.
+/// What is left for the tick is the paths with no movement at all -- a Space
+/// switch, a warped cursor -- and taking the mouse back on the way out, where
+/// a hundred milliseconds is invisible. tech.md 6.7.
 const HOVER_TICK: Duration = Duration::from_millis(100);
 
 /// Hands the mouse to the island while the pointer is over the resting mark
@@ -70,6 +72,12 @@ const HOVER_TICK: Duration = Duration::from_millis(100);
 /// letting it never take the mouse would make the mark impossible to press.
 /// tech.md 6.7.
 pub fn track_pointer(app: &AppHandle) {
+    // Movement leads. Installed on the main thread, where the setup runs, and
+    // called back there too. tech.md 6.7.
+    if let Err(err) = panel::watch_pointer(app, update_hover) {
+        tracing::warn!(error = %err, "no mouse monitor, the mark falls back to the poll");
+    }
+
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut ticker = tokio::time::interval(HOVER_TICK);

@@ -2393,6 +2393,7 @@ name = "peekle"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "block2",
  "objc2-app-kit",
  "objc2-foundation",
  "peekle-core",
