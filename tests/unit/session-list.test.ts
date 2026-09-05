@@ -17,6 +17,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   origin: 'Observed',
   entries: [],
   agent: null,
+  live_elsewhere: false,
   updated_at: 0,
 });
 
@@ -85,6 +86,7 @@ describe('continuing a chat', () => {
     origin,
     entries: [],
     agent: null,
+    live_elsewhere: false,
     updated_at: 0,
   });
 
@@ -95,5 +97,11 @@ describe('continuing a chat', () => {
     expect(canContinue(card('Observed'))).toBe(true);
     expect(canContinue(card('Owned'))).toBe(false);
     expect(canContinue(undefined)).toBe(false);
+  });
+
+  /** A chat somebody else is driving cannot be resumed at all: that would be
+   * two agents on one branch. tech.md 6.5. */
+  it('refuses a chat another client is writing right now', () => {
+    expect(canContinue({ ...card('Observed'), live_elsewhere: true })).toBe(false);
   });
 });

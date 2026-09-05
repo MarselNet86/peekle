@@ -357,6 +357,9 @@ where
         origin: SessionOrigin::Observed,
         entries,
         agent: agent.finish(),
+        // Rust fills this in where the cards are handed out; a transcript on
+        // its own says nothing about who is writing it now. tech.md 6.5.
+        live_elsewhere: false,
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }

@@ -145,6 +145,10 @@
 
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
+    // Said before anything is typed, not after: a chat somebody else is
+    // driving cannot be continued, and finding that out on submit is finding
+    // it out too late. tech.md 6.5.
+    if (current?.live_elsewhere) return 'Open in another app right now';
     if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
     return 'Message Claude';
   });

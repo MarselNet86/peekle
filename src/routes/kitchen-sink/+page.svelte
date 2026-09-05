@@ -231,6 +231,7 @@
     origin: i === 0 ? 'Owned' : 'Observed',
     entries: [],
     agent: null,
+    live_elsewhere: false,
     updated_at: 0,
   }));
 

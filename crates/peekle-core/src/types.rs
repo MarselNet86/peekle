@@ -262,6 +262,13 @@ pub struct SessionCard {
     /// a model, which is every session that has not had a turn yet.
     /// tech.md 6.15.
     pub agent: Option<AgentSetup>,
+    /// Whether another client is writing this chat right now.
+    ///
+    /// A chat somebody else is driving cannot be continued: resuming it would
+    /// put two agents on one branch. Only Rust can tell -- the signal is the
+    /// mtime of the transcript -- so the island is told rather than guessing,
+    /// and the field says so before anything is typed. tech.md 6.5.
+    pub live_elsewhere: bool,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,

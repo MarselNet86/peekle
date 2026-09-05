@@ -9,7 +9,7 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
-use crate::state::{AppState, HeldKind};
+use crate::state::{AppState, HeldKind, LIVE_CLIENT_WINDOW};
 use crate::windows;
 
 #[tauri::command]
@@ -399,10 +399,6 @@ pub fn continue_session(
 
     Ok(session)
 }
-
-/// How recently a transcript was written for its client to count as live.
-/// The detector of v34, reused here. tech.md 6.5.
-const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Spawns a `claude` the island owns, optionally forking an existing chat into
 /// it, and opens its card. Shared by `start_session` and `continue_session`.

@@ -21,6 +21,15 @@ entries: Array<FeedEntry>,
  */
 agent: AgentSetup | null, 
 /**
+ * Whether another client is writing this chat right now.
+ *
+ * A chat somebody else is driving cannot be continued: resuming it would
+ * put two agents on one branch. Only Rust can tell -- the signal is the
+ * mtime of the transcript -- so the island is told rather than guessing,
+ * and the field says so before anything is typed. tech.md 6.5.
+ */
+live_elsewhere: boolean, 
+/**
  * unix ms
  */
 updated_at: number, };
