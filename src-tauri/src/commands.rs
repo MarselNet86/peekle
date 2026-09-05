@@ -167,15 +167,28 @@ pub async fn refresh_usage(
 }
 
 pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
+    match ask_usage(state).await {
+        Some(snapshot) => publish_usage(app, state, snapshot),
+        None => state.usage(),
+    }
+}
+
+/// One question to the provider, off the async runtime. Nothing is stored and
+/// nothing is emitted: a path that asks more than once (the Reconnect press,
+/// tech.md 6.4) must not blink the bars on every attempt.
+async fn ask_usage(state: &Arc<AppState>) -> Option<UsageSnapshot> {
     let provider = Arc::clone(&state.usage_provider);
-    let snapshot = match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
-        Ok(snapshot) => snapshot,
+    match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
+        Ok(snapshot) => Some(snapshot),
         Err(err) => {
             tracing::warn!(error = %err, "the usage provider panicked");
-            return state.usage();
+            None
         }
-    };
+    }
+}
 
+/// Remembers a snapshot and tells the island about it.
+fn publish_usage(app: &AppHandle, state: &Arc<AppState>, snapshot: UsageSnapshot) -> UsageSnapshot {
     // The outcome, not the token. Without this line a failing account leaves
     // nothing behind but `could not reach the API` on the bars.
     tracing::debug!(
@@ -196,13 +209,71 @@ pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapsho
 ///
 /// A grant is remembered so the poll may start; a refusal is remembered so
 /// nothing asks again until the user clears it by hand.
+/// How many times a press asks again while the answer is a network failure.
+const MANUAL_TRIES: u32 = 3;
+/// And for how long in total, so a press against a hanging network is not a
+/// button that stays lit for half a minute. tech.md 6.4.
+const MANUAL_BUDGET: std::time::Duration = std::time::Duration::from_secs(6);
+/// Between attempts. Long enough for a route to finish coming up, short
+/// enough that three of them fit in the budget.
+const MANUAL_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Whether a press asks again after this answer. tech.md 6.4.
+///
+/// Only a network failure is worth a second ask, and only inside both bounds:
+/// an expired token and a refused Keychain answer the same however many times
+/// they are asked, and a press that keeps a button lit for half a minute is a
+/// press that failed differently.
+fn ask_again(
+    reason: Option<peekle_core::types::UsageUnavailable>,
+    attempt: u32,
+    elapsed: std::time::Duration,
+) -> bool {
+    reason == Some(peekle_core::types::UsageUnavailable::Network)
+        && attempt < MANUAL_TRIES
+        && elapsed < MANUAL_BUDGET
+}
+
+/// The press behind the Reconnect button.
+///
+/// One attempt is a lottery: an interface comes back before its route and its
+/// DNS, and a press that lands in that gap gets the same network failure the
+/// bars already show, which reads as a button that does nothing. So the press
+/// asks again while the failure is a network one, and stops the moment it is
+/// anything else: an expired token and a refused Keychain do not改 change on a
+/// second ask. Only the last snapshot is published, because three failures in
+/// a row are a blink rather than news. tech.md 6.4.
+async fn reconnect(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
+    let started = std::time::Instant::now();
+    let mut snapshot = None;
+
+    for attempt in 1..=MANUAL_TRIES {
+        let Some(asked) = ask_usage(state).await else {
+            break;
+        };
+        let again = ask_again(asked.reason, attempt, started.elapsed());
+        snapshot = Some(asked);
+
+        if !again {
+            break;
+        }
+        tracing::debug!(attempt, "the network was not there yet, asking again");
+        tokio::time::sleep(MANUAL_GAP).await;
+    }
+
+    match snapshot {
+        Some(snapshot) => publish_usage(app, state, snapshot),
+        None => state.usage(),
+    }
+}
+
 #[tauri::command]
 pub async fn request_usage_access(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<UsageSnapshot, ()> {
     let state = state.inner().clone();
-    let snapshot = fetch_usage(&app, &state).await;
+    let snapshot = reconnect(&app, &state).await;
 
     {
         use peekle_core::types::UsageUnavailable;
@@ -642,6 +713,44 @@ mod tests {
                 "{line}"
             );
         }
+    }
+
+    /// A press asks again only while the answer is a network one, and only
+    /// inside both bounds. tech.md 6.4.
+    #[test]
+    fn a_press_asks_again_only_while_the_network_is_the_problem() {
+        use peekle_core::types::UsageUnavailable;
+        let quick = std::time::Duration::from_millis(200);
+
+        assert!(ask_again(Some(UsageUnavailable::Network), 1, quick));
+        assert!(ask_again(Some(UsageUnavailable::Network), 2, quick));
+
+        // Nothing else changes on a second ask.
+        for reason in [
+            None,
+            Some(UsageUnavailable::NotLoggedIn),
+            Some(UsageUnavailable::Denied),
+            Some(UsageUnavailable::NotGranted),
+            Some(UsageUnavailable::Disabled),
+            Some(UsageUnavailable::Unsupported),
+        ] {
+            assert!(!ask_again(reason, 1, quick), "{reason:?}");
+        }
+    }
+
+    #[test]
+    fn a_press_gives_up_on_either_bound() {
+        use peekle_core::types::UsageUnavailable;
+        let network = Some(UsageUnavailable::Network);
+
+        assert!(
+            !ask_again(network, MANUAL_TRIES, std::time::Duration::from_millis(1)),
+            "the last attempt is the last one"
+        );
+        assert!(
+            !ask_again(network, 1, MANUAL_BUDGET),
+            "a hanging network must not keep the button lit"
+        );
     }
 
     /// A session that has never answered is being aimed, not changed: the pick

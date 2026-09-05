@@ -314,22 +314,31 @@ fn backfill_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
 
 fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
     const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
-    /// While the network is down, come back sooner. A user who lost wifi in a
-    /// tunnel should not stare at dashes for five minutes after it returns.
-    const RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
+        // How many network failures in a row, which is what decides how soon
+        // to come back. A flat wait made a returning wifi cost half a minute
+        // of dashes; the ladder catches it in seconds. tech.md 6.4.
+        let mut misses: u32 = 0;
+
         loop {
             // Fetch first and sleep after, so a granted account has numbers a
             // second after launch rather than five minutes into the session.
             let wait = if state.may_fetch_usage() {
                 let snapshot = commands::fetch_usage(&handle, &state).await;
                 match snapshot.reason {
-                    Some(peekle_core::types::UsageUnavailable::Network) => RETRY,
-                    _ => EVERY,
+                    Some(peekle_core::types::UsageUnavailable::Network) => {
+                        misses = misses.saturating_add(1);
+                        peekle_usage::retry_after(misses)
+                    }
+                    _ => {
+                        misses = 0;
+                        EVERY
+                    }
                 }
             } else {
+                misses = 0;
                 EVERY
             };
 
