@@ -27,6 +27,10 @@ pub struct SpawnSpec {
     pub cwd: String,
     pub cols: u16,
     pub rows: u16,
+    /// The id of an observed chat to fork into this one. When set, the spawn
+    /// continues that conversation under `session_id` and leaves the original
+    /// transcript alone. tech.md 6.5.
+    pub resume: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -46,8 +50,21 @@ pub enum PtyError {
 /// `--session-id` is the whole trick: it tells us up front which `session_id`
 /// the hooks will carry, so a hook is matched to a card without a guess, and
 /// anything else is an observed session. tech.md 6.5.
-pub fn spawn_args(session_id: &str) -> Vec<String> {
-    vec!["--session-id".to_string(), session_id.to_string()]
+///
+/// With `resume`, the same three flags Claude Desktop uses to open an existing
+/// chat: `--resume=<old>` continues that conversation, `--fork-session` gives
+/// this run its own id so the fork does not collide with the original and its
+/// hooks are recognised as ours, and `--session-id=<new>` is that id. The
+/// original transcript is left untouched; the fork grows in a new file.
+/// tech.md 6.5.
+pub fn spawn_args(session_id: &str, resume: Option<&str>) -> Vec<String> {
+    let mut args = vec!["--session-id".to_string(), session_id.to_string()];
+    if let Some(old) = resume {
+        args.push("--resume".to_string());
+        args.push(old.to_string());
+        args.push("--fork-session".to_string());
+    }
+    args
 }
 
 /// The bytes one message puts on the wire.
@@ -230,7 +247,7 @@ impl PtyHost {
             .map_err(|err| PtyError::Pty(err.to_string()))?;
 
         let mut command = CommandBuilder::new(binary);
-        for arg in spawn_args(&spec.session_id) {
+        for arg in spawn_args(&spec.session_id, spec.resume.as_deref()) {
             command.arg(arg);
         }
         command.cwd(&spec.cwd);
@@ -347,9 +364,32 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc"),
+            spawn_args("abc", None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
+    }
+
+    /// The three flags Claude Desktop opens an existing chat with. The fork id
+    /// is the one Peekle assigned, so the run is recognised as ours, and the
+    /// resume id is the chat being continued. tech.md 6.5.
+    #[test]
+    fn a_fork_carries_the_new_id_and_the_old_one_once_each() {
+        let args = spawn_args("new-id", Some("old-id"));
+        assert_eq!(
+            args,
+            vec![
+                "--session-id".to_string(),
+                "new-id".to_string(),
+                "--resume".to_string(),
+                "old-id".to_string(),
+                "--fork-session".to_string(),
+            ]
+        );
+        assert_eq!(args.iter().filter(|a| *a == "--resume").count(), 1);
+        assert_eq!(args.iter().filter(|a| *a == "--fork-session").count(), 1);
+        // The assigned id, not the resumed one, is what a hook will carry.
+        let idx = args.iter().position(|a| a == "--session-id").unwrap();
+        assert_eq!(args[idx + 1], "new-id");
     }
 
     #[test]
@@ -458,6 +498,7 @@ mod tests {
             cwd: "/nowhere/at/all".to_string(),
             cols: 120,
             rows: 40,
+            resume: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
@@ -473,6 +514,7 @@ mod tests {
             cwd: "/tmp".to_string(),
             cols: 120,
             rows: 40,
+            resume: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(Path::new("/bin/echo"), &spec, move |id| {

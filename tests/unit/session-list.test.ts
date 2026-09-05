@@ -7,7 +7,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { ageLabel } from '$lib/logic/age';
-import { searchSessions } from '$lib/logic/sessions';
+import { canContinue, searchSessions } from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 const card = (title: string, project = 'peekle'): SessionCard => ({
@@ -74,5 +74,26 @@ describe('searching the list', () => {
         expect(kept).toEqual(cards.filter((c) => kept.includes(c)));
       }),
     );
+  });
+});
+
+describe('continuing a chat', () => {
+  const card = (origin: SessionCard['origin']): SessionCard => ({
+    session: { session_id: 's', cwd: '/x/p', project: 'p', pid: null, tty: null },
+    title: 't',
+    status: 'Idle',
+    origin,
+    entries: [],
+    agent: null,
+    updated_at: 0,
+  });
+
+  /** An observed chat has no field, but it can be forked into one we own the
+   * way Desktop opens an existing chat. An owned one already has a field, and
+   * nothing to continue means nothing to offer. tech.md 6.5. */
+  it('offers the fork only for an observed chat', () => {
+    expect(canContinue(card('Observed'))).toBe(true);
+    expect(canContinue(card('Owned'))).toBe(false);
+    expect(canContinue(undefined)).toBe(false);
   });
 });

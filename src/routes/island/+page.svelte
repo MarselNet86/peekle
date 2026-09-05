@@ -14,7 +14,7 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { scrollAim, scrollState } from '$lib/logic/feed';
-  import { searchSessions } from '$lib/logic/sessions';
+  import { canContinue as canContinueCard, searchSessions } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
@@ -139,6 +139,13 @@
   );
   const reachable = $derived(island.prompt !== null || owned);
 
+  // An observed chat that nobody owns and no live client is writing can be
+  // forked into an owned one, the way Desktop opens an existing chat. There is
+  // no live-client signal in the webview, so Rust makes the final call and
+  // refuses if it is being written; here it is offered whenever the session is
+  // not already ours. tech.md 6.5.
+  const canContinue = $derived(canContinueCard(current));
+
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
     if (owned) return 'Message Claude';
@@ -158,6 +165,18 @@
     startError = null;
     try {
       const session = await commands.startSession(cwd);
+      if (session) openSession(session.session_id);
+    } catch (err) {
+      startError = String(err);
+    }
+  }
+
+  // Fork this observed chat into one we own and open it. The original card
+  // stays in the list as history. tech.md 6.5.
+  async function continueSession(sessionId: string) {
+    startError = null;
+    try {
+      const session = await commands.continueSession(sessionId);
       if (session) openSession(session.session_id);
     } catch (err) {
       startError = String(err);
@@ -478,13 +497,27 @@
             {#if agent.error}
               <p class="empty">{agent.error}</p>
             {/if}
-            <PromptInput
-              bind:value={reply}
-              placeholder={replyHint}
-              disabled={!reachable}
-              onsubmit={send}
-              onescape={() => island.dismiss()}
-            />
+            {#if startError}
+              <p class="empty">{startError}</p>
+            {/if}
+            <!-- An observed chat has no field, but it can be forked into one we
+                 own, the way Desktop opens an existing chat. Rust refuses if a
+                 live client is writing it. tech.md 6.5. -->
+            {#if canContinue}
+              <Button
+                label="Continue this chat"
+                onclick={() => current && continueSession(current.session.session_id)}
+                wide
+              />
+            {:else}
+              <PromptInput
+                bind:value={reply}
+                placeholder={replyHint}
+                disabled={!reachable}
+                onsubmit={send}
+                onescape={() => island.dismiss()}
+              />
+            {/if}
           </div>
         {/if}
       </div>

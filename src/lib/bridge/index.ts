@@ -73,6 +73,9 @@ export const commands = {
   // staying up while the picture is on screen. tech.md 6.13.
   setPreview: (open: boolean) => call<void>('set_preview', { open }),
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
+  // Forks an observed chat into an owned one, the way Desktop opens an
+  // existing chat: claude --resume=<id> in a pty of our own. tech.md 6.5.
+  continueSession: (sessionId: string) => call<SessionRef>('continue_session', { sessionId }),
   // `shots` are the screenshots attached to this message. They travel as
   // lines of the message itself, and Rust composes them: what goes on the wire
   // is a delivery detail and belongs next to the pty. tech.md 6.13.

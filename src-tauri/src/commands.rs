@@ -322,6 +322,72 @@ pub fn start_session(
     state: State<'_, Arc<AppState>>,
     cwd: String,
 ) -> Result<peekle_core::types::SessionRef, String> {
+    spawn_owned(&app, state.inner(), cwd, None)
+}
+
+/// Forks an observed chat into one the island owns. tech.md 6.5.
+///
+/// The same move Claude Desktop makes to open an existing chat: it spawns
+/// `claude --resume=<id>` as its own child rather than reaching into a foreign
+/// process, because there is no channel into one. The fork gives the run a new
+/// id -- the one assigned here -- so its hooks are recognised as ours and the
+/// original transcript is left alone.
+///
+/// Refused for a session the island already owns (it has a field already) and
+/// for one a live client is still writing (a fork on a branch someone else is
+/// writing is two agents racing, the hazard of v34). tech.md 6.5.
+#[tauri::command]
+pub fn continue_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<peekle_core::types::SessionRef, String> {
+    let Some(card) = state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+    else {
+        tracing::warn!(session_id, "continue for a session nobody knows");
+        return Err("That session is gone".to_string());
+    };
+
+    if state.owns_session(&session_id) {
+        return Err("That session already has an input field".to_string());
+    }
+
+    // A live client on the same conversation would branch under us. The file
+    // it writes on every message is the tell. tech.md 6.5 and v34.
+    if let Some(root) = peekle_core::transcripts::default_root() {
+        if peekle_core::transcripts::client_is_live(
+            &root,
+            &card.session.cwd,
+            &session_id,
+            LIVE_CLIENT_WINDOW,
+        ) {
+            return Err("That chat is open somewhere else right now".to_string());
+        }
+    }
+
+    spawn_owned(
+        &app,
+        state.inner(),
+        card.session.cwd.clone(),
+        Some(session_id),
+    )
+}
+
+/// How recently a transcript was written for its client to count as live.
+/// The detector of v34, reused here. tech.md 6.5.
+const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// Spawns a `claude` the island owns, optionally forking an existing chat into
+/// it, and opens its card. Shared by `start_session` and `continue_session`.
+fn spawn_owned(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    cwd: String,
+    resume: Option<String>,
+) -> Result<peekle_core::types::SessionRef, String> {
     let Some(binary) = peekle_core::claude_path() else {
         return Err("Claude Code is not installed where Peekle can find it".to_string());
     };
@@ -335,12 +401,13 @@ pub fn start_session(
         cwd: cwd.clone(),
         cols,
         rows,
+        resume,
     };
 
     state.claim_session(&spec.session_id);
 
     let handle = app.clone();
-    let owner = state.inner().clone();
+    let owner = state.clone();
     let result = state.pty().spawn(&binary, &spec, move |session_id| {
         // The process was ours, so this is the one place `Ended` states a fact
         // instead of guessing at someone else's session. tech.md 6.3.
@@ -786,6 +853,24 @@ mod tests {
 
     /// There is nothing to compact in a session that has not answered, and the
     /// ring is not a thing to hold for later.
+    /// Continue refuses a session the island already owns: it has a field, and
+    /// forking it would be a second process for one the user is already in.
+    /// tech.md 6.5.
+    #[test]
+    fn continue_refuses_a_session_we_already_own() {
+        // The guard `continue_session` runs before it ever spawns is
+        // `owns_session`. A claimed id is owned.
+        let state = fresh();
+        state.claim_session("ours");
+        assert!(state.owns_session("ours"));
+    }
+
+    /// The live-client window is the detector of v34, not a new number.
+    #[test]
+    fn the_live_client_window_matches_the_detector() {
+        assert_eq!(LIVE_CLIENT_WINDOW, std::time::Duration::from_secs(90));
+    }
+
     #[test]
     fn a_compact_before_the_first_answer_is_refused() {
         let state = fresh();
