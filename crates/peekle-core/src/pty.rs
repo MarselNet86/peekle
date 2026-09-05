@@ -27,10 +27,13 @@ pub struct SpawnSpec {
     pub cwd: String,
     pub cols: u16,
     pub rows: u16,
-    /// The id of an observed chat to fork into this one. When set, the spawn
-    /// continues that conversation under `session_id` and leaves the original
-    /// transcript alone. tech.md 6.5.
-    pub resume: Option<String>,
+    /// Whether this spawn continues the chat `session_id` already names.
+    ///
+    /// A resumed session keeps its own id, so it is not assigned one: the id
+    /// is what `--resume` is given. Continuing in place rather than forking is
+    /// the point -- one chat, one transcript, and every other client watching
+    /// that id sees the turns Peekle adds. tech.md 6.5.
+    pub resume: bool,
     /// The first message, handed to the spawn rather than typed into it.
     ///
     /// A freshly started TUI is not ready to receive a line for many seconds,
@@ -64,13 +67,17 @@ pub enum PtyError {
 /// hooks are recognised as ours, and `--session-id=<new>` is that id. The
 /// original transcript is left untouched; the fork grows in a new file.
 /// tech.md 6.5.
-pub fn spawn_args(session_id: &str, resume: Option<&str>, prompt: Option<&str>) -> Vec<String> {
-    let mut args = vec!["--session-id".to_string(), session_id.to_string()];
-    if let Some(old) = resume {
-        args.push("--resume".to_string());
-        args.push(old.to_string());
-        args.push("--fork-session".to_string());
-    }
+pub fn spawn_args(session_id: &str, resume: bool, prompt: Option<&str>) -> Vec<String> {
+    // Two ways to end up with a session of a known id: assign one to a fresh
+    // run, or resume the chat that already has it. Never both -- the CLI
+    // refuses `--session-id` with `--resume` unless the session is forked, and
+    // forking is exactly what must not happen here: a fork is a new id and a
+    // new transcript, invisible to every other client watching the old one.
+    let mut args = if resume {
+        vec!["--resume".to_string(), session_id.to_string()]
+    } else {
+        vec!["--session-id".to_string(), session_id.to_string()]
+    };
     // Positional, and last: it is the prompt, not a flag. Handed over rather
     // than typed, so the startup of the TUI cannot swallow it.
     if let Some(prompt) = prompt.map(str::trim).filter(|text| !text.is_empty()) {
@@ -259,11 +266,7 @@ impl PtyHost {
             .map_err(|err| PtyError::Pty(err.to_string()))?;
 
         let mut command = CommandBuilder::new(binary);
-        for arg in spawn_args(
-            &spec.session_id,
-            spec.resume.as_deref(),
-            spec.prompt.as_deref(),
-        ) {
+        for arg in spawn_args(&spec.session_id, spec.resume, spec.prompt.as_deref()) {
             command.arg(arg);
         }
         command.cwd(&spec.cwd);
@@ -380,46 +383,35 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc", None, None),
+            spawn_args("abc", false, None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
     }
 
-    /// The three flags Claude Desktop opens an existing chat with. The fork id
-    /// is the one Peekle assigned, so the run is recognised as ours, and the
-    /// resume id is the chat being continued. tech.md 6.5.
+    /// Continuing a chat keeps its id, so the run is resumed rather than
+    /// assigned one, and no fork is made: a fork would be a new id and a new
+    /// transcript that no other client is watching. tech.md 6.5.
     #[test]
-    fn a_fork_carries_the_new_id_and_the_old_one_once_each() {
-        let args = spawn_args("new-id", Some("old-id"), None);
-        assert_eq!(
-            args,
-            vec![
-                "--session-id".to_string(),
-                "new-id".to_string(),
-                "--resume".to_string(),
-                "old-id".to_string(),
-                "--fork-session".to_string(),
-            ]
-        );
-        assert_eq!(args.iter().filter(|a| *a == "--resume").count(), 1);
-        assert_eq!(args.iter().filter(|a| *a == "--fork-session").count(), 1);
-        // The assigned id, not the resumed one, is what a hook will carry.
-        let idx = args.iter().position(|a| a == "--session-id").unwrap();
-        assert_eq!(args[idx + 1], "new-id");
+    fn continuing_a_chat_keeps_its_own_id_and_never_forks() {
+        let args = spawn_args("chat-id", true, None);
+        assert_eq!(args, vec!["--resume".to_string(), "chat-id".to_string()]);
+        assert!(!args.iter().any(|a| a == "--fork-session"));
+        // Never both: the CLI refuses the pair unless it forks.
+        assert!(!args.iter().any(|a| a == "--session-id"));
     }
 
     /// The first message of a fork rides as an argument, because a TUI that is
     /// still starting swallows anything written into it. tech.md 6.5.
     #[test]
     fn the_first_message_is_handed_over_rather_than_typed() {
-        let args = spawn_args("new-id", Some("old-id"), Some("what did I say?"));
+        let args = spawn_args("chat-id", true, Some("what did I say?"));
         assert_eq!(args.last().map(String::as_str), Some("what did I say?"));
         // Positional: it carries no flag of its own and cannot be read as one.
         assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
 
         // Nothing to say means nothing appended, not an empty argument.
         for empty in [Some(""), Some("   "), None] {
-            let args = spawn_args("new-id", None, empty);
+            let args = spawn_args("new-id", false, empty);
             assert_eq!(args, vec!["--session-id".to_string(), "new-id".to_string()]);
         }
     }
@@ -530,7 +522,7 @@ mod tests {
             cwd: "/nowhere/at/all".to_string(),
             cols: 120,
             rows: 40,
-            resume: None,
+            resume: false,
             prompt: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
@@ -547,7 +539,7 @@ mod tests {
             cwd: "/tmp".to_string(),
             cols: 120,
             rows: 40,
-            resume: None,
+            resume: false,
             prompt: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();

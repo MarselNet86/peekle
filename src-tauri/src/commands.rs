@@ -378,7 +378,7 @@ pub fn continue_session(
         &app,
         state.inner(),
         card.session.cwd.clone(),
-        Some(session_id),
+        Some(card.session.clone()),
         Some(message.clone()),
     )?;
 
@@ -410,7 +410,10 @@ fn spawn_owned(
     app: &AppHandle,
     state: &Arc<AppState>,
     cwd: String,
-    resume: Option<String>,
+    // The chat being continued, or None to start a fresh one. A continued chat
+    // keeps its own id, which is the whole point: one transcript, and every
+    // other client watching that id sees what Peekle adds. tech.md 6.5.
+    resume: Option<peekle_core::types::SessionRef>,
     prompt: Option<String>,
 ) -> Result<peekle_core::types::SessionRef, String> {
     let Some(binary) = peekle_core::claude_path() else {
@@ -421,12 +424,16 @@ fn spawn_owned(
         let config = state.lock_config();
         (config.behavior.pty_cols, config.behavior.pty_rows)
     };
+    let session_id = match &resume {
+        Some(chat) => chat.session_id.clone(),
+        None => peekle_core::pty::new_session_id(),
+    };
     let spec = peekle_core::pty::SpawnSpec {
-        session_id: peekle_core::pty::new_session_id(),
+        session_id,
         cwd: cwd.clone(),
         cols,
         rows,
-        resume,
+        resume: resume.is_some(),
         prompt,
     };
 
