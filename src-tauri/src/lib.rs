@@ -334,6 +334,12 @@ fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
                         misses = misses.saturating_add(1);
                         peekle_usage::retry_after(misses)
                     }
+                    // Asked to wait, so wait: coming back sooner is what got
+                    // us rate limited. tech.md 6.4.
+                    Some(peekle_core::types::UsageUnavailable::RateLimited) => {
+                        misses = 0;
+                        EVERY
+                    }
                     _ => {
                         misses = 0;
                         EVERY

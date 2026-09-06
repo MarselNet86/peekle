@@ -130,3 +130,19 @@ describe('the grant control', () => {
     expect(connectLabel(null)).toBeNull();
   });
 });
+
+/** Reached and answered: it asked for time, so there is no button to press,
+ * only the reason. Offering Reconnect there makes it worse. tech.md 6.4. */
+describe('a rate limited account', () => {
+  const limited = (): UsageSnapshot => ({
+    windows: [],
+    source: 'Unavailable',
+    reason: 'RateLimited',
+    fetched_at: 0,
+  });
+
+  it('offers no button and says why', () => {
+    expect(connectLabel(limited())).toBeNull();
+    expect(reasonText(limited())).toBe('too many requests, it asked to wait');
+  });
+});

@@ -177,8 +177,16 @@ pub async fn fetch_usage(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapsho
 /// nothing is emitted: a path that asks more than once (the Reconnect press,
 /// tech.md 6.4) must not blink the bars on every attempt.
 async fn ask_usage(state: &Arc<AppState>) -> Option<UsageSnapshot> {
+    ask_usage_within(state, peekle_usage::POLL_TIMEOUT).await
+}
+
+/// The same question, bounded by what the caller can wait for. tech.md 6.4.
+async fn ask_usage_within(
+    state: &Arc<AppState>,
+    budget: std::time::Duration,
+) -> Option<UsageSnapshot> {
     let provider = Arc::clone(&state.usage_provider);
-    match tauri::async_runtime::spawn_blocking(move || provider.snapshot()).await {
+    match tauri::async_runtime::spawn_blocking(move || provider.snapshot_within(budget)).await {
         Ok(snapshot) => Some(snapshot),
         Err(err) => {
             tracing::warn!(error = %err, "the usage provider panicked");
@@ -211,12 +219,21 @@ fn publish_usage(app: &AppHandle, state: &Arc<AppState>, snapshot: UsageSnapshot
 /// nothing asks again until the user clears it by hand.
 /// How many times a press asks again while the answer is a network failure.
 const MANUAL_TRIES: u32 = 3;
-/// And for how long in total, so a press against a hanging network is not a
-/// button that stays lit for half a minute. tech.md 6.4.
+/// And for how long in total. This is a wall clock, not a wish: each attempt
+/// is given what is left of it, so the button cannot outlive the budget.
+///
+/// It matters because the expensive failure is silent. Measured: a blackholed
+/// address -- wifi associated, nothing routed, a captive portal -- costs the
+/// whole request timeout and answers nothing, while an unresolvable name fails
+/// in a tenth of a second. Without a budget the first case left the button
+/// lit for ten seconds and then simply gave up. tech.md 6.4.
 const MANUAL_BUDGET: std::time::Duration = std::time::Duration::from_secs(6);
 /// Between attempts. Long enough for a route to finish coming up, short
 /// enough that three of them fit in the budget.
-const MANUAL_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+const MANUAL_GAP: std::time::Duration = std::time::Duration::from_millis(700);
+/// The least an attempt is worth making with. Below this a request fails for
+/// want of time rather than for want of a network.
+const MIN_ATTEMPT: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// Whether a press asks again after this answer. tech.md 6.4.
 ///
@@ -229,6 +246,8 @@ fn ask_again(
     attempt: u32,
     elapsed: std::time::Duration,
 ) -> bool {
+    // Rate limiting is the one refusal that asking again makes worse: the
+    // endpoint was reached and answered, and it asked for time. tech.md 6.4.
     reason == Some(peekle_core::types::UsageUnavailable::Network)
         && attempt < MANUAL_TRIES
         && elapsed < MANUAL_BUDGET
@@ -248,7 +267,13 @@ async fn reconnect(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
     let mut snapshot = None;
 
     for attempt in 1..=MANUAL_TRIES {
-        let Some(asked) = ask_usage(state).await else {
+        // Whatever is left of the budget, and never nothing: an attempt with
+        // no time is a request that fails for the wrong reason.
+        let left = MANUAL_BUDGET
+            .checked_sub(started.elapsed())
+            .filter(|left| *left >= MIN_ATTEMPT)
+            .unwrap_or(MIN_ATTEMPT);
+        let Some(asked) = ask_usage_within(state, left).await else {
             break;
         };
         let again = ask_again(asked.reason, attempt, started.elapsed());
@@ -821,17 +846,31 @@ mod tests {
         assert!(ask_again(Some(UsageUnavailable::Network), 1, quick));
         assert!(ask_again(Some(UsageUnavailable::Network), 2, quick));
 
-        // Nothing else changes on a second ask.
+        // Nothing else changes on a second ask, and rate limiting gets worse
+        // for being asked: it was reached, and it asked for time. tech.md 6.4.
         for reason in [
             None,
             Some(UsageUnavailable::NotLoggedIn),
             Some(UsageUnavailable::Denied),
             Some(UsageUnavailable::NotGranted),
             Some(UsageUnavailable::Disabled),
+            Some(UsageUnavailable::RateLimited),
             Some(UsageUnavailable::Unsupported),
         ] {
             assert!(!ask_again(reason, 1, quick), "{reason:?}");
         }
+    }
+
+    /// The press is a wall clock: whatever it spends on one attempt is gone
+    /// from the next. A blackholed network costs the whole request timeout,
+    /// so without this the button outlived its budget by seconds. 6.4.
+    #[test]
+    fn an_attempt_never_outlives_the_budget() {
+        assert!(MIN_ATTEMPT < MANUAL_BUDGET);
+        // Three attempts and two gaps still fit inside the budget when each
+        // attempt is handed only what is left.
+        let gaps = MANUAL_GAP * (MANUAL_TRIES - 1);
+        assert!(gaps < MANUAL_BUDGET, "the gaps alone would spend it");
     }
 
     #[test]

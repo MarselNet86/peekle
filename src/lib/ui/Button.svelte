@@ -4,6 +4,7 @@
     variant = 'ghost',
     disabled = false,
     wide = false,
+    busy = false,
     onclick,
   }: {
     label: string;
@@ -11,6 +12,10 @@
     disabled?: boolean;
     /** Fills the row it sits in. For a control that is the only thing there. */
     wide?: boolean;
+    /** Working on the last press. A label that merely changes its word reads
+     * as a button that did nothing, so the wait gets a moving part of its
+     * own, and the button stops taking presses while it turns. tech.md 9. */
+    busy?: boolean;
     onclick?: () => void;
   } = $props();
 </script>
@@ -18,12 +23,27 @@
 <!-- The only button in the product. tech.md 9.
      No autofocus and no tabindex games: a button that takes focus would pull
      the keyboard out of whatever the user is actually using. tech.md 6.7. -->
-<button type="button" data-variant={variant} class:wide {disabled} onclick={() => onclick?.()}>
+<button
+  type="button"
+  data-variant={variant}
+  class:wide
+  class:busy
+  disabled={disabled || busy}
+  aria-busy={busy}
+  onclick={() => onclick?.()}
+>
+  {#if busy}
+    <span class="spinner" aria-hidden="true"></span>
+  {/if}
   {label}
 </button>
 
 <style>
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
     flex: none;
     border: 1px solid var(--hairline);
     border-radius: 8px;
@@ -80,5 +100,33 @@
   button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  /* A ring with a gap, turning. The one moving part the product has outside
+     the feed, and it exists because a wait with no moving part is read as a
+     press that was lost. tech.md 9. */
+  .spinner {
+    width: 11px;
+    height: 11px;
+    flex: none;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    opacity: 0.85;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Motion is a preference, and a spinner that cannot turn still has to say it
+     is working, so it holds the gap still instead. */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation: none;
+    }
   }
 </style>

@@ -18,6 +18,7 @@ const REASONS: Record<UsageUnavailable, string> = {
   Denied: 'Keychain access was denied',
   NotLoggedIn: 'log in with the Claude Code CLI',
   Network: 'could not reach the API',
+  RateLimited: 'too many requests, it asked to wait',
   Unsupported: 'the API stopped reporting it',
 };
 
@@ -66,6 +67,10 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
     case 'NotLoggedIn':
     case 'Network':
       return 'Reconnect';
+    // Reached and answered: pressing again is what it asked us not to do, so
+    // there is no button, only the reason. tech.md 6.4.
+    case 'RateLimited':
+      return null;
     default:
       return null;
   }
@@ -119,6 +124,10 @@ export function createUsage() {
     },
     get connecting() {
       return connecting;
+    },
+    /** Whether the last snapshot came back without numbers at all. */
+    get failed() {
+      return snapshot !== null && snapshot.reason !== null;
     },
     connect,
     start,

@@ -422,6 +422,10 @@ pub enum UsageUnavailable {
     Denied,
     NotLoggedIn,
     Network,
+    /// The endpoint answered `429`. Reached, understood, and asked to wait --
+    /// which is the opposite of a network failure, and retrying sooner makes
+    /// it worse. tech.md 6.4.
+    RateLimited,
     Unsupported,
 }
 

@@ -20,7 +20,9 @@ use crate::credentials::{access_token, CredentialError, CredentialStore};
 use crate::UsageProvider;
 
 const ENDPOINT: &str = "https://api.anthropic.com/api/oauth/usage";
-const TIMEOUT: Duration = Duration::from_secs(10);
+/// What the background poll allows one request. A press allows less: see
+/// `snapshot_within`. tech.md 6.4.
+pub const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Turns the response body into a snapshot. Pure, so the whole contract of
 /// step 3 is testable without a network.
@@ -103,10 +105,10 @@ impl AccountUsage {
 
     /// One request. Returns the snapshot, or the status code when the server
     /// refused, so the caller can tell an expired token from a dead network.
-    fn ask(&self, token: &str) -> Result<UsageSnapshot, Option<u16>> {
+    fn ask(&self, token: &str, budget: Duration) -> Result<UsageSnapshot, Option<u16>> {
         let response = ureq::get(ENDPOINT)
             .config()
-            .timeout_global(Some(TIMEOUT))
+            .timeout_global(Some(budget))
             .build()
             .header("user-agent", &self.agent)
             // The only place the token is used, and it goes nowhere else.
@@ -139,18 +141,31 @@ impl AccountUsage {
 
 impl UsageProvider for AccountUsage {
     fn snapshot(&self) -> UsageSnapshot {
+        self.snapshot_within(TIMEOUT)
+    }
+
+    /// The same read, bounded by what the caller can wait for.
+    ///
+    /// A press has to answer while a finger is still on the button, and a hole
+    /// in the network costs the whole timeout: measured, a blackholed address
+    /// takes every second of it, while an unresolvable name fails in a tenth.
+    /// tech.md 6.4.
+    fn snapshot_within(&self, budget: Duration) -> UsageSnapshot {
         let token = match self.token() {
             Ok(token) => token,
             Err(reason) => return unavailable(reason, now_ms()),
         };
         tracing::debug!(token_len = token.len(), "reading usage for the account");
 
-        match self.ask(&token) {
+        match self.ask(&token, budget) {
             Ok(snapshot) => snapshot,
             // An expired token is not worth an agent turn to refresh: Claude
             // Code rewrites the Keychain entry the next time it runs, and the
             // next poll reads it. tech.md 6.4 step 4.
             Err(Some(401 | 403)) => unavailable(UsageUnavailable::NotLoggedIn, now_ms()),
+            // Reached and answered: asked to wait, not unreachable. Calling it
+            // a network failure would offer a Reconnect that makes it worse.
+            Err(Some(429)) => unavailable(UsageUnavailable::RateLimited, now_ms()),
             Err(_) => unavailable(UsageUnavailable::Network, now_ms()),
         }
     }

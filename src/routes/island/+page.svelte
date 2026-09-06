@@ -356,15 +356,22 @@
      them under the session list was costing the list the rows it is for.
      tech.md S7. -->
 {#snippet connect()}
-  {#if usage.connectLabel}
+  {#if usage.connectLabel || usage.failed}
     <div class="usage">
-      <Button
-        label={usage.connecting ? 'Connecting' : usage.connectLabel}
-        variant="connect"
-        disabled={usage.connecting}
-        wide
-        onclick={() => usage.connect()}
-      />
+      {#if usage.connectLabel}
+        <Button
+          label={usage.connecting ? 'Connecting' : usage.connectLabel}
+          variant="connect"
+          busy={usage.connecting}
+          wide
+          onclick={() => usage.connect()}
+        />
+      {/if}
+      <!-- Why it is not connected, in words. A press that changes nothing on
+           screen reads as a press that was lost. tech.md 6.4. -->
+      {#if usage.failed && !usage.connecting}
+        <p class="why">{usage.reason}</p>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -567,6 +574,14 @@
     flex: none;
     border-top: 1px solid var(--hairline);
     padding-top: 6px;
+  }
+
+  /* Under the button, dim and small: it explains, it does not shout. */
+  .why {
+    margin: 6px 2px 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
   }
 
   .search {

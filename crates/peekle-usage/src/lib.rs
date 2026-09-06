@@ -8,7 +8,7 @@ pub mod account;
 pub mod credentials;
 pub mod fake;
 
-pub use account::AccountUsage;
+pub use account::{AccountUsage, TIMEOUT as POLL_TIMEOUT};
 pub use credentials::{CredentialError, CredentialStore, FakeCredentialStore, SecurityToolStore};
 pub use fake::FakeUsage;
 
@@ -16,6 +16,12 @@ use peekle_core::types::UsageSnapshot;
 
 pub trait UsageProvider: Send + Sync + 'static {
     fn snapshot(&self) -> UsageSnapshot;
+
+    /// A snapshot bounded by what the caller can wait for. Only the account
+    /// provider has anything to bound; a fake answers instantly. tech.md 6.4.
+    fn snapshot_within(&self, _budget: std::time::Duration) -> UsageSnapshot {
+        self.snapshot()
+    }
 }
 
 /// How long the background poll waits after a network failure. tech.md 6.4.
