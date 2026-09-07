@@ -7,7 +7,14 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { ageLabel } from '$lib/logic/age';
-import { canContinue, replyReachable, searchSessions } from '$lib/logic/sessions';
+import {
+  BUSY_ELSEWHERE,
+  canContinue,
+  classifyContinueOutcome,
+  isBusyElsewhere,
+  replyReachable,
+  searchSessions,
+} from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 const card = (title: string, project = 'peekle'): SessionCard => ({
@@ -122,5 +129,45 @@ describe('the field while a fork is in flight', () => {
     expect(replyReachable({ ...base, hasPrompt: true, canContinue: false, continuing: true })).toBe(
       true,
     );
+  });
+});
+
+/**
+ * Whether the chat is busy elsewhere is not this attempt's failure to
+ * report: continue_session refuses it for as long as another client is
+ * actually driving the chat, a fact about the world rather than about one
+ * attempt, so it has to be told apart from every other refusal. tech.md 6.5.
+ */
+describe('reading what one attempt at continuing a chat came back with', () => {
+  it('is a real session to open', () => {
+    expect(classifyContinueOutcome({ session_id: 's1' }, undefined)).toEqual({
+      ok: true,
+      sessionId: 's1',
+    });
+  });
+
+  it('is busy elsewhere, worth trying again, not an error', () => {
+    expect(classifyContinueOutcome(undefined, BUSY_ELSEWHERE)).toEqual({ ok: false, busy: true });
+    expect(isBusyElsewhere(BUSY_ELSEWHERE)).toBe(true);
+  });
+
+  it('is a real error otherwise', () => {
+    expect(classifyContinueOutcome(undefined, 'That session is gone')).toEqual({
+      ok: false,
+      busy: false,
+      error: 'That session is gone',
+    });
+    expect(isBusyElsewhere('That session is gone')).toBe(false);
+  });
+
+  /** No Tauri to answer (dev, Playwright) is not a real session and not a
+   * real error either -- every other command in the island route stays
+   * quiet there too, rather than reporting on a backend nothing expected. */
+  it('says nothing at all when there was no backend to ask', () => {
+    expect(classifyContinueOutcome(null, undefined)).toEqual({
+      ok: false,
+      busy: false,
+      error: null,
+    });
   });
 });

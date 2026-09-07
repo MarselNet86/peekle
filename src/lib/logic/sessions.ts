@@ -53,3 +53,46 @@ export function replyReachable(state: {
 }): boolean {
   return state.hasPrompt || state.owned || (state.canContinue && !state.continuing);
 }
+
+/**
+ * The exact refusal `continue_session` gives when another client is driving
+ * the chat right now. Matched here rather than treated as an ordinary error,
+ * so a rejection can become "wait and try again" instead of a dead end.
+ * tech.md 6.5.
+ */
+export const BUSY_ELSEWHERE = 'That chat is open somewhere else right now';
+
+export function isBusyElsewhere(error: unknown): boolean {
+  return String(error) === BUSY_ELSEWHERE;
+}
+
+/** What one attempt at continuing a chat came back with. */
+export type ContinueOutcome =
+  | { ok: true; sessionId: string }
+  | { ok: false; busy: true }
+  // `error` is null for "there is no Tauri to answer" (dev, Playwright),
+  // where nothing surfaces a message about a backend that was never expected
+  // to exist -- every other command in the island route stays quiet there
+  // too.
+  | { ok: false; busy: false; error: string | null };
+
+/**
+ * Turns one `continue_session` attempt into an outcome the caller can act on
+ * without re-deriving the classification: a real session to open, a chat
+ * that is busy and worth trying again, or an error, and neither of the last
+ * two is confused with the other. Exactly one of `session`/`error` is ever
+ * meaningful, matching the one try/catch that produces them. tech.md 6.5.
+ */
+export function classifyContinueOutcome(
+  session: { session_id: string } | null | undefined,
+  error: unknown,
+): ContinueOutcome {
+  if (error !== undefined) {
+    return isBusyElsewhere(error)
+      ? { ok: false, busy: true }
+      : { ok: false, busy: false, error: String(error) };
+  }
+  return session
+    ? { ok: true, sessionId: session.session_id }
+    : { ok: false, busy: false, error: null };
+}
