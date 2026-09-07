@@ -32,3 +32,24 @@ export function searchSessions(cards: SessionCard[], query: string): SessionCard
 export function canContinue(card: SessionCard | undefined): boolean {
   return card?.origin === 'Observed';
 }
+
+/**
+ * Whether the reply field takes a press right now.
+ *
+ * Answering a permission request or writing into a session the island already
+ * owns is a fire-and-forget write to a pty that is already running: nothing
+ * to wait for, so nothing to guard. Forking an observed chat is the one real
+ * round trip -- spawning a process, not writing to one -- and `continuing`
+ * covers exactly its width: from the press that starts it to the moment it
+ * lands or fails. A second press inside that window used to race a second
+ * fork of the same chat, because nothing on screen changed to say the first
+ * one was still in flight. tech.md 6.5.
+ */
+export function replyReachable(state: {
+  hasPrompt: boolean;
+  owned: boolean;
+  canContinue: boolean;
+  continuing: boolean;
+}): boolean {
+  return state.hasPrompt || state.owned || (state.canContinue && !state.continuing);
+}
