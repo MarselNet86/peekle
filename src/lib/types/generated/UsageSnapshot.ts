@@ -7,4 +7,16 @@ export type UsageSnapshot = { windows: Array<UsageWindowStat>, source: UsageSour
 /**
  * unix ms
  */
-fetched_at: number, };
+fetched_at: number, 
+/**
+ * Whether Keychain access was ever granted, ever -- not whether this
+ * particular read succeeded. A provider does not know this; it is config
+ * state stamped on at the one place snapshots are handed to the island,
+ * same as `SessionCard.live_elsewhere`. tech.md 6.4.
+ *
+ * This is what the island gates the session list on rather than
+ * `source == Account`: a later rate limit or a network blip must not
+ * hide history that was already reachable once. Losing that would be
+ * the same fragility the gate exists to end.
+ */
+keychain_granted: boolean, };

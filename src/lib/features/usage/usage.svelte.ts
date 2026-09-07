@@ -17,6 +17,7 @@ const REASONS: Record<UsageUnavailable, string> = {
   NotGranted: 'needs Keychain access',
   Denied: 'Keychain access was denied',
   NotLoggedIn: 'log in with the Claude Code CLI',
+  Offline: 'no internet connection',
   Network: 'could not reach the API',
   RateLimited: 'too many requests, it asked to wait',
   Unsupported: 'the API stopped reporting it',
@@ -65,6 +66,7 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
     case 'Denied':
       return 'Connect';
     case 'NotLoggedIn':
+    case 'Offline':
     case 'Network':
       return 'Reconnect';
     // Reached and answered: pressing again is what it asked us not to do, so
@@ -74,6 +76,22 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Whether the session list should be replaced by one big connect screen
+ * instead of drawn at all.
+ *
+ * Exactly when access has never been granted and there is a button that could
+ * fix that -- never for `Disabled`, `Unsupported` or `RateLimited`, where no
+ * press would do anything, and never once `keychain_granted` is true, because
+ * a later network blip or rate limit must not hide history that was already
+ * reachable. Before the first snapshot arrives (`null`) this reads as
+ * reachable too, so the list opens on nothing rather than flashing this
+ * screen for the instant before `get_state` answers. tech.md 6.4.
+ */
+export function gateSessions(snapshot: UsageSnapshot | null): boolean {
+  return !(snapshot?.keychain_granted ?? true) && connectLabel(snapshot) !== null;
 }
 
 export function createUsage() {
@@ -128,6 +146,15 @@ export function createUsage() {
     /** Whether the last snapshot came back without numbers at all. */
     get failed() {
       return snapshot !== null && snapshot.reason !== null;
+    },
+    /** Whether access has ever been granted. tech.md 6.4. */
+    get keychainGranted() {
+      return snapshot?.keychain_granted ?? false;
+    },
+    /** Whether the session list should be gated behind one big connect
+     * screen rather than drawn. tech.md 6.4. */
+    get gateSessions() {
+      return gateSessions(snapshot);
     },
     connect,
     start,

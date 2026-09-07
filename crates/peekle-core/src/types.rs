@@ -421,6 +421,14 @@ pub enum UsageUnavailable {
     NotGranted,
     Denied,
     NotLoggedIn,
+    /// No network at all: the name did not resolve, or nothing could be
+    /// connected to. Measured, this fails in a tenth of a second, and it is
+    /// the one failure a person can act on themselves -- and the only one
+    /// cheap enough to retry within the same press. tech.md 6.4.
+    Offline,
+    /// Something is out there but did not answer, or answered with a status
+    /// nothing else names. A retry costs the whole timeout and rarely helps,
+    /// so a press tries this once. tech.md 6.4.
     Network,
     /// The endpoint answered `429`. Reached, understood, and asked to wait --
     /// which is the opposite of a network failure, and retrying sooner makes
@@ -438,6 +446,16 @@ pub struct UsageSnapshot {
     /// unix ms
     #[ts(type = "number")]
     pub fetched_at: i64,
+    /// Whether Keychain access was ever granted, ever -- not whether this
+    /// particular read succeeded. A provider does not know this; it is config
+    /// state stamped on at the one place snapshots are handed to the island,
+    /// same as `SessionCard.live_elsewhere`. tech.md 6.4.
+    ///
+    /// This is what the island gates the session list on rather than
+    /// `source == Account`: a later rate limit or a network blip must not
+    /// hide history that was already reachable once. Losing that would be
+    /// the same fragility the gate exists to end.
+    pub keychain_granted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

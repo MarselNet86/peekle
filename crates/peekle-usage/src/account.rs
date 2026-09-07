@@ -44,6 +44,9 @@ pub fn snapshot_from(body: &Value, fetched_at: i64) -> UsageSnapshot {
             source: UsageSource::Account,
             reason: None,
             fetched_at,
+            // Stamped centrally where snapshots are handed to the island, not
+            // known here. tech.md 6.4.
+            keychain_granted: false,
         },
         _ => unavailable(UsageUnavailable::Unsupported, fetched_at),
     }
@@ -70,6 +73,7 @@ pub fn unavailable(reason: UsageUnavailable, fetched_at: i64) -> UsageSnapshot {
         source: UsageSource::Unavailable,
         reason: Some(reason),
         fetched_at,
+        keychain_granted: false,
     }
 }
 
@@ -84,6 +88,18 @@ fn now_ms() -> i64 {
 pub struct AccountUsage {
     store: Box<dyn CredentialStore>,
     agent: String,
+}
+
+/// Why one request did not come back with a body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AskError {
+    /// The server answered, with this code.
+    Status(u16),
+    /// Nothing to connect to and no name to resolve: the machine is off the
+    /// network. tech.md 6.4.
+    Offline,
+    /// Something is out there, but it did not answer in the time allowed.
+    Unreachable,
 }
 
 impl AccountUsage {
@@ -105,7 +121,7 @@ impl AccountUsage {
 
     /// One request. Returns the snapshot, or the status code when the server
     /// refused, so the caller can tell an expired token from a dead network.
-    fn ask(&self, token: &str, budget: Duration) -> Result<UsageSnapshot, Option<u16>> {
+    fn ask(&self, token: &str, budget: Duration) -> Result<UsageSnapshot, AskError> {
         let response = ureq::get(ENDPOINT)
             .config()
             .timeout_global(Some(budget))
@@ -119,21 +135,30 @@ impl AccountUsage {
             Ok(mut response) => {
                 let raw = response.body_mut().read_to_string().map_err(|err| {
                     tracing::warn!(error = %err, "could not read the usage body");
-                    None
+                    AskError::Unreachable
                 })?;
                 let body: Value = serde_json::from_str(&raw).map_err(|err| {
                     tracing::warn!(error = %err, bytes = raw.len(), "usage body is not json");
-                    None
+                    AskError::Unreachable
                 })?;
                 Ok(snapshot_from(&body, now_ms()))
             }
-            Err(ureq::Error::StatusCode(code)) => Err(Some(code)),
+            Err(ureq::Error::StatusCode(code)) => Err(AskError::Status(code)),
+            // Nothing answered in time. The machine may well be online: a
+            // captive portal and a silent endpoint look the same from here,
+            // and both cost the whole budget. tech.md 6.4.
+            Err(err @ ureq::Error::Timeout(_)) => {
+                tracing::warn!(error = %err, endpoint = ENDPOINT, "usage request timed out");
+                Err(AskError::Unreachable)
+            }
+            // The name did not resolve, or there was nowhere to connect to.
+            // Measured at a tenth of a second, and it is the one failure the
+            // person in front of the screen can fix. tech.md 6.4.
             Err(err) => {
                 // The error carries the endpoint and the transport failure,
-                // never a header, so the token cannot ride along. Swallowing
-                // it left `could not reach the API` with nothing behind it.
+                // never a header, so the token cannot ride along.
                 tracing::warn!(error = %err, endpoint = ENDPOINT, "usage request failed");
-                Err(None)
+                Err(AskError::Offline)
             }
         }
     }
@@ -162,10 +187,13 @@ impl UsageProvider for AccountUsage {
             // An expired token is not worth an agent turn to refresh: Claude
             // Code rewrites the Keychain entry the next time it runs, and the
             // next poll reads it. tech.md 6.4 step 4.
-            Err(Some(401 | 403)) => unavailable(UsageUnavailable::NotLoggedIn, now_ms()),
+            Err(AskError::Status(401 | 403)) => {
+                unavailable(UsageUnavailable::NotLoggedIn, now_ms())
+            }
             // Reached and answered: asked to wait, not unreachable. Calling it
             // a network failure would offer a Reconnect that makes it worse.
-            Err(Some(429)) => unavailable(UsageUnavailable::RateLimited, now_ms()),
+            Err(AskError::Status(429)) => unavailable(UsageUnavailable::RateLimited, now_ms()),
+            Err(AskError::Offline) => unavailable(UsageUnavailable::Offline, now_ms()),
             Err(_) => unavailable(UsageUnavailable::Network, now_ms()),
         }
     }

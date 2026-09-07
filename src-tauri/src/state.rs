@@ -707,7 +707,15 @@ impl AppState {
     }
 
     pub fn usage(&self) -> UsageSnapshot {
-        self.lock(&self.usage).clone()
+        // Stamped on every read, not baked in at storage time: config can
+        // change (a grant, a revoke) between a snapshot landing and being
+        // asked for, and the island must see the current truth, not the one
+        // that happened to be true when the poll ran. tech.md 6.4.
+        let granted = self.lock_config().usage.keychain_granted;
+        UsageSnapshot {
+            keychain_granted: granted,
+            ..self.lock(&self.usage).clone()
+        }
     }
 
     pub fn set_usage(&self, snapshot: UsageSnapshot) {
@@ -961,6 +969,25 @@ mod tests {
             Arc::new(FakeUsage::default()),
             Arc::new(peekle_core::shots::FakePasteboard::new()),
         )
+    }
+
+    /// The bit the island gates its session list on is config truth read live,
+    /// not baked into whatever the provider happened to return: a provider
+    /// never knows whether Keychain access was granted, and a snapshot fetched
+    /// before a grant must not go stale the moment one happens. tech.md 6.4.
+    #[test]
+    fn keychain_granted_is_read_live_from_config_on_every_call() {
+        let state = state();
+        assert!(!state.usage().keychain_granted, "nothing granted yet");
+
+        state.lock_config().usage.keychain_granted = true;
+        assert!(
+            state.usage().keychain_granted,
+            "the same stored snapshot now reads as granted"
+        );
+
+        state.lock_config().usage.keychain_granted = false;
+        assert!(!state.usage().keychain_granted, "and back, just as live");
     }
 
     fn request(id: &str) -> PromptRequest {

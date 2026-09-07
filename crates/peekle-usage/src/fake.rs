@@ -83,12 +83,15 @@ impl UsageProvider for FakeUsage {
                 source: UsageSource::Fake,
                 reason: None,
                 fetched_at: now_ms(),
+                // Stamped centrally, same as the real provider. tech.md 6.4.
+                keychain_granted: false,
             },
             FakeMode::Unavailable(reason) => UsageSnapshot {
                 windows: Vec::new(),
                 source: UsageSource::Unavailable,
                 reason: Some(reason),
                 fetched_at: now_ms(),
+                keychain_granted: false,
             },
         }
     }
@@ -102,6 +105,7 @@ pub fn unknown(reason: UsageUnavailable) -> UsageSnapshot {
         source: UsageSource::Unavailable,
         reason: Some(reason),
         fetched_at: now_ms(),
+        keychain_granted: false,
     }
 }
 
@@ -141,7 +145,9 @@ mod tests {
             UsageUnavailable::NotGranted,
             UsageUnavailable::Denied,
             UsageUnavailable::NotLoggedIn,
+            UsageUnavailable::Offline,
             UsageUnavailable::Network,
+            UsageUnavailable::RateLimited,
             UsageUnavailable::Unsupported,
         ] {
             let snapshot = FakeUsage::new(FakeMode::Unavailable(reason)).snapshot();
