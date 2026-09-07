@@ -14,7 +14,11 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { scrollAim, scrollState } from '$lib/logic/feed';
-  import { canContinue as canContinueCard, searchSessions } from '$lib/logic/sessions';
+  import {
+    canContinue as canContinueCard,
+    replyReachable,
+    searchSessions,
+  } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
@@ -141,10 +145,19 @@
   // own, which is what Desktop does when you type into an old chat. No button
   // and no ceremony -- a chat is a chat. tech.md 6.5.
   const canContinue = $derived(canContinueCard(current));
-  const reachable = $derived(island.prompt !== null || owned || canContinue);
+  // The fork is a real round trip -- spawning a process, not a fire-and-forget
+  // write to a pty already open -- so the field has to say it is busy and stop
+  // taking presses while it is, or a person who sees no change from their
+  // first press sends the same reply again into a second race to fork the
+  // same chat. tech.md 6.5.
+  let continuing = $state(false);
+  const reachable = $derived(
+    replyReachable({ hasPrompt: island.prompt !== null, owned, canContinue, continuing }),
+  );
 
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
+    if (continuing) return 'Continuing…';
     if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
     return 'Message Claude';
   });
@@ -240,12 +253,21 @@
     // text is only cleared once it has somewhere to go. tech.md 6.5.
     const id = current.session.session_id;
     if (!answering && canContinue) {
-      // The fork carries this message itself, so nothing is sent after it: the
-      // new session runs it as its first turn. tech.md 6.5.
-      const forked = await continueSession(id, text, attached);
-      if (!forked) return;
-      shots.clear(id);
-      reply = '';
+      // The field goes busy for the one request that is an actual round
+      // trip: PromptInput stops taking presses the instant this flips, which
+      // is what a second Enter before the first fork lands used to race.
+      // tech.md 6.5.
+      continuing = true;
+      try {
+        // The fork carries this message itself, so nothing is sent after it:
+        // the new session runs it as its first turn. tech.md 6.5.
+        const forked = await continueSession(id, text, attached);
+        if (!forked) return;
+        shots.clear(id);
+        reply = '';
+      } finally {
+        continuing = false;
+      }
       return;
     }
 

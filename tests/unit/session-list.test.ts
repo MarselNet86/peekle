@@ -7,7 +7,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { ageLabel } from '$lib/logic/age';
-import { canContinue, searchSessions } from '$lib/logic/sessions';
+import { canContinue, replyReachable, searchSessions } from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 const card = (title: string, project = 'peekle'): SessionCard => ({
@@ -95,5 +95,32 @@ describe('continuing a chat', () => {
     expect(canContinue(card('Observed'))).toBe(true);
     expect(canContinue(card('Owned'))).toBe(false);
     expect(canContinue(undefined)).toBe(false);
+  });
+});
+
+/** The fork is a real round trip -- spawning a process -- and a second press
+ * that lands before the first one does used to start a second one racing it,
+ * because nothing on screen said the first press had been taken. tech.md 6.5. */
+describe('the field while a fork is in flight', () => {
+  const base = { hasPrompt: false, owned: false, canContinue: true, continuing: false };
+
+  it('takes a press on an observed chat, same as before', () => {
+    expect(replyReachable(base)).toBe(true);
+  });
+
+  it('refuses a second press once the first fork is in flight', () => {
+    expect(replyReachable({ ...base, continuing: true })).toBe(false);
+  });
+
+  /** Once the fork lands the card turns Owned, and from then on the field
+   * answers to that instead -- a fire-and-forget write needs no guard. */
+  it('reopens the moment the session is owned, in-flight or not', () => {
+    expect(replyReachable({ ...base, owned: true, continuing: true })).toBe(true);
+  });
+
+  it('answering a permission request is never gated by a fork elsewhere', () => {
+    expect(replyReachable({ ...base, hasPrompt: true, canContinue: false, continuing: true })).toBe(
+      true,
+    );
   });
 });
