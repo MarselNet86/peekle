@@ -257,7 +257,6 @@ impl SessionRegistry {
                 // Nothing has answered yet, so there is nothing to say about
                 // the model. tech.md 6.15.
                 agent: None,
-                live_elsewhere: false,
                 updated_at: at,
             },
         );
@@ -653,7 +652,6 @@ impl SessionRegistry {
                     },
                     entries: Vec::new(),
                     agent: None,
-                    live_elsewhere: false,
                     updated_at: at,
                 },
             );

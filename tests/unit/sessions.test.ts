@@ -20,7 +20,6 @@ const card = (status: SessionStatus, over: Partial<SessionCard> = {}): SessionCa
   origin: 'Observed',
   entries: [],
   agent: null,
-  live_elsewhere: false,
   updated_at: 0,
   ...over,
 });

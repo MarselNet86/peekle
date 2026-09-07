@@ -22,12 +22,13 @@ export function searchSessions(cards: SessionCard[], query: string): SessionCard
 /**
  * Whether this chat can be forked into one the island owns.
  *
- * Only an observed chat that nobody else is driving. An owned one already has
- * a field; one a live client is writing cannot be resumed at all, because that
- * would put two agents on one branch. Rust reads that fact from the transcript
- * mtime and puts it on the card, so the field can say so before anything is
- * typed rather than refusing on submit. tech.md 6.5.
+ * Only an observed chat: an owned one already has a field. Whether a live
+ * client is writing it right now is not guessed here -- that read is a
+ * filesystem stat with a shelf life of seconds, and baking it into every card
+ * handed to the island turned into a dead field the moment it went stale. Rust
+ * makes the real, fresh check at the instant it actually matters: when a
+ * message is about to be sent. tech.md 6.5.
  */
 export function canContinue(card: SessionCard | undefined): boolean {
-  return card?.origin === 'Observed' && !card.live_elsewhere;
+  return card?.origin === 'Observed';
 }

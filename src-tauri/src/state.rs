@@ -319,7 +319,7 @@ impl AppState {
             .collect();
         let mut sessions = self.lock(&self.sessions);
         sessions.seed(cards);
-        self.marked(sessions.cards().to_vec())
+        sessions.cards().to_vec()
     }
 
     /// Renames a session and remembers it. False means nobody knows the id.
@@ -396,42 +396,14 @@ impl AppState {
     }
 
     pub fn sessions(&self) -> Vec<SessionCard> {
-        self.marked(self.lock(&self.sessions).cards().to_vec())
-    }
-
-    /// Marks the chats another client is writing right now.
-    ///
-    /// The island cannot read a transcript's mtime, and it must not guess from
-    /// its own bookkeeping, so the fact travels on the card. Only an observed
-    /// chat can be busy elsewhere: one we own is one we are driving ourselves.
-    /// tech.md 6.5.
-    fn marked(&self, cards: Vec<SessionCard>) -> Vec<SessionCard> {
-        let Some(root) = peekle_core::transcripts::default_root() else {
-            return cards;
-        };
-        cards
-            .into_iter()
-            .map(|card| {
-                let elsewhere = card.origin == peekle_core::types::SessionOrigin::Observed
-                    && peekle_core::transcripts::client_is_live(
-                        &root,
-                        &card.session.cwd,
-                        &card.session.session_id,
-                        LIVE_CLIENT_WINDOW,
-                    );
-                SessionCard {
-                    live_elsewhere: elsewhere,
-                    ..card
-                }
-            })
-            .collect()
+        self.lock(&self.sessions).cards().to_vec()
     }
 
     /// Records one feed event and hands back the cards to broadcast.
     pub fn apply_feed(&self, event: FeedEvent, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.apply(event, at);
-        self.marked(registry.cards().to_vec())
+        registry.cards().to_vec()
     }
 
     /// Opens the card if the session is new, then moves it to a status.
@@ -445,7 +417,7 @@ impl AppState {
         let mut registry = self.lock(&self.sessions);
         registry.ensure(session.clone(), at);
         registry.set_status(&session.session_id, status, at);
-        self.marked(registry.cards().to_vec())
+        registry.cards().to_vec()
     }
 
     /// Records what the agent said last. tech.md S6.
@@ -459,7 +431,7 @@ impl AppState {
     ) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
         sessions.user_turn(session.clone(), text, state, at);
-        self.marked(sessions.cards().to_vec())
+        sessions.cards().to_vec()
     }
 
     /// The pty host. Commands spawn through it; the hook sink asks it whether
@@ -479,7 +451,7 @@ impl AppState {
     pub fn open_owned_session(&self, session: SessionRef, at: i64) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
         sessions.open_owned(session, at);
-        self.marked(sessions.cards().to_vec())
+        sessions.cards().to_vec()
     }
 
     /// Whether the island can type into this session.
@@ -500,13 +472,13 @@ impl AppState {
     pub fn replies_failed(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
         sessions.replies_failed(session_id, at);
-        self.marked(sessions.cards().to_vec())
+        sessions.cards().to_vec()
     }
 
     pub fn assistant_turn(&self, session: &SessionRef, text: &str, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.assistant_turn(session.clone(), text, at);
-        self.marked(registry.cards().to_vec())
+        registry.cards().to_vec()
     }
 
     /// Replaces a session's feed with what its transcript says, and hands back
@@ -522,7 +494,7 @@ impl AppState {
         let mut registry = self.lock(&self.sessions);
         registry
             .adopt_entries(session_id, entries, agent)
-            .then(|| self.marked(registry.cards().to_vec()))
+            .then(|| registry.cards().to_vec())
     }
 
     /// Holds a setting picked before the session has answered, to travel with
@@ -574,7 +546,7 @@ impl AppState {
     pub fn mark_session_ended(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.set_status(session_id, SessionStatus::Ended, at);
-        self.marked(registry.cards().to_vec())
+        registry.cards().to_vec()
     }
 
     /// The turn ended, so every row still `Running` never reported success.
@@ -582,7 +554,7 @@ impl AppState {
     pub fn end_turn(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
         registry.end_turn(session_id, at);
-        self.marked(registry.cards().to_vec())
+        registry.cards().to_vec()
     }
 
     /// Remembers where the pasteboard counter stood, so the watch starts from

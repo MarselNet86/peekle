@@ -262,13 +262,6 @@ pub struct SessionCard {
     /// a model, which is every session that has not had a turn yet.
     /// tech.md 6.15.
     pub agent: Option<AgentSetup>,
-    /// Whether another client is writing this chat right now.
-    ///
-    /// A chat somebody else is driving cannot be continued: resuming it would
-    /// put two agents on one branch. Only Rust can tell -- the signal is the
-    /// mtime of the transcript -- so the island is told rather than guessing,
-    /// and the field says so before anything is typed. tech.md 6.5.
-    pub live_elsewhere: bool,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,
@@ -449,7 +442,7 @@ pub struct UsageSnapshot {
     /// Whether Keychain access was ever granted, ever -- not whether this
     /// particular read succeeded. A provider does not know this; it is config
     /// state stamped on at the one place snapshots are handed to the island,
-    /// same as `SessionCard.live_elsewhere`. tech.md 6.4.
+    /// not baked in when the reading itself happened. tech.md 6.4.
     ///
     /// This is what the island gates the session list on rather than
     /// `source == Account`: a later rate limit or a network blip must not

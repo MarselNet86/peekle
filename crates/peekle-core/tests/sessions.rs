@@ -912,7 +912,6 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         origin: peekle_core::types::SessionOrigin::Observed,
         entries: Vec::new(),
         agent: None,
-        live_elsewhere: false,
         updated_at: 2,
     }]);
     assert!(registry.cards().is_empty(), "the backfill may not raise it");
