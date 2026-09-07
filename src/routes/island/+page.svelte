@@ -390,40 +390,60 @@
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
     {:else if listing}
       <div class="feed">
-        <!-- Only once there is a list worth searching. tech.md S14. -->
-        {#if feed.sessions.length > 3}
-          <div class="search"><SearchField bind:value={query} /></div>
-        {/if}
-        {#if newestCwd}
-          <div class="start">
-            <Button label="New session" onclick={() => startSession(newestCwd)} wide />
-          </div>
-        {/if}
-        <div class="rows" bind:this={scroller} onscroll={readScroll}>
-          {#each cards as card (card.session.session_id)}
-            <SessionRow
-              {card}
-              onopen={() => openSession(card.session.session_id)}
-              onrename={(title) => renameSession(card.session.session_id, title)}
-              onhide={() => hideSession(card.session.session_id)}
+        {#if usage.gateSessions}
+          <!-- Nothing else is drawn: no search, no rows, no New session.
+               History a person has never granted access to is not history
+               they can browse yet, and a half-working list beside a button
+               that may or may not do anything is worse than one clear ask.
+               tech.md 6.4. -->
+          <div class="gate">
+            <Button
+              label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
+              variant="connect"
+              busy={usage.connecting}
+              wide
+              onclick={() => usage.connect()}
             />
-          {/each}
-          <!-- An empty list opened from the mark says so. Collapsing on the
-               click the user just made reads as a broken island. tech.md S12. -->
-          {#if cards.length === 0}
-            <p class="empty">
-              {query
-                ? 'Nothing matches that.'
-                : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
-            </p>
+            {#if usage.failed && !usage.connecting}
+              <p class="why">{usage.reason}</p>
+            {/if}
+          </div>
+        {:else}
+          <!-- Only once there is a list worth searching. tech.md S14. -->
+          {#if feed.sessions.length > 3}
+            <div class="search"><SearchField bind:value={query} /></div>
           {/if}
-          {#if startError}
-            <p class="empty">{startError}</p>
+          {#if newestCwd}
+            <div class="start">
+              <Button label="New session" onclick={() => startSession(newestCwd)} wide />
+            </div>
           {/if}
-        </div>
-        <ScrollHint visible={showHint} onclick={() => toBottom()} />
+          <div class="rows" bind:this={scroller} onscroll={readScroll}>
+            {#each cards as card (card.session.session_id)}
+              <SessionRow
+                {card}
+                onopen={() => openSession(card.session.session_id)}
+                onrename={(title) => renameSession(card.session.session_id, title)}
+                onhide={() => hideSession(card.session.session_id)}
+              />
+            {/each}
+            <!-- An empty list opened from the mark says so. Collapsing on the
+                 click the user just made reads as a broken island. tech.md S12. -->
+            {#if cards.length === 0}
+              <p class="empty">
+                {query
+                  ? 'Nothing matches that.'
+                  : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
+              </p>
+            {/if}
+            {#if startError}
+              <p class="empty">{startError}</p>
+            {/if}
+          </div>
+          <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
-        {@render connect()}
+          {@render connect()}
+        {/if}
       </div>
     {:else if current}
       <div class="feed">
@@ -574,6 +594,19 @@
     flex: none;
     border-top: 1px solid var(--hairline);
     padding-top: 6px;
+  }
+
+  /* Fills the list's whole space rather than sitting among rows: nothing
+     else is drawn beside it, so the button is the one thing on screen.
+     tech.md 6.4. */
+  .gate {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 10px;
   }
 
   /* Under the button, dim and small: it explains, it does not shout. */

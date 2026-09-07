@@ -282,7 +282,7 @@ describe('the shot waiting in the field', () => {
       active_prompt: null,
       sessions: [],
       tasks: [],
-      usage: { windows: [], source: 'Fake', reason: null, fetched_at: 0 },
+      usage: { windows: [], source: 'Fake', reason: null, fetched_at: 0, keychain_granted: true },
       shot: offer(0, 5000),
       live_sessions: 0,
       hotkey_ok: true,

@@ -8,7 +8,13 @@ import { render, screen } from '@testing-library/svelte';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { bars, reasonText, WINDOW_LABELS, connectLabel } from '$lib/features/usage/usage.svelte';
+import {
+  bars,
+  connectLabel,
+  gateSessions,
+  reasonText,
+  WINDOW_LABELS,
+} from '$lib/features/usage/usage.svelte';
 import UsageBar from '$lib/ui/UsageBar.svelte';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
@@ -21,6 +27,7 @@ const live: UsageSnapshot = {
   source: 'Account',
   reason: null,
   fetched_at: 0,
+  keychain_granted: true,
 };
 
 const REASONS: UsageUnavailable[] = [
@@ -28,7 +35,9 @@ const REASONS: UsageUnavailable[] = [
   'NotGranted',
   'Denied',
   'NotLoggedIn',
+  'Offline',
   'Network',
+  'RateLimited',
   'Unsupported',
 ];
 
@@ -105,11 +114,12 @@ describe('UsageBar', () => {
 });
 
 describe('the grant control', () => {
-  const snapshot = (reason: UsageUnavailable | null): UsageSnapshot => ({
+  const snapshot = (reason: UsageUnavailable | null, granted = false): UsageSnapshot => ({
     windows: [],
     source: 'Unavailable',
     reason,
     fetched_at: 0,
+    keychain_granted: granted,
   });
 
   /// A first run and a dropped session are one press apart from working, and
@@ -118,6 +128,7 @@ describe('the grant control', () => {
     expect(connectLabel(snapshot('NotGranted'))).toBe('Connect');
     expect(connectLabel(snapshot('Denied'))).toBe('Connect');
     expect(connectLabel(snapshot('NotLoggedIn'))).toBe('Reconnect');
+    expect(connectLabel(snapshot('Offline'))).toBe('Reconnect');
     expect(connectLabel(snapshot('Network'))).toBe('Reconnect');
   });
 
@@ -139,10 +150,56 @@ describe('a rate limited account', () => {
     source: 'Unavailable',
     reason: 'RateLimited',
     fetched_at: 0,
+    keychain_granted: true,
   });
 
   it('offers no button and says why', () => {
     expect(connectLabel(limited())).toBeNull();
     expect(reasonText(limited())).toBe('too many requests, it asked to wait');
+  });
+
+  /// Reached, throttled, and already connected once: retrying is the wrong
+  /// move, but hiding the session list over it is the exact fragility this
+  /// gate exists to end. tech.md 6.4.
+  it('does not gate a session list that was already reachable', () => {
+    expect(gateSessions(limited())).toBe(false);
+  });
+});
+
+describe('gating the session list', () => {
+  const snapshot = (reason: UsageUnavailable | null, granted: boolean): UsageSnapshot => ({
+    windows: [],
+    source: granted && !reason ? 'Account' : 'Unavailable',
+    reason,
+    fetched_at: 0,
+    keychain_granted: granted,
+  });
+
+  it('gates on a first run, where there is a button to press', () => {
+    expect(gateSessions(snapshot('NotGranted', false))).toBe(true);
+    expect(gateSessions(snapshot('Denied', false))).toBe(true);
+    expect(gateSessions(snapshot('Offline', false))).toBe(true);
+    expect(gateSessions(snapshot('Network', false))).toBe(true);
+  });
+
+  /// Disabled and Unsupported offer no button at all: gating behind one would
+  /// trap a person who turned usage tracking off on purpose. tech.md 6.4.
+  it('never gates a reason with nothing to press', () => {
+    expect(gateSessions(snapshot('Disabled', false))).toBe(false);
+    expect(gateSessions(snapshot('Unsupported', false))).toBe(false);
+  });
+
+  /// Once granted, a later failure of any kind must not hide history that
+  /// was already reachable -- the exact flapping this gate exists to end.
+  it('never re-gates once access has been granted', () => {
+    expect(gateSessions(snapshot('Network', true))).toBe(false);
+    expect(gateSessions(snapshot('Offline', true))).toBe(false);
+    expect(gateSessions(snapshot(null, true))).toBe(false);
+  });
+
+  /// Before the first snapshot arrives, the list opens on nothing rather than
+  /// flashing the gate for the instant before get_state answers.
+  it('does not gate before anything is known at all', () => {
+    expect(gateSessions(null)).toBe(false);
   });
 });

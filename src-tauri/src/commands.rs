@@ -205,11 +205,15 @@ fn publish_usage(app: &AppHandle, state: &Arc<AppState>, snapshot: UsageSnapshot
         windows = snapshot.windows.len(),
         "usage snapshot"
     );
-    state.set_usage(snapshot.clone());
-    if let Err(err) = app.emit(events::USAGE, &snapshot) {
+    state.set_usage(snapshot);
+    // Read back rather than re-emitting what was stored: `state.usage()`
+    // stamps `keychain_granted` from the config as it stands right now, and
+    // the provider never knows that bit at all. tech.md 6.4.
+    let stamped = state.usage();
+    if let Err(err) = app.emit(events::USAGE, &stamped) {
         tracing::warn!(error = %err, "failed to emit usage");
     }
-    snapshot
+    stamped
 }
 
 /// The only path allowed to raise the Keychain dialog. Never called from
@@ -246,9 +250,19 @@ fn ask_again(
     attempt: u32,
     elapsed: std::time::Duration,
 ) -> bool {
-    // Rate limiting is the one refusal that asking again makes worse: the
-    // endpoint was reached and answered, and it asked for time. tech.md 6.4.
-    reason == Some(peekle_core::types::UsageUnavailable::Network)
+    // Only Offline is worth a second ask. It is a local, instant failure --
+    // measured at a tenth of a second -- so retrying it costs nothing and
+    // catches the interface-came-up-before-the-route-did window a wifi
+    // reconnect opens for a moment.
+    //
+    // Network (something out there timed out, or answered oddly) is not
+    // retried: each attempt burns up to the whole remaining budget for a
+    // question that will likely fail the same way again, and hammering a
+    // server that may simply be slow is how a press earns the rate limit it
+    // was trying to avoid. Rate limiting itself is the clearest case of that:
+    // the endpoint was reached and answered, and it asked for time.
+    // tech.md 6.4.
+    reason == Some(peekle_core::types::UsageUnavailable::Offline)
         && attempt < MANUAL_TRIES
         && elapsed < MANUAL_BUDGET
 }
@@ -259,7 +273,7 @@ fn ask_again(
 /// DNS, and a press that lands in that gap gets the same network failure the
 /// bars already show, which reads as a button that does nothing. So the press
 /// asks again while the failure is a network one, and stops the moment it is
-/// anything else: an expired token and a refused Keychain do not改 change on a
+/// anything else: an expired token and a refused Keychain do not change on a
 /// second ask. Only the last snapshot is published, because three failures in
 /// a row are a blink rather than news. tech.md 6.4.
 async fn reconnect(app: &AppHandle, state: &Arc<AppState>) -> UsageSnapshot {
@@ -306,12 +320,14 @@ pub async fn request_usage_access(
         let mut config = state.lock_config();
         match snapshot.reason {
             Some(UsageUnavailable::Denied) => config.usage.keychain_denied = true,
-            // A network failure says nothing about the Keychain: the read may
-            // never have happened. Recording a grant on it would start the
-            // background poll on a permission nobody confirmed.
-            Some(UsageUnavailable::Network) => {}
-            // Everything else means the read itself went through, entry there
-            // or not, so the dialog will not come back.
+            // Everything else means the Keychain read itself went through --
+            // entry there or not, the account reachable or not. `Offline`,
+            // `Network` and `RateLimited` can only be reached after a token
+            // was read: they describe the request to the usage endpoint that
+            // followed, not the read that came before it. Refusing to grant
+            // on them would leave a session with a real network problem
+            // unable to ever open its own history behind the gate below.
+            // tech.md 6.4.
             _ => {
                 config.usage.keychain_denied = false;
                 config.usage.keychain_granted = true;
@@ -320,7 +336,15 @@ pub async fn request_usage_access(
     }
     state.save_config();
 
-    Ok(snapshot)
+    // The command's return value is what the island actually applies (see
+    // usage.svelte.ts::connect), not the emitted event, so it has to carry
+    // the grant this same press just wrote -- not the reading from before it.
+    // tech.md 6.4.
+    let stamped = state.usage();
+    if let Err(err) = app.emit(events::USAGE, &stamped) {
+        tracing::warn!(error = %err, "failed to emit usage");
+    }
+    Ok(stamped)
 }
 
 #[tauri::command]
@@ -836,20 +860,23 @@ mod tests {
         }
     }
 
-    /// A press asks again only while the answer is a network one, and only
-    /// inside both bounds. tech.md 6.4.
+    /// A press asks again only while the answer is Offline, and only inside
+    /// both bounds. tech.md 6.4.
     #[test]
-    fn a_press_asks_again_only_while_the_network_is_the_problem() {
+    fn a_press_asks_again_only_while_offline_is_the_problem() {
         use peekle_core::types::UsageUnavailable;
         let quick = std::time::Duration::from_millis(200);
 
-        assert!(ask_again(Some(UsageUnavailable::Network), 1, quick));
-        assert!(ask_again(Some(UsageUnavailable::Network), 2, quick));
+        assert!(ask_again(Some(UsageUnavailable::Offline), 1, quick));
+        assert!(ask_again(Some(UsageUnavailable::Offline), 2, quick));
 
-        // Nothing else changes on a second ask, and rate limiting gets worse
-        // for being asked: it was reached, and it asked for time. tech.md 6.4.
+        // Network is not retried: each attempt burns up to the whole
+        // remaining budget on a question likely to fail the same way again,
+        // and rate limiting gets worse for being asked -- it was reached, and
+        // it asked for time. tech.md 6.4.
         for reason in [
             None,
+            Some(UsageUnavailable::Network),
             Some(UsageUnavailable::NotLoggedIn),
             Some(UsageUnavailable::Denied),
             Some(UsageUnavailable::NotGranted),
@@ -876,14 +903,14 @@ mod tests {
     #[test]
     fn a_press_gives_up_on_either_bound() {
         use peekle_core::types::UsageUnavailable;
-        let network = Some(UsageUnavailable::Network);
+        let offline = Some(UsageUnavailable::Offline);
 
         assert!(
-            !ask_again(network, MANUAL_TRIES, std::time::Duration::from_millis(1)),
+            !ask_again(offline, MANUAL_TRIES, std::time::Duration::from_millis(1)),
             "the last attempt is the last one"
         );
         assert!(
-            !ask_again(network, 1, MANUAL_BUDGET),
+            !ask_again(offline, 1, MANUAL_BUDGET),
             "a hanging network must not keep the button lit"
         );
     }
