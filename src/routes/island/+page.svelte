@@ -16,6 +16,7 @@
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import {
     canContinue as canContinueCard,
+    classifyContinueOutcome,
     replyReachable,
     searchSessions,
   } from '$lib/logic/sessions';
@@ -158,6 +159,7 @@
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
     if (continuing) return 'Continuing…';
+    if (waitingToHandOff) return 'Will send once the other app is done';
     if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
     return 'Message Claude';
   });
@@ -178,24 +180,68 @@
     }
   }
 
-  // Forks this observed chat into one we own and opens it, returning the new
-  // id so the reply that triggered the fork can go there. The original card
-  // stays in the list as history. tech.md 6.5.
-  async function continueSession(
-    sessionId: string,
-    text: string,
-    paths: string[],
-  ): Promise<string | null> {
-    startError = null;
+  // A reply that landed on "busy elsewhere" rather than a real error: exactly
+  // what to keep trying, and with what. Captured once at the first refusal
+  // rather than read live off the field, so editing the reply afterwards
+  // cannot make a background retry send words the field no longer shows.
+  // tech.md 6.5.
+  let handoff = $state<{ id: string; text: string; paths: string[] } | null>(null);
+  const waitingToHandOff = $derived(handoff !== null);
+  const HANDOFF_POLL_MS = 5000;
+
+  // One attempt at forking this observed chat into one we own. "Busy
+  // elsewhere" is not this call's failure to report -- continue_session
+  // refuses it and keeps refusing for as long as another client is actually
+  // driving the chat, a fact about the world rather than about this one
+  // attempt -- so it comes back as data (classifyContinueOutcome), and the
+  // caller decides whether to wait it out. Shared by the first press and the
+  // background retry below, so "what happens once a fork lands" is written
+  // in exactly one place. tech.md 6.5.
+  async function attemptContinue(sessionId: string, text: string, paths: string[]) {
     try {
       const session = await commands.continueSession(sessionId, text, paths);
-      if (!session) return null;
-      openSession(session.session_id);
-      return session.session_id;
+      return classifyContinueOutcome(session, undefined);
     } catch (err) {
-      startError = String(err);
-      return null;
+      return classifyContinueOutcome(undefined, err);
     }
+  }
+
+  /** Retries a handed-off reply every few seconds for as long as the chat
+   * stays busy elsewhere, and stops the moment it is not: delivered, refused
+   * for a different, real reason, or cancelled. Costs one file read on the
+   * Rust side per miss, never a spawned process, so polling this way is
+   * cheap. tech.md 6.5. */
+  $effect(() => {
+    if (!handoff) return;
+    const { id, text, paths } = handoff;
+
+    const attempt = async () => {
+      if (continuing) return;
+      continuing = true;
+      const outcome = await attemptContinue(id, text, paths);
+      continuing = false;
+
+      if (outcome.ok) {
+        handoff = null;
+        shots.clear(id);
+        if (current?.session.session_id === id) reply = '';
+        openSession(outcome.sessionId);
+      } else if (!outcome.busy && outcome.error) {
+        handoff = null;
+        startError = outcome.error;
+      }
+      // Still busy, or the silent no-backend case: leave `handoff` standing
+      // and let the next tick try again.
+    };
+
+    const timer = setInterval(attempt, HANDOFF_POLL_MS);
+    return () => clearInterval(timer);
+  });
+
+  /** Gives the field back without waiting any further. The field keeps
+   * whatever text it still shows, so nothing typed is lost. tech.md 6.5. */
+  function cancelHandoff() {
+    handoff = null;
   }
 
   // What answers in the session on screen, and which of the three controls is
@@ -253,20 +299,30 @@
     // text is only cleared once it has somewhere to go. tech.md 6.5.
     const id = current.session.session_id;
     if (!answering && canContinue) {
+      startError = null;
+      // A fresh press supersedes any wait already in progress -- it carries
+      // whatever the field shows right now, which is the truth the user just
+      // acted on. tech.md 6.5.
+      handoff = null;
       // The field goes busy for the one request that is an actual round
       // trip: PromptInput stops taking presses the instant this flips, which
       // is what a second Enter before the first fork lands used to race.
       // tech.md 6.5.
       continuing = true;
-      try {
-        // The fork carries this message itself, so nothing is sent after it:
-        // the new session runs it as its first turn. tech.md 6.5.
-        const forked = await continueSession(id, text, attached);
-        if (!forked) return;
+      const outcome = await attemptContinue(id, text, attached);
+      continuing = false;
+
+      if (outcome.ok) {
         shots.clear(id);
         reply = '';
-      } finally {
-        continuing = false;
+        openSession(outcome.sessionId);
+      } else if (outcome.busy) {
+        // Not an error: the chat is real and reachable, just spoken for right
+        // now. The reply stays exactly as typed, and the background retry
+        // above picks it up the moment that changes. tech.md 6.5.
+        handoff = { id, text, paths: attached };
+      } else if (outcome.error) {
+        startError = outcome.error;
       }
       return;
     }
@@ -564,13 +620,21 @@
             {/if}
             {#if startError}
               <p class="empty">{startError}</p>
+            {:else if waitingToHandOff}
+              <!-- Not an error: the chat is real and reachable, just spoken
+                   for right now. Said as something in progress, with a way
+                   out, rather than a dead end. tech.md 6.5. -->
+              <p class="empty waiting">
+                <span>That chat is busy elsewhere — sending as soon as it frees up</span>
+                <Button label="Cancel" onclick={cancelHandoff} />
+              </p>
             {/if}
             <PromptInput
               bind:value={reply}
               placeholder={replyHint}
               disabled={!reachable}
               onsubmit={send}
-              onescape={() => island.dismiss()}
+              onescape={() => (handoff ? cancelHandoff() : island.dismiss())}
             />
           </div>
         {/if}
@@ -645,6 +709,20 @@
     padding: 10px 2px;
     color: var(--text-dim);
     font-size: 12px;
+  }
+
+  /* Something in progress, not a dead end: the reason sits beside a way out
+     rather than alone. tech.md 6.5. */
+  .empty.waiting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .empty.waiting span {
+    flex: 1;
+    min-width: 0;
   }
 
   .head {
