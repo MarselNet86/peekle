@@ -139,6 +139,13 @@ impl AgentReader {
         if record.get("type").and_then(Value::as_str) != Some("assistant") {
             return;
         }
+        // An API error wears the assistant's role and a model called
+        // `<synthetic>`. It is not what the session answers with -- it is what
+        // it failed to answer with -- and a row that reads `<synthetic>` is a
+        // menu nobody can use. tech.md 6.11.
+        if is_api_error(record) {
+            return;
+        }
         let Some(message) = record.get("message") else {
             return;
         };
@@ -320,11 +327,20 @@ where
                 }
             }
             Some("assistant") => {
+                // The turn did not get an answer, it got an error, and the
+                // file says so. Shown as a failed answer rather than an
+                // ordinary one, and it is the end of the turn: no `Stop`
+                // follows it. tech.md 6.11.
+                let failed = is_api_error(&record);
                 for block in &blocks_of(&record) {
                     match block.get("type").and_then(Value::as_str) {
                         Some("text") => {
                             if let Some(text) = string_at(block, "text") {
-                                entries.push(entry(next_id(), EntryKind::Assistant, text, at));
+                                let mut answer = entry(next_id(), EntryKind::Assistant, text, at);
+                                if failed {
+                                    answer.state = EntryState::Failed;
+                                }
+                                entries.push(answer);
                             }
                         }
                         // Collapsed to a marker with its own duration, exactly
@@ -494,6 +510,21 @@ fn texts_of(record: &Value) -> Vec<String> {
 /// The same file read twice has to give the same ids: the live feed re-reads
 /// it after every hook, and fresh keys would rebuild the whole list, throwing
 /// away the scroll position and every expanded row. tech.md 6.11.
+/// Whether an `assistant` record is the API refusing rather than the model
+/// answering. Claude Code flags it, and names the model `<synthetic>` for
+/// good measure; either mark is enough. tech.md 6.11.
+pub fn is_api_error(record: &Value) -> bool {
+    record
+        .get("isApiErrorMessage")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || record
+            .get("message")
+            .and_then(|m| m.get("model"))
+            .and_then(Value::as_str)
+            == Some("<synthetic>")
+}
+
 fn entry(id: String, kind: EntryKind, text: String, at: i64) -> FeedEntry {
     FeedEntry {
         id,

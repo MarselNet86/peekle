@@ -57,28 +57,12 @@ impl AppSink {
             return;
         };
 
-        let app = self.app.clone();
-        let state = Arc::clone(&self.state);
-        let session_id = session_id.to_string();
-        let path = path.to_string();
-
-        tauri::async_runtime::spawn_blocking(move || {
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                tracing::debug!(path, "no transcript to read the words out of");
-                return;
-            };
-            let Some(card) =
-                peekle_core::transcripts::card_from_lines(text.lines(), &session_id, now_ms())
-            else {
-                return;
-            };
-            let Some(cards) = state.adopt_entries(&session_id, card.entries, card.agent) else {
-                return;
-            };
-            if let Err(err) = app.emit(events::SESSIONS, &cards) {
-                tracing::warn!(error = %err, "failed to emit sessions");
-            }
-        });
+        refresh_session(
+            self.app.clone(),
+            Arc::clone(&self.state),
+            session_id.to_string(),
+            path.to_string(),
+        );
     }
 
     /// One line in the notch: an observed turn ended, and this is what it
@@ -305,6 +289,39 @@ impl HookSink for AppSink {
 
 /// The first line with anything on it. A closing message is prose and the
 /// notch is one line wide; the rest of it is in the feed of that session.
+/// Reads one session's transcript and puts what it says in place of what the
+/// hooks assembled. Shared by the hook path and the poll that stands in for a
+/// hook when none is coming (tech.md 6.11): a turn that ends in an API error
+/// ends in silence, and the file is the only place that knows.
+///
+/// Off the caller's thread, always: parsing a megabyte of JSON is not
+/// something an agent or a ticker should wait for. A file that will not read
+/// leaves the feed exactly as it was.
+pub(crate) fn refresh_session(
+    app: AppHandle,
+    state: Arc<AppState>,
+    session_id: String,
+    path: String,
+) {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            tracing::debug!(path, "no transcript to read the words out of");
+            return;
+        };
+        let Some(card) =
+            peekle_core::transcripts::card_from_lines(text.lines(), &session_id, now_ms())
+        else {
+            return;
+        };
+        let Some(cards) = state.adopt_entries(&session_id, card.entries, card.agent) else {
+            return;
+        };
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+    });
+}
+
 pub(crate) fn first_line(text: &str) -> String {
     text.lines()
         .map(str::trim)

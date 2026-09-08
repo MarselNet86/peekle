@@ -1037,6 +1037,7 @@ fn restoring_applies_what_the_user_said_to_the_cards_already_there() {
 /// no hook does, so it replaces what the events assembled. tech.md 6.11.
 mod adopting_a_transcript {
     use super::*;
+    use peekle_core::types::SessionStatus;
     use peekle_core::types::{FeedEntry, SessionRef};
 
     fn session() -> SessionRef {
@@ -1261,6 +1262,32 @@ mod adopting_a_transcript {
             let expected: Vec<String> = (0..times.len()).map(|n| format!("f-{n}")).collect();
             proptest::prop_assert_eq!(kept, expected);
         }
+    }
+
+    /// An API error ends a turn and nothing fires for it: no `Stop`, no hook,
+    /// and the card would spin `Working` until the stale sweep gave up on it.
+    /// The file knows the turn is over, and the file is right. tech.md 6.11.
+    #[test]
+    fn a_file_that_ends_in_an_api_error_puts_the_session_to_rest() {
+        let mut registry = registry_with_a_call();
+        assert_eq!(registry.cards()[0].status, SessionStatus::Working);
+
+        let refused = FeedEntry {
+            state: EntryState::Failed,
+            ..row("a-1", EntryKind::Assistant, "API Error: 400 not supported")
+        };
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::User, "hi"), refused], None);
+        assert_eq!(registry.cards()[0].status, SessionStatus::Idle);
+    }
+
+    /// An ordinary answer at the end of the file says nothing about whether
+    /// the turn is over -- the agent may be mid tool call -- so only `Stop`
+    /// decides, as before.
+    #[test]
+    fn a_file_that_ends_in_an_ordinary_answer_leaves_the_status_alone() {
+        let mut registry = registry_with_a_call();
+        registry.adopt_entries("s", vec![row("a-1", EntryKind::Assistant, "on it")], None);
+        assert_eq!(registry.cards()[0].status, SessionStatus::Working);
     }
 
     /// An answer to a permission request is not a prompt: no transcript row

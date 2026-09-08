@@ -30,6 +30,44 @@ fn a_captured_transcript_becomes_a_card() {
 
 /// Claude Code writes its own title for its own list, so reusing it beats
 /// cutting the first line in half.
+/// The shape Claude Code writes when the API refuses a turn, as seen live on
+/// 2026-09-08: an `assistant` record flagged `isApiErrorMessage` with the
+/// model named `<synthetic>`. It is a failed answer in the feed and not a
+/// model in the settings row -- a menu that reads `<synthetic>` is a menu
+/// nobody can use. tech.md 6.11.
+#[test]
+fn an_api_error_is_a_failed_answer_and_not_a_model() {
+    let lines = [
+        r#"{"type":"user","uuid":"u1","sessionId":"s","cwd":"/tmp/p","timestamp":"2026-09-08T17:05:53.000Z","message":{"role":"user","content":"hi"}}"#,
+        r#"{"type":"assistant","uuid":"a1","sessionId":"s","timestamp":"2026-09-08T17:05:56.000Z","isApiErrorMessage":true,"message":{"role":"assistant","model":"<synthetic>","usage":{"input_tokens":1},"content":[{"type":"text","text":"API Error: 400 not supported"}]}}"#,
+    ];
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+
+    let answer = card.entries.last().unwrap();
+    assert_eq!(answer.kind, EntryKind::Assistant);
+    assert_eq!(answer.state, EntryState::Failed);
+    assert!(answer.text.starts_with("API Error"));
+    assert!(
+        card.agent.is_none(),
+        "no real answer, so no model to report"
+    );
+}
+
+/// A real answer before the error still names the model; the error does not
+/// overwrite it with `<synthetic>`.
+#[test]
+fn an_api_error_after_a_real_answer_keeps_the_real_model() {
+    let lines = [
+        r#"{"type":"assistant","uuid":"a0","sessionId":"s","timestamp":"2026-09-08T17:05:50.000Z","message":{"role":"assistant","model":"claude-opus-5","usage":{"input_tokens":1},"content":[{"type":"text","text":"sure"}]}}"#,
+        r#"{"type":"assistant","uuid":"a1","sessionId":"s","timestamp":"2026-09-08T17:05:56.000Z","isApiErrorMessage":true,"message":{"role":"assistant","model":"<synthetic>","usage":{"input_tokens":1},"content":[{"type":"text","text":"API Error"}]}}"#,
+    ];
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+    assert_eq!(
+        card.agent.as_ref().and_then(|a| a.model.as_deref()),
+        Some("claude-opus-5")
+    );
+}
+
 #[test]
 fn the_title_comes_from_the_one_claude_code_wrote() {
     assert_eq!(card().title, "xxxxxxxx xxxxx xxxxxxxxx");

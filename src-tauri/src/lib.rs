@@ -133,6 +133,7 @@ pub fn run() {
 
             backfill_sessions(app.handle(), Arc::clone(&state));
             rest_stale_sessions(app.handle(), Arc::clone(&state));
+            watch_working_transcripts(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
 
@@ -268,6 +269,49 @@ fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
 ///
 /// Nothing else can: `Working` arrives on a hook and leaves on a hook, so an
 /// agent that died takes the island's spinner with it forever. tech.md 6.3.
+/// Re-reads the transcript of every working session on a short tick.
+///
+/// The feed is refreshed from the file after each hook (tech.md 6.11), and
+/// one end of a turn comes with no hook at all: an API error. Nothing fires
+/// after it -- no `Stop`, nothing -- so without this the error stays unread
+/// and the card spins `Working` until the stale sweep gives up on it ten
+/// minutes later. The file says the turn is over; this is how the file gets
+/// read. Only cards that are working, and only while they are: the cost of a
+/// read (R-16) is paid by the sessions that have something to report.
+fn watch_working_transcripts(app: &tauri::AppHandle, state: Arc<state::AppState>) {
+    const WORKING_TICK: std::time::Duration = std::time::Duration::from_secs(2);
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(root) = peekle_core::transcripts::default_root() else {
+            return;
+        };
+        let mut ticker = tokio::time::interval(WORKING_TICK);
+        loop {
+            ticker.tick().await;
+            for card in state.sessions() {
+                if card.status != peekle_core::types::SessionStatus::Working {
+                    continue;
+                }
+                let path = peekle_core::transcripts::transcript_path(
+                    &root,
+                    &card.session.cwd,
+                    &card.session.session_id,
+                );
+                if !path.is_file() {
+                    continue;
+                }
+                hooks::refresh_session(
+                    handle.clone(),
+                    Arc::clone(&state),
+                    card.session.session_id.clone(),
+                    path.to_string_lossy().into_owned(),
+                );
+            }
+        }
+    });
+}
+
 fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
     const TICK: std::time::Duration = std::time::Duration::from_secs(60);
     /// Longer than any single tool call has a right to be silent for.
