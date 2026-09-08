@@ -496,7 +496,10 @@ impl SessionRegistry {
     /// a reply stays protected across the `UserPromptSubmit` that confirms
     /// delivery -- being confirmed says the agent has it, not that the file
     /// does. Dropping it here would take a sent message off the screen and
-    /// put it back a turn later under a different id. Nothing else is kept,
+    /// put it back a turn later under a different id. It goes back at the
+    /// time it was sent rather than at the end (`weave`): the file keeps
+    /// being written after a message it has not named, so appending one would
+    /// slide it under an answer to a later turn. Nothing else is kept,
     /// because everything else came from the file to begin with.
     ///
     /// False means there is no such session yet, so there is nothing to
@@ -546,7 +549,7 @@ impl SessionRegistry {
             self.local_pending.remove(session_id);
         }
 
-        adopted.extend(pending);
+        adopted = weave(adopted, pending);
 
         if adopted.len() > ENTRY_CAP {
             adopted.drain(..adopted.len() - ENTRY_CAP);
@@ -793,6 +796,38 @@ impl SessionRegistry {
 }
 
 /// Appends and trims to the cap, returning the ids that fell off the front.
+/// Puts the rows the file has not caught up with back where they were said.
+///
+/// Appending them was what made a sent message jump: a reply the transcript
+/// has not named yet is not the newest thing in the feed, it is only the
+/// thing the file is missing, and the file goes on being written after it.
+/// Two messages sent in a row and one of them written first was enough --
+/// the other one landed under the agent's answer to the later one, and the
+/// conversation read in the wrong order.
+///
+/// Both sides carry epoch milliseconds -- the transcript's `timestamp` and
+/// the hook's clock -- so time is the one thing they can be lined up by. The
+/// file's own order is never disturbed: a carried row goes before the first
+/// row younger than it, and a tie leaves the file first, because a row the
+/// file already knows about is the older event of the two. tech.md 6.11.
+fn weave(adopted: Vec<FeedEntry>, mut pending: Vec<FeedEntry>) -> Vec<FeedEntry> {
+    if pending.is_empty() {
+        return adopted;
+    }
+    pending.sort_by_key(|entry| entry.at);
+
+    let mut woven = Vec::with_capacity(adopted.len() + pending.len());
+    let mut carried = pending.into_iter().peekable();
+    for entry in adopted {
+        while let Some(local) = carried.next_if(|local| local.at < entry.at) {
+            woven.push(local);
+        }
+        woven.push(entry);
+    }
+    woven.extend(carried);
+    woven
+}
+
 fn push_entry(card: &mut SessionCard, entry: FeedEntry) -> Vec<String> {
     card.entries.push(entry);
     if card.entries.len() <= ENTRY_CAP {
