@@ -41,6 +41,12 @@ pub struct SpawnSpec {
     /// (tech.md 6.15, v46.2). As an argument the prompt cannot be missed: the
     /// agent runs it as its first turn. tech.md 6.5.
     pub prompt: Option<String>,
+    /// What the session answers with, picked before it ever ran. Flags rather
+    /// than `/model` lines typed after the prompt: the prompt is the first
+    /// turn, and a line typed behind it would apply to the second.
+    /// tech.md 6.15.
+    pub model: Option<String>,
+    pub effort: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -67,7 +73,13 @@ pub enum PtyError {
 /// hooks are recognised as ours, and `--session-id=<new>` is that id. The
 /// original transcript is left untouched; the fork grows in a new file.
 /// tech.md 6.5.
-pub fn spawn_args(session_id: &str, resume: bool, prompt: Option<&str>) -> Vec<String> {
+pub fn spawn_args(
+    session_id: &str,
+    resume: bool,
+    prompt: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
+) -> Vec<String> {
     // Two ways to end up with a session of a known id: assign one to a fresh
     // run, or resume the chat that already has it. Never both -- the CLI
     // refuses `--session-id` with `--resume` unless the session is forked, and
@@ -78,6 +90,15 @@ pub fn spawn_args(session_id: &str, resume: bool, prompt: Option<&str>) -> Vec<S
     } else {
         vec!["--session-id".to_string(), session_id.to_string()]
     };
+    // What was picked before the first turn rides as flags, ahead of the
+    // prompt: `--model` and `--effort` are the CLI's own, and they take effect
+    // before the first request goes out. tech.md 6.15.
+    for (flag, value) in [("--model", model), ("--effort", effort)] {
+        if let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) {
+            args.push(flag.to_string());
+            args.push(value.to_string());
+        }
+    }
     // Positional, and last: it is the prompt, not a flag. Handed over rather
     // than typed, so the startup of the TUI cannot swallow it.
     if let Some(prompt) = prompt.map(str::trim).filter(|text| !text.is_empty()) {
@@ -266,7 +287,13 @@ impl PtyHost {
             .map_err(|err| PtyError::Pty(err.to_string()))?;
 
         let mut command = CommandBuilder::new(binary);
-        for arg in spawn_args(&spec.session_id, spec.resume, spec.prompt.as_deref()) {
+        for arg in spawn_args(
+            &spec.session_id,
+            spec.resume,
+            spec.prompt.as_deref(),
+            spec.model.as_deref(),
+            spec.effort.as_deref(),
+        ) {
             command.arg(arg);
         }
         command.cwd(&spec.cwd);
@@ -404,7 +431,7 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc", false, None),
+            spawn_args("abc", false, None, None, None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
     }
@@ -414,7 +441,7 @@ mod tests {
     /// transcript that no other client is watching. tech.md 6.5.
     #[test]
     fn continuing_a_chat_keeps_its_own_id_and_never_forks() {
-        let args = spawn_args("chat-id", true, None);
+        let args = spawn_args("chat-id", true, None, None, None);
         assert_eq!(args, vec!["--resume".to_string(), "chat-id".to_string()]);
         assert!(!args.iter().any(|a| a == "--fork-session"));
         // Never both: the CLI refuses the pair unless it forks.
@@ -425,16 +452,41 @@ mod tests {
     /// still starting swallows anything written into it. tech.md 6.5.
     #[test]
     fn the_first_message_is_handed_over_rather_than_typed() {
-        let args = spawn_args("chat-id", true, Some("what did I say?"));
+        let args = spawn_args("chat-id", true, Some("what did I say?"), None, None);
         assert_eq!(args.last().map(String::as_str), Some("what did I say?"));
         // Positional: it carries no flag of its own and cannot be read as one.
         assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
 
         // Nothing to say means nothing appended, not an empty argument.
         for empty in [Some(""), Some("   "), None] {
-            let args = spawn_args("new-id", false, empty);
+            let args = spawn_args("new-id", false, empty, None, None);
             assert_eq!(args, vec!["--session-id".to_string(), "new-id".to_string()]);
         }
+    }
+
+    /// A pick made before the session ran travels as the CLI's own flags,
+    /// and ahead of the prompt: the prompt is the first turn, and a `/model`
+    /// line typed behind it would only reach the second. tech.md 6.15.
+    #[test]
+    fn settings_picked_before_the_first_turn_ride_as_flags_ahead_of_it() {
+        let args = spawn_args("new-id", false, Some("hi"), Some("opus"), Some("high"));
+        let expected: Vec<String> = [
+            "--session-id",
+            "new-id",
+            "--model",
+            "opus",
+            "--effort",
+            "high",
+            "hi",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert_eq!(args, expected);
+
+        // Nothing picked means no flag, not an empty one.
+        let args = spawn_args("new-id", false, Some("hi"), Some(" "), None);
+        assert_eq!(args, vec!["--session-id", "new-id", "hi"]);
     }
 
     #[test]
@@ -545,6 +597,8 @@ mod tests {
             rows: 40,
             resume: false,
             prompt: None,
+            model: None,
+            effort: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
@@ -562,6 +616,8 @@ mod tests {
             rows: 40,
             resume: false,
             prompt: None,
+            model: None,
+            effort: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(Path::new("/bin/echo"), &spec, move |id| {

@@ -358,7 +358,7 @@ impl SessionRegistry {
                 // started in the terminal -- has nothing to confirm and needs
                 // a row of its own. tech.md 6.3.
                 let session_id = session.session_id.clone();
-                let confirmed = self.confirm_reply(&session_id, at);
+                let confirmed = self.confirm_reply(&session_id, &text, at);
 
                 let entry = (!confirmed).then(|| {
                     now_entry(
@@ -458,12 +458,22 @@ impl SessionRegistry {
     /// vanishes on submit reads as one that never went. `Running` means queued
     /// and not delivered yet, and only the `Stop` that carries it away turns it
     /// into `Ok`. tech.md 6.5.
-    pub fn user_turn(&mut self, session: SessionRef, text: &str, state: EntryState, at: i64) {
+    ///
+    /// Returns the row's id, so the caller can come back for it: a reply that
+    /// no `UserPromptSubmit` ever names is failed by id, never by position.
+    pub fn user_turn(
+        &mut self,
+        session: SessionRef,
+        text: &str,
+        state: EntryState,
+        at: i64,
+    ) -> Option<String> {
         let trimmed = truncate(text, ASSISTANT_LIMIT);
         if trimmed.is_empty() {
-            return;
+            return None;
         }
         let entry = now_entry(EntryKind::User, trimmed, None, state, at);
+        let entry_id = entry.id.clone();
         // A message still on its way to the agent is one the transcript is
         // going to name and has not named yet, so `adopt_entries` has to keep
         // it. Recorded by id and read by id, never by `state`: confirming
@@ -482,6 +492,31 @@ impl SessionRegistry {
         }
         let card = self.card_mut(session, at);
         push_entry(card, entry);
+        Some(entry_id)
+    }
+
+    /// Gives up on one reply that nothing confirmed in time. tech.md 6.3.
+    ///
+    /// By id and only from `Running`: a reply the hook confirmed meanwhile is
+    /// left alone, and one already failed is not failed twice. The window is
+    /// `delivery_confirm_secs`, and this is the only place it ends -- exactly
+    /// once, whichever way the race went (rule 10).
+    pub fn fail_reply(&mut self, session_id: &str, entry_id: &str, at: i64) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return false;
+        };
+        let Some(entry) = card.entries.iter_mut().find(|e| {
+            e.id == entry_id && e.kind == EntryKind::User && e.state == EntryState::Running
+        }) else {
+            return false;
+        };
+        entry.state = EntryState::Failed;
+        card.updated_at = at;
+        true
     }
 
     /// Replaces a session's feed with what its transcript says. tech.md 6.11.
@@ -573,10 +608,13 @@ impl SessionRegistry {
     /// Confirms the oldest reply still waiting on this session, if any.
     ///
     /// `UserPromptSubmit` is what confirms a reply, and it confirms exactly
-    /// one: the channel is FIFO, so the oldest unconfirmed row is the one this
-    /// event belongs to. Returns whether it found one, because the caller then
-    /// knows not to add a row of its own. tech.md 6.3.
-    pub fn confirm_reply(&mut self, session_id: &str, at: i64) -> bool {
+    /// one. The hook carries the prompt, so the row it names is the one with
+    /// those words -- and a row already given up on is set right by them,
+    /// because arriving late is still arriving. Only when no row carries the
+    /// words does the channel's FIFO order decide: the oldest reply still
+    /// waiting is the one this event belongs to. Returns whether it found one,
+    /// because the caller then knows not to add a row of its own. tech.md 6.3.
+    pub fn confirm_reply(&mut self, session_id: &str, text: &str, at: i64) -> bool {
         let Some(card) = self
             .cards
             .iter_mut()
@@ -584,14 +622,21 @@ impl SessionRegistry {
         else {
             return false;
         };
-        let Some(entry) = card
-            .entries
-            .iter_mut()
-            .find(|e| e.kind == EntryKind::User && e.state == EntryState::Running)
-        else {
+        let spoken = truncate(text, ASSISTANT_LIMIT);
+        let by_words = card.entries.iter().position(|e| {
+            e.kind == EntryKind::User
+                && matches!(e.state, EntryState::Running | EntryState::Failed)
+                && e.text == spoken
+        });
+        let by_order = || {
+            card.entries
+                .iter()
+                .position(|e| e.kind == EntryKind::User && e.state == EntryState::Running)
+        };
+        let Some(index) = by_words.or_else(by_order) else {
             return false;
         };
-        entry.state = EntryState::Ok;
+        card.entries[index].state = EntryState::Ok;
         card.updated_at = at;
         true
     }

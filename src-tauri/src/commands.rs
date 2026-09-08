@@ -2,6 +2,7 @@
 //! The frontend calls nothing else.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use peekle_core::types::{
     IslandView, PeekleState, PromptAnswer, PromptOutcome, SignInState, ToastRequest, ToastTone,
@@ -11,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
 use crate::notify::Notifier;
-use crate::state::{AppState, HeldKind};
+use crate::state::{AppState, HeldKind, HeldSettings};
 use crate::windows;
 
 #[tauri::command]
@@ -594,7 +595,29 @@ pub fn start_session(
     state: State<'_, Arc<AppState>>,
     cwd: String,
 ) -> Result<peekle_core::types::SessionRef, String> {
-    spawn_owned(&app, state.inner(), cwd, None, None)
+    // Aimed, not started. A TUI brought up here would be typed into a few
+    // seconds later, while it is still coming up, and a line written into a
+    // TUI that is not ready disappears without a trace (v46.2). So the card
+    // opens now and the agent starts with the first message, which it takes
+    // as an argument and cannot miss. The same move `continue_session` makes.
+    // tech.md 6.5.
+    if !std::path::Path::new(&cwd).is_dir() {
+        return Err("That folder does not exist".to_string());
+    }
+    let session = peekle_core::types::SessionRef {
+        session_id: peekle_core::pty::new_session_id(),
+        project: peekle_core::sessions::project_of(&cwd),
+        cwd,
+        pid: None,
+        tty: None,
+    };
+    state.claim_session(&session.session_id);
+    let cards = state.open_owned_session(session.clone(), now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+    tracing::info!(session = %session.session_id, "aimed a session of our own");
+    Ok(session)
 }
 
 /// The one refusal that means "wait, then ask again" rather than "no". The
@@ -670,20 +693,25 @@ pub fn continue_session(
         // The first message is handed to the spawn rather than typed into
         // it: a TUI that is still starting swallows a written line without
         // a trace. tech.md 6.5.
-        peekle_core::registry::Route::Resume => spawn_owned(
-            &app,
-            state.inner(),
-            card.session.cwd.clone(),
-            Some(card.session.clone()),
-            Some(message.clone()),
-        )?,
+        peekle_core::registry::Route::Resume => {
+            let held = state.take_settings(&session_id);
+            spawn_owned(
+                &app,
+                state.inner(),
+                card.session.clone(),
+                true,
+                &message,
+                held,
+            )?;
+            card.session.clone()
+        }
     };
 
     // Into the feed at once, the way a reply is: it is already on its way, and
     // a message the user cannot see is a message they will type twice.
     // `UserPromptSubmit` confirms it like any other. tech.md 6.3.
     if !message.is_empty() {
-        let cards = state.user_turn(
+        let (cards, entry_id) = state.user_turn(
             &session,
             &message,
             peekle_core::types::EntryState::Running,
@@ -692,23 +720,58 @@ pub fn continue_session(
         if let Err(err) = app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
+        if let Some(entry_id) = entry_id {
+            watch_delivery(&app, state.inner(), session.session_id.clone(), entry_id);
+        }
     }
 
     Ok(session)
 }
 
-/// Spawns a `claude` the island owns, optionally forking an existing chat into
-/// it, and opens its card. Shared by `start_session` and `continue_session`.
+/// Gives a sent reply `delivery_confirm_secs` to be named by
+/// `UserPromptSubmit`, then calls it undelivered. tech.md 6.3.
+///
+/// By id, so a reply sent later is not judged by an earlier one's clock, and
+/// only from `Running`, so a reply confirmed in time is left alone. A row that
+/// went red and is named after all is set right by the hook: the verdict was
+/// early, not wrong forever. A reply that sits dim with nothing on the way is
+/// the lie this closes -- the one a person waits on for a minute before
+/// wondering.
+fn watch_delivery(app: &AppHandle, state: &Arc<AppState>, session_id: String, entry_id: String) {
+    let wait = Duration::from_secs(state.lock_config().behavior.delivery_confirm_secs as u64);
+    let app = app.clone();
+    let state = Arc::clone(state);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        let Some(cards) = state.fail_reply(&session_id, &entry_id, now_ms()) else {
+            return;
+        };
+        tracing::info!(session = %session_id, "a reply was never confirmed");
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+    });
+}
+
+/// Starts the `claude` of a session the island owns, with its first message.
+///
+/// The message rides as an argument and the picks made before the first turn
+/// as `--model` and `--effort`: a TUI that is still coming up swallows what
+/// is typed into it (v46.2), and an argument cannot be swallowed. Shared by
+/// the first message of an aimed chat (`start_session`, then `send_message`)
+/// and the resume of an observed one (`continue_session`). tech.md 6.5.
 fn spawn_owned(
     app: &AppHandle,
     state: &Arc<AppState>,
-    cwd: String,
-    // The chat being continued, or None to start a fresh one. A continued chat
-    // keeps its own id, which is the whole point: one transcript, and every
-    // other client watching that id sees what Peekle adds. tech.md 6.5.
-    resume: Option<peekle_core::types::SessionRef>,
-    prompt: Option<String>,
-) -> Result<peekle_core::types::SessionRef, String> {
+    session: peekle_core::types::SessionRef,
+    // Whether `session_id` names a chat that already has a transcript. A
+    // resumed chat keeps its own id, which is the whole point: one
+    // transcript, and every other client watching that id sees what Peekle
+    // adds. tech.md 6.5.
+    resume: bool,
+    prompt: &str,
+    held: HeldSettings,
+) -> Result<(), String> {
     let Some(binary) = peekle_core::claude_path() else {
         return Err("Claude Code is not installed where Peekle can find it".to_string());
     };
@@ -717,17 +780,15 @@ fn spawn_owned(
         let config = state.lock_config();
         (config.behavior.pty_cols, config.behavior.pty_rows)
     };
-    let session_id = match &resume {
-        Some(chat) => chat.session_id.clone(),
-        None => peekle_core::pty::new_session_id(),
-    };
     let spec = peekle_core::pty::SpawnSpec {
-        session_id,
-        cwd: cwd.clone(),
+        session_id: session.session_id.clone(),
+        cwd: session.cwd.clone(),
         cols,
         rows,
-        resume: resume.is_some(),
-        prompt,
+        resume,
+        prompt: Some(prompt.to_string()),
+        model: held.model,
+        effort: held.effort,
     };
 
     state.claim_session(&spec.session_id);
@@ -746,7 +807,9 @@ fn spawn_owned(
     });
 
     if let Err(err) = result {
-        state.disown_session(&spec.session_id);
+        // The card stays: what failed is one start, and the next message
+        // tries again. Only the process is forgotten.
+        state.pty().forget(&spec.session_id);
         tracing::warn!(error = %err, "could not start a session");
         return Err(match err {
             peekle_core::pty::PtyError::NoCwd => "That folder does not exist".to_string(),
@@ -754,24 +817,16 @@ fn spawn_owned(
         });
     }
 
-    let session = peekle_core::types::SessionRef {
-        session_id: spec.session_id.clone(),
-        cwd: cwd.clone(),
-        project: peekle_core::sessions::project_of(&cwd),
-        pid: None,
-        tty: None,
-    };
-
     // The card before the caller opens it. The island shows this session
     // immediately, and the first hook is a whole agent startup away, so
     // without the card there is nothing on screen to draw. tech.md 6.5.
-    let cards = state.open_owned_session(session.clone(), now_ms());
+    let cards = state.open_owned_session(session, now_ms());
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }
 
     tracing::info!(session = %spec.session_id, "started a session of our own");
-    Ok(session)
+    Ok(())
 }
 
 /// Sends what the user typed into the session's pty. tech.md 6.5.
@@ -821,7 +876,7 @@ pub async fn send_message(
 
     // Into the feed before anything is attempted: a message the user cannot
     // see is a message they will type twice. tech.md 6.5.
-    let cards = state.user_turn(
+    let (cards, entry_id) = state.user_turn(
         &card.session,
         text,
         peekle_core::types::EntryState::Running,
@@ -830,17 +885,34 @@ pub async fn send_message(
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }
+    if let Some(entry_id) = entry_id {
+        watch_delivery(&app, state.inner(), session_id.clone(), entry_id);
+    }
 
     // A model or an effort picked before this session ever answered has been
-    // waiting for exactly this write: it goes first, one line of its own, and
-    // the message follows a `SETTING_GAP` later. tech.md 6.15.
+    // waiting for exactly this write. tech.md 6.15.
     let held = state.take_settings(&session_id);
+
+    // The first message of an aimed chat starts the agent, and rides as an
+    // argument with the picks as flags: a TUI that is still coming up swallows
+    // what is typed into it. tech.md 6.5.
+    if !state.pty_running(&session_id) {
+        return match spawn_owned(&app, state.inner(), card.session.clone(), false, text, held) {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                fail_replies(&app, state.inner(), &session_id);
+                Err(err)
+            }
+        };
+    }
+
+    // A running process takes the picks as lines of their own, each a
+    // `SETTING_GAP` ahead of the next, and the message last. tech.md 6.15.
     let owner = state.inner().clone();
     let id = session_id.clone();
     let body = text.to_string();
-
     let wrote = tauri::async_runtime::spawn_blocking(move || {
-        for line in held {
+        for line in held.lines() {
             owner.pty().send(&id, &line)?;
             std::thread::sleep(peekle_core::pty::SETTING_GAP);
         }
@@ -897,7 +969,12 @@ pub fn set_model(
 ) -> Result<(), String> {
     let line = peekle_core::agent::model_command(&model)
         .map_err(|_| "That is not a model name".to_string())?;
-    command_session(state.inner(), &session_id, Some(HeldKind::Model), &line)
+    command_session(
+        state.inner(),
+        &session_id,
+        Some((HeldKind::Model, model.trim().to_string())),
+        &line,
+    )
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.
@@ -910,7 +987,7 @@ pub fn set_effort(
     command_session(
         state.inner(),
         &session_id,
-        Some(HeldKind::Effort),
+        Some((HeldKind::Effort, effort.flag().to_string())),
         &peekle_core::agent::effort_command(effort),
     )
 }
@@ -935,7 +1012,9 @@ pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> R
 fn command_session(
     state: &Arc<AppState>,
     session_id: &str,
-    held: Option<HeldKind>,
+    // What to hold if the session has not answered yet: the kind, and the
+    // value as the CLI takes it -- a flag on the spawn or a line later.
+    held: Option<(HeldKind, String)>,
     line: &str,
 ) -> Result<(), String> {
     if !state.owns_session(session_id) {
@@ -951,11 +1030,11 @@ fn command_session(
     // a trace. So the pick waits and travels with the first message, which is
     // the write that proves the far end is listening. tech.md 6.15.
     if !state.session_has_answered(session_id) {
-        let Some(kind) = held else {
+        let Some((kind, value)) = held else {
             return Err("There is nothing to compact yet".to_string());
         };
         tracing::debug!(session_id, "holding a setting for the first message");
-        state.hold_setting(session_id, kind, line.to_string());
+        state.hold_setting(session_id, kind, value);
         return Ok(());
     }
 
@@ -1188,7 +1267,12 @@ mod tests {
             "/effort high",
             peekle_core::agent::COMPACT_COMMAND,
         ] {
-            let refused = command_session(&state, "someone-elses", Some(HeldKind::Model), line);
+            let refused = command_session(
+                &state,
+                "someone-elses",
+                Some((HeldKind::Model, "opus".to_string())),
+                line,
+            );
             assert_eq!(
                 refused,
                 Err("Peekle can only talk to sessions it started".to_string()),
@@ -1260,27 +1344,22 @@ mod tests {
         let state = fresh();
         state.claim_session("ours");
 
-        assert_eq!(
-            command_session(&state, "ours", Some(HeldKind::Model), "/model opus"),
-            Ok(())
-        );
-        assert_eq!(
-            command_session(&state, "ours", Some(HeldKind::Effort), "/effort max"),
-            Ok(())
-        );
+        let pick = |kind: HeldKind, value: &str, line: &str| {
+            command_session(&state, "ours", Some((kind, value.to_string())), line)
+        };
+        assert_eq!(pick(HeldKind::Model, "opus", "/model opus"), Ok(()));
+        assert_eq!(pick(HeldKind::Effort, "max", "/effort max"), Ok(()));
         // Last pick of each kind wins: a model was chosen, not a sequence.
-        assert_eq!(
-            command_session(&state, "ours", Some(HeldKind::Model), "/model haiku"),
-            Ok(())
-        );
+        assert_eq!(pick(HeldKind::Model, "haiku", "/model haiku"), Ok(()));
 
-        assert_eq!(
-            state.take_settings("ours"),
-            vec!["/model haiku".to_string(), "/effort max".to_string()]
-        );
+        let held = state.take_settings("ours");
+        assert_eq!(held.model.as_deref(), Some("haiku"));
+        assert_eq!(held.effort.as_deref(), Some("max"));
+        assert_eq!(held.lines(), vec!["/model haiku", "/effort max"]);
         // Handed over once: they go on the wire with that message and nowhere
         // else.
-        assert!(state.take_settings("ours").is_empty());
+        let again = state.take_settings("ours");
+        assert!(again.model.is_none() && again.effort.is_none());
     }
 
     /// There is nothing to compact in a session that has not answered, and the
@@ -1295,6 +1374,45 @@ mod tests {
         let state = fresh();
         state.claim_session("ours");
         assert!(state.owns_session("ours"));
+    }
+
+    /// `New session` aims a chat and starts nothing: the card is ours before
+    /// any process runs, and the first message is what starts one. A TUI
+    /// brought up first would be typed into while still coming up, and that
+    /// line disappears without a trace (v46.2). tech.md 6.5.
+    #[test]
+    fn an_aimed_session_is_owned_before_any_process_runs() {
+        let state = fresh();
+        let session = peekle_core::types::SessionRef {
+            session_id: "aimed".to_string(),
+            cwd: "/tmp".to_string(),
+            project: "tmp".to_string(),
+            pid: None,
+            tty: None,
+        };
+        state.claim_session(&session.session_id);
+        state.open_owned_session(session, 1);
+
+        assert!(state.owns_session("aimed"), "the field is live");
+        assert!(!state.pty_running("aimed"), "and nothing runs yet");
+    }
+
+    /// One pick, two shapes: a flag on the spawn that carries the first
+    /// message, a line into a pty that is already running. Taken once, gone
+    /// after, whichever shape it took. tech.md 6.15.
+    #[test]
+    fn a_held_pick_is_a_flag_on_the_spawn_and_a_line_into_a_running_pty() {
+        let state = fresh();
+        state.hold_setting("s", HeldKind::Model, "opus".to_string());
+        state.hold_setting("s", HeldKind::Effort, "high".to_string());
+
+        let held = state.take_settings("s");
+        assert_eq!(held.model.as_deref(), Some("opus"));
+        assert_eq!(held.effort.as_deref(), Some("high"));
+        assert_eq!(held.lines(), vec!["/model opus", "/effort high"]);
+
+        let again = state.take_settings("s");
+        assert!(again.model.is_none() && again.effort.is_none());
     }
 
     /// The pulling path hands over what the registry holds and nothing else:

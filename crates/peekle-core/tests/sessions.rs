@@ -634,7 +634,7 @@ fn each_prompt_submit_confirms_one_waiting_reply() {
         .iter()
         .all(|e| e.state == EntryState::Running));
 
-    assert!(registry.confirm_reply("s", 3));
+    assert!(registry.confirm_reply("s", "keep going", 3));
     let states: Vec<EntryState> = registry.cards()[0]
         .entries
         .iter()
@@ -646,12 +646,101 @@ fn each_prompt_submit_confirms_one_waiting_reply() {
         "the oldest one is the one this event belongs to"
     );
 
-    assert!(registry.confirm_reply("s", 4));
+    assert!(registry.confirm_reply("s", "and push", 4));
     assert!(registry.cards()[0]
         .entries
         .iter()
         .all(|e| e.state == EntryState::Ok));
-    assert!(!registry.confirm_reply("s", 5), "nothing left to confirm");
+    assert!(
+        !registry.confirm_reply("s", "and push", 5),
+        "nothing left to confirm"
+    );
+}
+
+/// The hook carries the prompt, so it names the row with those words rather
+/// than whichever row happens to be oldest. One message lost on the way must
+/// not borrow the confirmation of the next one -- that is how a message that
+/// never went was painted green on the screen. tech.md 6.3.
+#[test]
+fn a_prompt_submit_names_the_row_by_its_words_and_not_by_its_place() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.user_turn(session.clone(), "first, lost", EntryState::Running, 1);
+    registry.user_turn(session.clone(), "second, delivered", EntryState::Running, 2);
+
+    assert!(registry.confirm_reply("s", "second, delivered", 3));
+    let states: Vec<EntryState> = registry.cards()[0]
+        .entries
+        .iter()
+        .map(|e| e.state)
+        .collect();
+    assert_eq!(states, vec![EntryState::Running, EntryState::Ok]);
+}
+
+/// S3 promised this and nothing built it: a reply no `UserPromptSubmit` names
+/// within `delivery_confirm_secs` becomes `Failed`, exactly once, and only
+/// that reply. A later reply is on its own clock, and a reply confirmed in
+/// time is left alone. tech.md 6.3.
+#[test]
+fn a_reply_nothing_confirmed_is_failed_once_and_only_that_one() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+        pid: None,
+        tty: None,
+    };
+    let first = registry
+        .user_turn(session.clone(), "went nowhere", EntryState::Running, 1)
+        .expect("a row for the first reply");
+    registry.user_turn(session.clone(), "still on its way", EntryState::Running, 2);
+
+    assert!(registry.fail_reply("s", &first, 21));
+    assert!(
+        !registry.fail_reply("s", &first, 22),
+        "failed once, not twice"
+    );
+    let states: Vec<EntryState> = registry.cards()[0]
+        .entries
+        .iter()
+        .map(|e| e.state)
+        .collect();
+    assert_eq!(states, vec![EntryState::Failed, EntryState::Running]);
+
+    // The clock of a reply that was confirmed in time changes nothing.
+    assert!(registry.confirm_reply("s", "still on its way", 23));
+    let second = registry.cards()[0].entries[1].id.clone();
+    assert!(!registry.fail_reply("s", &second, 30));
+    assert_eq!(registry.cards()[0].entries[1].state, EntryState::Ok);
+}
+
+/// A verdict given at twenty seconds is early, not final: the hook that
+/// names a red row after all sets it right, because arriving late is still
+/// arriving. tech.md 6.3.
+#[test]
+fn a_late_confirmation_sets_a_failed_reply_right() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "s".to_string(),
+        cwd: "/tmp".to_string(),
+        project: "tmp".to_string(),
+        pid: None,
+        tty: None,
+    };
+    let id = registry
+        .user_turn(session.clone(), "slow start", EntryState::Running, 1)
+        .expect("a row");
+    assert!(registry.fail_reply("s", &id, 21));
+
+    assert!(registry.confirm_reply("s", "slow start", 25));
+    assert_eq!(registry.cards()[0].entries[0].state, EntryState::Ok);
 }
 
 /// The reply the island drew when it was typed is the same row the hook
@@ -710,7 +799,7 @@ fn a_turn_the_island_never_sent_still_lands_in_the_feed() {
 #[test]
 fn confirming_leaves_a_session_it_never_heard_of_alone() {
     let mut registry = SessionRegistry::new();
-    assert!(!registry.confirm_reply("nobody", 1));
+    assert!(!registry.confirm_reply("nobody", "hi", 1));
     assert!(registry.cards().is_empty());
 }
 
@@ -1052,7 +1141,10 @@ mod adopting_a_transcript {
     fn a_reply_the_hook_confirmed_survives_a_file_that_has_not_caught_up() {
         let mut registry = registry_with_a_call();
         registry.user_turn(session(), "ship it", EntryState::Running, 1);
-        assert!(registry.confirm_reply("s", 2), "the hook confirms delivery");
+        assert!(
+            registry.confirm_reply("s", "ship it", 2),
+            "the hook confirms delivery"
+        );
 
         registry.adopt_entries("s", vec![row("u-1", EntryKind::Tool, "ls")], None);
 
@@ -1226,7 +1318,7 @@ fn a_prompt_delivered_through_an_inbox_is_the_words_typed_and_confirms_the_reply
 
     let mut registry = SessionRegistry::new();
     registry.user_turn(session.clone(), text, EntryState::Running, 1);
-    assert!(registry.confirm_reply(&session.session_id, 2));
+    assert!(registry.confirm_reply(&session.session_id, text, 2));
     let card = &registry.cards()[0];
     assert_eq!(card.entries.len(), 1);
     assert_eq!(card.entries[0].state, EntryState::Ok);
