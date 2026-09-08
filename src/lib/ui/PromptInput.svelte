@@ -1,9 +1,12 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+
   let {
     value = $bindable(''),
     placeholder = '',
     disabled = false,
     working = false,
+    tools,
     onsubmit,
     onstop,
     onescape,
@@ -15,6 +18,10 @@
      * into the way to end it, which is where Claude Code puts it too: no
      * second control appears, and none has to be found. tech.md 6.5. */
     working?: boolean;
+    /** What sits in the row under the text, on the left of the send button:
+     * the controls of the message being written. Claude Code's own composer
+     * is laid out this way, and for the same reason. tech.md 6.15. */
+    tools?: Snippet;
     onsubmit?: (text: string) => void;
     onstop?: () => void;
     onescape?: () => void;
@@ -53,64 +60,79 @@
   }
 </script>
 
-<div class="row">
-  <div class="capsule" class:off={disabled}>
-    <textarea
-      bind:this={field}
-      bind:value
-      {placeholder}
-      {disabled}
-      rows="1"
-      spellcheck="false"
-      onkeydown={keydown}></textarea>
+<!-- One capsule: the text on top, its controls under it. tech.md 6.15. -->
+<div class="capsule" class:off={disabled}>
+  <textarea
+    bind:this={field}
+    bind:value
+    {placeholder}
+    {disabled}
+    rows="1"
+    spellcheck="false"
+    onkeydown={keydown}></textarea>
+
+  <div class="tools">
+    <div class="left">
+      {#if tools}{@render tools()}{/if}
+    </div>
+    <!-- mousedown is swallowed so the caret stays where the user left it:
+         pressing send must not take the field's focus away. tech.md 6.7. -->
+    <button
+      class="send"
+      class:stop={stops}
+      type="button"
+      disabled={stops ? false : !sendable}
+      aria-label={stops ? 'Stop' : 'Send'}
+      onmousedown={(event) => event.preventDefault()}
+      onclick={() => (stops ? onstop?.() : send())}
+    >
+      {#if stops}
+        <!-- The square everything else uses for stop, filled and centred. -->
+        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+          <rect x="4" y="4" width="6" height="6" rx="1.2" fill="currentColor" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+          <path
+            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      {/if}
+    </button>
   </div>
-  <!-- mousedown is swallowed so the caret stays where the user left it:
-       pressing send must not take the field's focus away. tech.md 6.7. -->
-  <button
-    class="send"
-    class:stop={stops}
-    type="button"
-    disabled={stops ? false : !sendable}
-    aria-label={stops ? 'Stop' : 'Send'}
-    onmousedown={(event) => event.preventDefault()}
-    onclick={() => (stops ? onstop?.() : send())}
-  >
-    {#if stops}
-      <!-- The square everything else uses for stop, filled and centred. -->
-      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-        <rect x="4" y="4" width="6" height="6" rx="1.2" fill="currentColor" />
-      </svg>
-    {:else}
-      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-        <path
-          d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    {/if}
-  </button>
 </div>
 
 <style>
-  .row {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-  }
-
   .capsule {
-    flex: 1;
     min-width: 0;
     border: 1px solid var(--hairline);
-    /* Exactly half the one-line height, so a single line is a true pill and a
-       grown field keeps the same corner. */
-    border-radius: 18px;
-    padding: 6px 16px;
+    border-radius: 20px;
+    padding: 9px 9px 9px 16px;
     transition: border-color 120ms ease;
+  }
+
+  /* The controls of the message being written, under it. tech.md 6.15. */
+  .tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 5px;
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    /* The first control's own padding pulled back, so its label starts on the
+       same line the text above it starts on. */
+    margin-left: -6px;
   }
 
   .capsule:focus-within {
@@ -153,9 +175,8 @@
 
   .send {
     flex: none;
-    width: 30px;
-    height: 30px;
-    margin-bottom: 2px;
+    width: 28px;
+    height: 28px;
     display: grid;
     place-items: center;
     border: none;

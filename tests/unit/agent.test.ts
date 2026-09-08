@@ -20,6 +20,7 @@ import {
   FINISHED_NOTE,
 } from '$lib/logic/agent';
 import AgentBar from '$lib/ui/AgentBar.svelte';
+import UsageCorner from '$lib/ui/UsageCorner.svelte';
 import PickerMenu from '$lib/ui/PickerMenu.svelte';
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
 import type { ModelChoice } from '$lib/types/generated/ModelChoice';
@@ -52,12 +53,11 @@ const haiku: AgentSetup = {
 };
 
 describe('the row of a live session', () => {
-  it('names the model, the effort and the context', () => {
+  it('names the model and the effort', () => {
     render(AgentBar, { props: { agent: opus, models, live: true } });
 
     expect(screen.getByRole('button', { name: 'Opus 5' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'High' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /61% of context used/ })).toBeInTheDocument();
   });
 
   it('sends the alias of the model that was picked, not its label', async () => {
@@ -80,24 +80,22 @@ describe('the row of a live session', () => {
     expect(oneffort).toHaveBeenCalledExactlyOnceWith('Max');
   });
 
-  /** The ring is the button, exactly as it is in Claude Code. */
-  it('compacts when the ring is clicked', async () => {
-    const oncompact = vi.fn();
-    render(AgentBar, { props: { agent: opus, models, live: true, oncompact } });
-
-    await userEvent.click(screen.getByRole('button', { name: /Click to compact/ }));
-    expect(oncompact).toHaveBeenCalledOnce();
-  });
-
   /** Nothing confirms a write to a pty, so a pick stands dimmed until the
    * transcript names it back. tech.md 6.15. */
   it('marks a pick that the agent has not confirmed', () => {
     render(AgentBar, {
-      props: { agent: opus, models, live: true, pendingModel: true, pendingCompact: true },
+      props: { agent: opus, models, live: true, pendingModel: true },
     });
 
     expect(screen.getByRole('button', { name: 'Opus 5' })).toHaveClass('pending');
-    expect(screen.getByRole('button', { name: /Click to compact/ })).toHaveClass('pending');
+  });
+
+  /** The ring left this row for the corner where the other two live: three
+   * readings of "how much is left" belong together. tech.md 6.15. */
+  it('carries no ring at all: that lives in the corner now', () => {
+    const { container } = render(AgentBar, { props: { agent: opus, models, live: true } });
+
+    expect(container.querySelector('.usage-dial')).toBeNull();
   });
 
   /** Haiku takes no effort at all, so it is not offered a dead menu. */
@@ -106,6 +104,86 @@ describe('the row of a live session', () => {
 
     expect(screen.getByRole('button', { name: 'Haiku 4.5' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Effort' })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The ring moved to the corner where the other two readings live, and it took
+ * its one action with it. tech.md 6.15 and 6.12.
+ */
+describe('UsageCorner', () => {
+  it('carries all three readings of how much is left', () => {
+    render(UsageCorner, {
+      props: { hour: 42, week: 68, context: 61.2, contextTitle: '61% of context used', live: true },
+    });
+
+    expect(screen.getByText('42% 5h')).toBeInTheDocument();
+    expect(screen.getByText('68% 7d')).toBeInTheDocument();
+    expect(screen.getByText('61% ctx')).toBeInTheDocument();
+  });
+
+  /** The ring is the button, exactly as it is in Claude Code. */
+  it('compacts when the ring is clicked', async () => {
+    const oncompact = vi.fn();
+    render(UsageCorner, {
+      props: {
+        hour: 42,
+        week: 68,
+        context: 61.2,
+        contextTitle: '61% of context used',
+        live: true,
+        oncompact,
+      },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /61% of context used/ }));
+    expect(oncompact).toHaveBeenCalledOnce();
+  });
+
+  /** Nothing has been asked of the window, and an empty ring says that. A
+   * drawn zero would be a measurement nobody made. */
+  it('leaves the ring empty and refuses to compact before the first answer', async () => {
+    const oncompact = vi.fn();
+    render(UsageCorner, {
+      props: {
+        hour: null,
+        week: null,
+        context: null,
+        contextTitle: 'Nothing in the context yet',
+        live: true,
+        oncompact,
+      },
+    });
+
+    const ring = screen.getByRole('button', { name: 'Nothing in the context yet' });
+    expect(ring).toBeDisabled();
+    await userEvent.click(ring);
+    expect(oncompact).not.toHaveBeenCalled();
+  });
+
+  /** The number is true whoever runs the session; only the invitation goes. */
+  it('keeps the reading of a session it cannot compact', () => {
+    render(UsageCorner, {
+      props: { hour: 42, week: 68, context: 61.2, contextTitle: '61% of context used' },
+    });
+
+    expect(screen.getByText('61% ctx')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /61% of context used/ })).toBeDisabled();
+  });
+
+  it('waits visibly while a compact travels', () => {
+    const { container } = render(UsageCorner, {
+      props: {
+        hour: 42,
+        week: 68,
+        context: 61.2,
+        contextTitle: '61% of context used',
+        live: true,
+        pending: true,
+      },
+    });
+
+    expect(container.querySelector('.context')).toHaveClass('pending');
   });
 });
 
@@ -130,18 +208,6 @@ describe('a session that has not answered yet', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Haiku 4.5/ }));
 
     expect(onmodel).toHaveBeenCalledExactlyOnceWith('haiku');
-  });
-
-  /** Nothing has been asked of the window, and an empty ring says that. A
-   * drawn zero would be a measurement nobody made. */
-  it('leaves the ring empty and refuses to compact', async () => {
-    const oncompact = vi.fn();
-    render(AgentBar, { props: { agent: null, defaults, models, live: true, oncompact } });
-
-    const ring = screen.getByRole('button', { name: 'Nothing in the context yet' });
-    expect(ring).toBeDisabled();
-    await userEvent.click(ring);
-    expect(oncompact).not.toHaveBeenCalled();
   });
 
   /**
@@ -193,7 +259,7 @@ describe('the row of a session the island cannot command', () => {
    * to tell a value that opens a menu from a value that does not, and the
    * reader has to press to find out. tech.md 6.15. */
   it('wears no chevron, so it is not read as a menu', async () => {
-    const handlers = { onmodel: vi.fn(), oneffort: vi.fn(), oncompact: vi.fn() };
+    const handlers = { onmodel: vi.fn(), oneffort: vi.fn() };
     const { container } = render(AgentBar, {
       props: { agent: opus, models, live: false, note: noteTitle(ELSEWHERE_NOTE), ...handlers },
     });
@@ -209,22 +275,14 @@ describe('the row of a session the island cannot command', () => {
     // Pressed, they change nothing, whatever else they do.
     await userEvent.click(screen.getByText('Opus 5'));
     await userEvent.click(screen.getByText('High'));
-    await userEvent.click(screen.getByLabelText(/context used/));
     expect(handlers.onmodel).not.toHaveBeenCalled();
     expect(handlers.oneffort).not.toHaveBeenCalled();
-    expect(handlers.oncompact).not.toHaveBeenCalled();
   });
 
   /** The row that does change things carries the affordance the other lacks. */
   it('is told apart from a live row by that chevron alone', () => {
     const { container } = render(AgentBar, { props: { agent: opus, models, live: true } });
     expect(container.querySelectorAll('.chev')).toHaveLength(2);
-  });
-
-  /** The number is true whoever runs the session; only the invitation goes. */
-  it('keeps the context reading without inviting a click', () => {
-    render(AgentBar, { props: { agent: opus, models, live: false } });
-    expect(screen.getByLabelText('61% of context used, 612k of 1000k.')).toBeTruthy();
   });
 
   /** A value that looks like a value gets pressed anyway. Silence is the
@@ -236,8 +294,7 @@ describe('the row of a session the island cannot command', () => {
 
     await userEvent.click(screen.getByText('Opus 5'));
     await userEvent.click(screen.getByText('High'));
-    await userEvent.click(screen.getByLabelText(/context used/));
-    expect(onnote).toHaveBeenCalledTimes(3);
+    expect(onnote).toHaveBeenCalledTimes(2);
   });
 
   /** With nothing to stand on -- no transcript, no defaults -- there is no

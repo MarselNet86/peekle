@@ -146,11 +146,16 @@
     color: var(--text-dim);
   }
 
+  /* Grown from the button that opened it, not swapped in for it: a menu that
+     appears whole and instantly reads as a change of frame. Transform and
+     opacity only -- nothing here relays out the island. tech.md 6.10. */
   .menu {
     position: absolute;
     bottom: calc(100% + 6px);
     left: 0;
     z-index: 3;
+    transform-origin: bottom left;
+    animation: grow 160ms cubic-bezier(0.22, 1, 0.36, 1);
     display: flex;
     flex-direction: column;
     min-width: 130px;
@@ -158,6 +163,23 @@
     border: 1px solid var(--hairline);
     border-radius: 10px;
     background: var(--notch);
+  }
+
+  @keyframes grow {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .menu {
+      animation: none;
+    }
   }
 
   .option {
