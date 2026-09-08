@@ -25,6 +25,7 @@
   import TaskRow from '$lib/ui/TaskRow.svelte';
   import Toast from '$lib/ui/Toast.svelte';
   import UsageBar from '$lib/ui/UsageBar.svelte';
+  import UsageCorner from '$lib/ui/UsageCorner.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
   import { effortOptions, modelOptions } from '$lib/logic/agent';
   import { ELSEWHERE_NOTE, FINISHED_NOTE, noteTitle } from '$lib/logic/agent';
@@ -361,11 +362,25 @@
       />
     </div>
 
+    <h2>UsageCorner</h2>
+    <!-- The top right corner of a dialogue: both windows and the context, the
+         last of them a button. tech.md 6.12 and 6.15. -->
+    <div class="frame">
+      <UsageCorner
+        hour={42}
+        week={68}
+        context={61.2}
+        contextTitle="61% of context used. Click to compact."
+        live
+        oncompact={() => {}}
+      />
+    </div>
+
     <h2>AgentBar</h2>
     <!-- Live, waiting on a pick it has sent, a model that takes no effort, and
          a session nobody can type into. tech.md 6.15. -->
     <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
-    <AgentBar agent={opus} models={modelRows} live pendingModel pendingCompact />
+    <AgentBar agent={opus} models={modelRows} live pendingModel />
     <AgentBar agent={haiku} models={modelRows} live />
     <!-- A chat another app runs: reading, with the note saying where the
          setting lives. Stopping still works there, over the inbox. 6.15. -->
@@ -484,7 +499,15 @@
 
   <section>
     <h2>PromptInput</h2>
-    <div class="frame"><PromptInput bind:value={text} placeholder="Reply to Claude" /></div>
+    <!-- The composer as the island builds it: the text, and under it the
+         controls of the message being written. tech.md 6.15. -->
+    <div class="frame">
+      <PromptInput bind:value={text} placeholder="Reply to Claude">
+        {#snippet tools()}
+          <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
+        {/snippet}
+      </PromptInput>
+    </div>
     <div class="frame"><PromptInput value="disabled" disabled /></div>
     <!-- Mid turn the one button becomes the way to end it: a white square on
          the product's green, where the arrow was. tech.md 6.5. -->

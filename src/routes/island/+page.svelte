@@ -16,7 +16,7 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { createSignIn } from '$lib/features/signin/signin.svelte';
-  import { noteTitle, settingsNote, type SettingsNote } from '$lib/logic/agent';
+  import { contextLabel, noteTitle, settingsNote, type SettingsNote } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import { feedRows } from '$lib/logic/work';
   import {
@@ -43,12 +43,12 @@
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import UsageCorner from '$lib/ui/UsageCorner.svelte';
   import WorkLine from '$lib/ui/WorkLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
-  import UsageDial from '$lib/ui/UsageDial.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
@@ -734,12 +734,21 @@
             </svg>
             <span>{current.session.project}</span>
           </button>
-          <!-- The windows in miniature. The full bars stay in the list, where
-               there is room for them. tech.md 6.12. -->
-          <div class="dials">
-            <UsageDial pct={usage.bars[0]?.pct ?? null} label="5h" size={13} />
-            <UsageDial pct={usage.bars[1]?.pct ?? null} label="7d" size={13} />
-          </div>
+          <!-- Everything that says how much is left, in one corner: the two
+               windows and the context. The ring is the button that compacts.
+               tech.md 6.12 and 6.15. -->
+          <UsageCorner
+            hour={usage.bars[0]?.pct ?? null}
+            week={usage.bars[1]?.pct ?? null}
+            context={setup ? setup.context_pct : null}
+            contextTitle={contextLabel(setup, owned) || 'Nothing in the context yet'}
+            live={owned}
+            pending={waiting.compact}
+            oncompact={() =>
+              owned
+                ? current && agent.compact(current.session.session_id, setup)
+                : (rowNote = settingsNote(current))}
+          />
         </div>
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each rows as row (row.id)}
@@ -789,24 +798,6 @@
                 {/each}
               </div>
             {/if}
-            <!-- On the divider, above the field: a session is aimed before it
-                 is spoken to, not after. tech.md 6.15. -->
-            <AgentBar
-              agent={setup}
-              defaults={agent.defaults}
-              models={agent.models}
-              live={owned}
-              note={noteTitle(settingsNote(current))}
-              askedModel={asked.model}
-              askedEffort={asked.effort}
-              pendingModel={waiting.model}
-              pendingEffort={waiting.effort}
-              pendingCompact={waiting.compact}
-              onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
-              oneffort={(level) => current && agent.setEffort(current.session.session_id, level)}
-              oncompact={() => current && agent.compact(current.session.session_id, setup)}
-              onnote={() => (rowNote = settingsNote(current))}
-            />
             {#if agent.error}
               <p class="empty">{agent.error}</p>
             {/if}
@@ -831,7 +822,27 @@
               onsubmit={send}
               onstop={stop}
               onescape={() => (handoff ? cancelHandoff() : island.dismiss())}
-            />
+            >
+              <!-- In the capsule, under the text: what will answer what is
+                   being typed belongs to the typing. tech.md 6.15. -->
+              {#snippet tools()}
+                <AgentBar
+                  agent={setup}
+                  defaults={agent.defaults}
+                  models={agent.models}
+                  live={owned}
+                  note={noteTitle(settingsNote(current))}
+                  askedModel={asked.model}
+                  askedEffort={asked.effort}
+                  pendingModel={waiting.model}
+                  pendingEffort={waiting.effort}
+                  onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
+                  oneffort={(level) =>
+                    current && agent.setEffort(current.session.session_id, level)}
+                  onnote={() => (rowNote = settingsNote(current))}
+                />
+              {/snippet}
+            </PromptInput>
           </div>
         {/if}
       </div>
@@ -960,13 +971,6 @@
 
   .start {
     padding: 0 2px 8px;
-  }
-
-  .dials {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding-bottom: 4px;
   }
 
   /* Off it reads as an offer, on it reads as a state, because on it is

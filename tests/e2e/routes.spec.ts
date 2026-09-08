@@ -106,6 +106,7 @@ test.describe('overlay routes', () => {
       'SearchField',
       'UsageDial',
       'AgentBar',
+      'UsageCorner',
       'PickerMenu',
       'Objects with a body',
       'WorkLine',
