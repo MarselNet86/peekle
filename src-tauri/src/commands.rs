@@ -1025,6 +1025,21 @@ pub fn stop_session(state: State<'_, Arc<AppState>>, session_id: String) -> Resu
     })
 }
 
+/// The cards as they stand, for a webview that has just come up.
+///
+/// The list reaches the island by event, and an event sent before the webview
+/// subscribed reaches nobody: `listen` is async, so the subscription lands
+/// after the call that made it, while the transcript backfill emits from a
+/// background thread the moment the app starts. Whoever won that race decided
+/// whether a person saw their own dialogues -- and a lost race left "No
+/// sessions yet" over a disk full of transcripts until some other agent's hook
+/// happened to arrive. So there is a second, pulling path, asked for once on
+/// mount. tech.md 6.1 and section 8.
+#[tauri::command]
+pub fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<peekle_core::types::SessionCard> {
+    state.sessions()
+}
+
 /// Whether a finished turn puts a banner on the screen. tech.md 6.17.
 #[tauri::command]
 pub fn notify_enabled(state: State<'_, Arc<AppState>>) -> bool {
@@ -1280,6 +1295,28 @@ mod tests {
         let state = fresh();
         state.claim_session("ours");
         assert!(state.owns_session("ours"));
+    }
+
+    /// The pulling path hands over what the registry holds and nothing else:
+    /// a webview that asks on mount and gets a different answer than the one
+    /// the events carry would be a second source of truth. tech.md 6.1.
+    #[test]
+    fn the_cards_a_fresh_webview_asks_for_are_the_ones_the_registry_holds() {
+        let state = fresh();
+        assert!(state.sessions().is_empty(), "nothing has happened yet");
+
+        let session = peekle_core::types::SessionRef {
+            session_id: "s-1".to_string(),
+            cwd: "/Users/mars/peekle".to_string(),
+            project: "peekle".to_string(),
+            pid: None,
+            tty: None,
+        };
+        state.open_owned_session(session, 1);
+
+        let handed = state.sessions();
+        assert_eq!(handed.len(), 1);
+        assert_eq!(handed[0].session.session_id, "s-1");
     }
 
     /// The one refusal the island waits out rather than reports. The webview

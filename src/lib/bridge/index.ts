@@ -107,6 +107,10 @@ export const commands = {
   setModel: (sessionId: string, model: string) => call<void>('set_model', { sessionId, model }),
   setEffort: (sessionId: string, effort: Effort) => call<void>('set_effort', { sessionId, effort }),
   compactSession: (sessionId: string) => call<void>('compact_session', { sessionId }),
+  // The cards as they stand. Asked for once on mount: an event sent before
+  // the subscription landed reaches nobody, and the backfill emits at start.
+  // tech.md 6.1 and section 8.
+  getSessions: () => call<SessionCard[]>('get_sessions'),
   // The banner a finished turn puts on the screen. Reading the switch costs
   // nothing; flicking it on posts the first banner, which is what makes macOS
   // ask for the permission at all. tech.md 6.17.
