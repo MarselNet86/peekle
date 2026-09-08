@@ -28,11 +28,26 @@ pub enum HeldKind {
 }
 
 /// What one session has picked and not yet sent. One of each: the user chose
-/// a model, not a sequence of models. tech.md 6.15.
+/// a model, not a sequence of models. Values, not lines: the same pick is a
+/// `--model` flag on a spawn and a `/model` line into a running pty, and only
+/// the moment of sending knows which. tech.md 6.15.
 #[derive(Debug, Clone, Default)]
 pub struct HeldSettings {
-    model: Option<String>,
-    effort: Option<String>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+}
+
+impl HeldSettings {
+    /// The picks as slash commands, for a process that is already running.
+    pub fn lines(&self) -> Vec<String> {
+        [
+            self.model.as_ref().map(|m| format!("/model {m}")),
+            self.effort.as_ref().map(|e| format!("/effort {e}")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
 }
 
 pub struct AppState {
@@ -426,10 +441,10 @@ impl AppState {
         text: &str,
         state: peekle_core::types::EntryState,
         at: i64,
-    ) -> Vec<SessionCard> {
+    ) -> (Vec<SessionCard>, Option<String>) {
         let mut sessions = self.lock(&self.sessions);
-        sessions.user_turn(session.clone(), text, state, at);
-        sessions.cards().to_vec()
+        let entry_id = sessions.user_turn(session.clone(), text, state, at);
+        (sessions.cards().to_vec(), entry_id)
     }
 
     /// The pty host. Commands spawn through it; the hook sink asks it whether
@@ -473,6 +488,21 @@ impl AppState {
     /// Marks the queued replies of a session as undeliverable. Only the path
     /// that could not start a turn calls this: a message that will never leave
     /// says so rather than sitting dim forever. tech.md 6.5.
+    /// Gives up on one reply nothing confirmed within `delivery_confirm_secs`.
+    /// `None` when there was nothing to give up on: it was confirmed in time,
+    /// or already failed by the write itself. tech.md 6.3.
+    pub fn fail_reply(
+        &self,
+        session_id: &str,
+        entry_id: &str,
+        at: i64,
+    ) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        sessions
+            .fail_reply(session_id, entry_id, at)
+            .then(|| sessions.cards().to_vec())
+    }
+
     pub fn replies_failed(&self, session_id: &str, at: i64) -> Vec<SessionCard> {
         let mut sessions = self.lock(&self.sessions);
         sessions.replies_failed(session_id, at);
@@ -504,21 +534,28 @@ impl AppState {
     /// Holds a setting picked before the session has answered, to travel with
     /// the first message. Last pick of each kind wins: the user chose a model,
     /// not a sequence of models. tech.md 6.15.
-    pub fn hold_setting(&self, session_id: &str, kind: HeldKind, line: String) {
+    pub fn hold_setting(&self, session_id: &str, kind: HeldKind, value: String) {
         let mut held = self.lock(&self.held);
         let entry = held.entry(session_id.to_string()).or_default();
         match kind {
-            HeldKind::Model => entry.model = Some(line),
-            HeldKind::Effort => entry.effort = Some(line),
+            HeldKind::Model => entry.model = Some(value),
+            HeldKind::Effort => entry.effort = Some(value),
         }
     }
 
     /// The held settings of a session, taken as they are handed over: they go
-    /// on the wire once, ahead of the message, and are gone whichever way that
+    /// on the wire once, with the message, and are gone whichever way that
     /// write ends. tech.md 6.15.
-    pub fn take_settings(&self, session_id: &str) -> Vec<String> {
-        let held = self.lock(&self.held).remove(session_id).unwrap_or_default();
-        [held.model, held.effort].into_iter().flatten().collect()
+    pub fn take_settings(&self, session_id: &str) -> HeldSettings {
+        self.lock(&self.held).remove(session_id).unwrap_or_default()
+    }
+
+    /// Whether a process of ours is running for this session. An owned card
+    /// without one is a chat that was aimed and not yet spoken to: `New
+    /// session` opens the card, the first message starts the agent.
+    /// tech.md 6.5.
+    pub fn pty_running(&self, session_id: &str) -> bool {
+        self.pty.owns(session_id)
     }
 
     /// Whether this session has ever said what it answers with. Everything
