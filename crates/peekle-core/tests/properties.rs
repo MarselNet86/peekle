@@ -1,6 +1,7 @@
 //! Property based tests for the pure logic of the core crate.
 //! tech.md section 10 names these: usage window math and the label classifier.
 
+use peekle_core::auth::{authorize_url, logged_in, strip_escapes, wants_code};
 use peekle_core::island::{shape_rect, Rect};
 use peekle_core::labels::classify;
 use peekle_core::shots::compose;
@@ -126,6 +127,48 @@ proptest! {
             let found = composed[at..].find(shot.as_str());
             prop_assert!(found.is_some());
             at += found.unwrap_or(0) + shot.len();
+        }
+    }
+}
+
+/// The byte a terminal starts an escape sequence with.
+const ESC: char = '\u{1b}';
+
+proptest! {
+    /// The sign-in reads whatever `claude auth login` puts on the wire, and a
+    /// pty carries arbitrary bytes: half an escape sequence at the edge of a
+    /// read, a multi-byte character split in two, a terminal drawing things
+    /// nobody planned for. A panic on the reader thread would leave the panel
+    /// waiting on a run that has already died. tech.md 6.16.
+    #[test]
+    fn reading_the_sign_in_output_is_total(chunk in ".*") {
+        let _ = strip_escapes(&chunk);
+        let _ = authorize_url(&chunk);
+        let _ = wants_code(&chunk);
+    }
+
+    /// Whatever it hands back is an address, not a fragment of one: the panel
+    /// offers it as a link, and half an address is a dead end dressed as a way
+    /// out.
+    #[test]
+    fn any_address_it_finds_is_whole(chunk in ".*") {
+        if let Some(url) = authorize_url(&chunk) {
+            prop_assert!(url.starts_with("https://"));
+            prop_assert!(url.len() > "https://".len());
+            prop_assert!(!url.chars().any(char::is_whitespace));
+            prop_assert!(!url.contains(ESC));
+        }
+    }
+
+    /// `auth status` is a subprocess whose output nothing here controls: an
+    /// older CLI, a version that renamed the field, an error on stdout. None
+    /// of it may panic, and none of it may come back as `Some(false)` -- that
+    /// would send a working account through a login it does not need.
+    /// tech.md 6.16.
+    #[test]
+    fn reading_the_status_never_invents_a_no(raw in ".*") {
+        if logged_in(&raw) == Some(false) {
+            prop_assert!(raw.contains("loggedIn"));
         }
     }
 }

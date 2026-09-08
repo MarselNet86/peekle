@@ -4,7 +4,8 @@
 use std::sync::Arc;
 
 use peekle_core::types::{
-    IslandView, PeekleState, PromptAnswer, PromptOutcome, ToastRequest, ToastTone, UsageSnapshot,
+    IslandView, PeekleState, PromptAnswer, PromptOutcome, SignInState, ToastRequest, ToastTone,
+    UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -345,6 +346,206 @@ pub async fn request_usage_access(
         tracing::warn!(error = %err, "failed to emit usage");
     }
     Ok(stamped)
+}
+
+/// How long `claude auth status --json` is given to answer.
+///
+/// It reads a file and prints; it does not go to the network. A CLI that takes
+/// longer than this is one that is not going to answer, and blocking a press
+/// on it would be worse than not knowing.
+const STATUS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Whether Claude Code itself thinks it is signed in.
+///
+/// `None` means the question could not be answered -- no binary, a CLI too old
+/// for the command, output that is not JSON -- and it must never be read as a
+/// "no": telling someone they are signed out on the strength of a parse
+/// failure is exactly the pointless login this is here to prevent.
+/// tech.md 6.16.
+fn cli_signed_in() -> Option<bool> {
+    let binary = peekle_core::claude_path()?;
+    let mut child = std::process::Command::new(binary)
+        .args(peekle_core::auth::STATUS_ARGS)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // Bounded by hand rather than by `output()`: a CLI that never returns
+    // would otherwise hold this thread for the life of the process.
+    let deadline = std::time::Instant::now() + STATUS_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                tracing::warn!("claude auth status did not answer in time");
+                return None;
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "could not wait on claude auth status");
+                return None;
+            }
+        }
+    }
+
+    let mut raw = String::new();
+    {
+        use std::io::Read;
+        child.stdout.take()?.read_to_string(&mut raw).ok()?;
+    }
+    // The outcome, never the body: it carries the account's email and org.
+    let answer = peekle_core::auth::logged_in(&raw);
+    tracing::debug!(?answer, "claude auth status");
+    answer
+}
+
+/// Publishes a sign-in state and remembers it.
+fn publish_sign_in(app: &AppHandle, next: SignInState) -> SignInState {
+    // The stage, never the address and never the code. tech.md 6.16, rule 11.
+    tracing::debug!(stage = ?next.stage, has_url = next.url.is_some(), "sign-in");
+    if let Err(err) = app.emit(events::SIGN_IN, &next) {
+        tracing::warn!(error = %err, "failed to emit the sign-in state");
+    }
+    next
+}
+
+/// Starts the sign-in Claude Code performs for itself. tech.md 6.16.
+///
+/// Only ever from a press. Nothing here raises the Keychain dialog -- that is
+/// still `request_usage_access` alone (rule 12) -- and nothing here writes a
+/// credential: the token this ends with is Claude Code's, written by Claude
+/// Code, and Peekle goes on only reading it.
+#[tauri::command]
+pub async fn start_sign_in(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SignInState, String> {
+    let state = state.inner().clone();
+
+    // Asked before the process is spawned, because the answer decides whether
+    // spawning one is the right thing at all. A CLI that is signed in while
+    // the endpoint refuses is a network or a region problem, and sending the
+    // user through a login would repeat the mistake Reconnect made under a new
+    // name. tech.md 6.16.
+    if tauri::async_runtime::spawn_blocking(cli_signed_in)
+        .await
+        .ok()
+        .flatten()
+        == Some(true)
+    {
+        return Ok(publish_sign_in(
+            &app,
+            SignInState::failed("Claude Code is signed in, so the API refused for another reason"),
+        ));
+    }
+
+    let Some(binary) = peekle_core::claude_path() else {
+        return Ok(publish_sign_in(
+            &app,
+            SignInState::failed("no claude command found on this Mac"),
+        ));
+    };
+
+    let host = state.sign_in().clone();
+    let reporter = app.clone();
+    let started = host.start(&binary, move |next| {
+        publish_sign_in(&reporter, next);
+    });
+
+    match started {
+        Ok(next) => Ok(publish_sign_in(&app, next)),
+        Err(err) => {
+            tracing::warn!(error = %err, "could not start the sign-in");
+            Ok(publish_sign_in(
+                &app,
+                SignInState::failed("could not start claude auth login"),
+            ))
+        }
+    }
+}
+
+/// Hands the code from the authorize page to the waiting process.
+///
+/// The code is a credential: only its length is ever logged, and it goes
+/// straight into the process's stdin and nowhere else. tech.md 6.16, rule 11.
+#[tauri::command]
+pub async fn submit_sign_in_code(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    code: String,
+) -> Result<SignInState, String> {
+    let state = state.inner().clone();
+    let host = state.sign_in().clone();
+
+    let submitting = match host.submit_code(&code) {
+        Ok(next) => next,
+        Err(err) => {
+            tracing::warn!(error = %err, "the sign-in code went nowhere");
+            return Ok(publish_sign_in(&app, SignInState::failed(err.to_string())));
+        }
+    };
+    publish_sign_in(&app, submitting);
+
+    // The CLI has the code; whether it worked is a question for the CLI, not
+    // for an exit status read through a terminal. Asked once it has had time
+    // to write, and settled exactly once either way. Rule 10.
+    let answered = tauri::async_runtime::spawn_blocking(cli_signed_in)
+        .await
+        .ok()
+        .flatten();
+
+    let settled = match answered {
+        Some(true) => host.settle(true, None),
+        Some(false) => host.settle(false, Some("that code was not accepted".into())),
+        // The login may well have worked; we simply cannot say. Refreshing
+        // below is what will tell, so this does not claim a failure.
+        None => host.settle(true, None),
+    };
+    let settled = publish_sign_in(&app, settled);
+
+    // The point of signing in is that the bars fill. Making the user press
+    // again afterwards would be one more lost click. tech.md 6.16.
+    if settled.stage == peekle_core::types::SignInStage::Done {
+        fetch_usage(&app, &state).await;
+    }
+    Ok(settled)
+}
+
+/// Opens the authorize page in the user's browser.
+///
+/// Claude Code opens it itself; this is the way back when it did not -- a
+/// different default browser, a refused `open`. It takes no argument on
+/// purpose: the address comes from the running sign-in and from nowhere else,
+/// so a page inside the webview cannot use this to open something of its own.
+/// The island cannot link to it directly either -- an anchor in an overlay
+/// webview would navigate the overlay. tech.md 6.16.
+#[tauri::command]
+pub fn open_sign_in_page(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let Some(url) = state.sign_in().state().url else {
+        return Err("there is no sign-in page to open".to_string());
+    };
+    // The length, never the address: it carries `code_challenge` and `state`.
+    tracing::debug!(url_len = url.len(), "opening the authorize page");
+    std::process::Command::new("/usr/bin/open")
+        .arg(&url)
+        .spawn()
+        .map_err(|err| {
+            tracing::warn!(error = %err, "could not open the authorize page");
+            "could not open your browser".to_string()
+        })?;
+    Ok(())
+}
+
+/// Kills the sign-in and puts the panel away. tech.md 6.16.
+#[tauri::command]
+pub fn cancel_sign_in(app: AppHandle, state: State<'_, Arc<AppState>>) {
+    state.sign_in().cancel();
+    publish_sign_in(&app, SignInState::idle());
 }
 
 #[tauri::command]

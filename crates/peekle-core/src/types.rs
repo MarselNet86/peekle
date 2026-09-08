@@ -528,3 +528,65 @@ mod tests {
         assert_eq!(stat.used_pct, 100.0);
     }
 }
+
+/// How far the island's own sign-in has got. tech.md 6.16.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum SignInStage {
+    /// Nothing is running.
+    Idle,
+    /// `claude auth login` is up and has printed nothing yet.
+    Starting,
+    /// The authorize URL is out, Claude Code has opened the browser, and the
+    /// CLI is waiting on the code the page shows.
+    Waiting,
+    /// The code went into stdin and the CLI is trading it for tokens.
+    Finishing,
+    /// The process exited zero.
+    Done,
+    /// It exited non-zero, would not start, or was cancelled.
+    Failed,
+}
+
+/// What the island knows about a sign-in in progress. tech.md 6.16.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SignInState {
+    pub stage: SignInStage,
+    /// The authorize address, kept because "the browser did not open" is an
+    /// ordinary outcome -- another default browser, a refused `open` -- and
+    /// without the address on screen there is nowhere left to go.
+    pub url: Option<String>,
+    /// Whether the CLI has asked for the code from the page.
+    pub needs_code: bool,
+    /// Why it failed, in words. Never the code and never the URL: one is a
+    /// credential and the other carries `code_challenge` and `state`.
+    /// tech.md 6.16 and rule 11.
+    pub error: Option<String>,
+}
+
+impl SignInState {
+    pub fn idle() -> Self {
+        Self {
+            stage: SignInStage::Idle,
+            url: None,
+            needs_code: false,
+            error: None,
+        }
+    }
+
+    pub fn failed(error: impl Into<String>) -> Self {
+        Self {
+            stage: SignInStage::Failed,
+            url: None,
+            needs_code: false,
+            error: Some(error.into()),
+        }
+    }
+}
+
+impl Default for SignInState {
+    fn default() -> Self {
+        Self::idle()
+    }
+}

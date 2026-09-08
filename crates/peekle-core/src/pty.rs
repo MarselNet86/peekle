@@ -161,7 +161,7 @@ const PATH_FALLBACK: &[&str] = &[
 /// `-l` alone is not enough: people set `PATH` in `.zshrc`, which only an
 /// interactive shell reads. A shell that hangs or prints nothing falls back to
 /// the static list rather than leaving the session with no path at all.
-fn session_path() -> String {
+pub(crate) fn session_path() -> String {
     static PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     PATH.get_or_init(|| {
         let fallback = || PATH_FALLBACK.join(":");

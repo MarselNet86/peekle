@@ -6,6 +6,7 @@ pub const PROMPT_CLOSE: &str = "peekle://prompt-close";
 pub const SESSIONS: &str = "peekle://sessions";
 pub const TASKS: &str = "peekle://tasks";
 pub const USAGE: &str = "peekle://usage";
+pub const SIGN_IN: &str = "peekle://sign-in";
 pub const ENABLED: &str = "peekle://enabled";
 pub const TOAST: &str = "peekle://toast";
 pub const VIEW: &str = "peekle://view";

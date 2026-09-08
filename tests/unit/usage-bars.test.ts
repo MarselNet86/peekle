@@ -127,9 +127,15 @@ describe('the grant control', () => {
   it('says connect on a first run and reconnect on a session that dropped', () => {
     expect(connectLabel(snapshot('NotGranted'))).toBe('Connect');
     expect(connectLabel(snapshot('Denied'))).toBe('Connect');
-    expect(connectLabel(snapshot('NotLoggedIn'))).toBe('Reconnect');
     expect(connectLabel(snapshot('Offline'))).toBe('Reconnect');
     expect(connectLabel(snapshot('Network'))).toBe('Reconnect');
+  });
+
+  /// A missing or expired credential is not fixed by re-reading the Keychain
+  /// either, so it left this control for one that runs Claude Code's own
+  /// login. tech.md 6.16, and `signin.test.ts` holds that side.
+  it('leaves a missing credential to the sign-in', () => {
+    expect(connectLabel(snapshot('NotLoggedIn'))).toBeNull();
   });
 
   /// A switch in the config and a body that changed shape are not fixed by a

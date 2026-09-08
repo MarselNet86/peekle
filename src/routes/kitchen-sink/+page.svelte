@@ -12,6 +12,7 @@
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
+  import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
@@ -307,6 +308,32 @@
   <section>
     <h2>SearchField</h2>
     <div class="frame"><SearchField bind:value={search} /></div>
+
+    <h2>SignInPanel</h2>
+    <div class="frame">
+      <SignInPanel signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }} />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        signIn={{
+          stage: 'Waiting',
+          url: 'https://claude.com/cai/oauth/authorize?code=true',
+          needs_code: true,
+          error: null,
+        }}
+        waiting="Approve in your browser, then paste the code"
+      />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        signIn={{
+          stage: 'Failed',
+          url: null,
+          needs_code: false,
+          error: 'that code was not accepted',
+        }}
+      />
+    </div>
   </section>
 
   <section>
