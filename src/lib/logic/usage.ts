@@ -19,6 +19,30 @@ export function clampPct(pct: number): number {
   return Math.min(100, Math.max(0, pct));
 }
 
+/** The step the island announces: every ten percent of the window. tech.md 6.18. */
+export const DECADE = 10;
+
+/** Which ten a percent has reached: 30 for 34.2, 0 for 4, null for nothing. */
+export function decadeOf(pct: number | null): number | null {
+  if (pct === null || !Number.isFinite(pct)) return null;
+  return Math.floor(clampPct(pct) / DECADE) * DECADE;
+}
+
+/**
+ * Whether the window has just stepped into a ten worth announcing.
+ *
+ * Upward only: the five hour window resets on its own schedule, and falling
+ * from 90 to 0 is not news. Never on the first reading either -- there is
+ * nothing to compare it against, and an island that flashes on every launch
+ * has taught the eye to ignore it by the second one. tech.md 6.18.
+ */
+export function steppedUp(prev: number | null, next: number | null): boolean {
+  const before = decadeOf(prev);
+  const after = decadeOf(next);
+  if (before === null || after === null) return false;
+  return after > before && after >= DECADE;
+}
+
 export function usageTone(pct: number): UsageTone {
   const value = clampPct(pct);
   for (const [floor, tone] of THRESHOLDS) {

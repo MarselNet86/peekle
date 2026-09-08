@@ -1231,6 +1231,27 @@ pub fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<peekle_core::types::
     state.sessions()
 }
 
+/// Whether a resting island shows the percent on every ten. tech.md 6.18.
+#[tauri::command]
+pub fn usage_badge(state: State<'_, Arc<AppState>>) -> bool {
+    state.lock_config().usage.badge
+}
+
+/// Turns the badge on or off.
+///
+/// Nothing to ask the system for and nothing that can be refused, so unlike
+/// `set_notify_enabled` this one has no error to report. Showing the badge
+/// once on the way in belongs to the island: the number it would show is on
+/// screen already, and Rust has no business animating it. tech.md 6.18.
+#[tauri::command]
+pub fn set_usage_badge(state: State<'_, Arc<AppState>>, on: bool) {
+    {
+        // Scoped: `save_config` takes the same lock.
+        state.lock_config().usage.badge = on;
+    }
+    state.save_config();
+}
+
 /// Whether a finished turn puts a banner on the screen. tech.md 6.17.
 #[tauri::command]
 pub fn notify_enabled(state: State<'_, Arc<AppState>>) -> bool {

@@ -289,6 +289,11 @@
           <RestMark {status} pct={12} onopen={() => {}} />
         </div>
       {/each}
+      <!-- The badge as it stands on a ten, in the room the shape makes for it.
+           tech.md 6.18. -->
+      <div class="mark-stage wide">
+        <RestMark status="idle" pct={70} badge={70} onopen={() => {}} />
+      </div>
     </div>
     <!-- Every threshold of section 9, plus the unknown that draws an empty
          ring rather than a zero. tech.md R-3. -->
@@ -699,6 +704,12 @@
     height: 26px;
     background: var(--notch);
     border-radius: 0 0 10px 10px;
+  }
+
+  /* The width the shape springs to while the badge stands: 2 * REST_BADGE
+     wider than the mark beside it. tech.md 6.18. */
+  .mark-stage.wide {
+    width: 168px;
   }
 
   .row {

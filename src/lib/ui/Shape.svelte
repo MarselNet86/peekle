@@ -8,14 +8,22 @@
   let {
     view,
     notch,
+    badge = false,
     rest,
     children,
-  }: { view: IslandView; notch: Notch; rest?: Snippet; children?: Snippet } = $props();
+  }: {
+    view: IslandView;
+    notch: Notch;
+    /** The resting shape stands open for the usage number. tech.md 6.18. */
+    badge?: boolean;
+    rest?: Snippet;
+    children?: Snippet;
+  } = $props();
 
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
 
-  const target = $derived(shapeBounds(view, notch));
+  const target = $derived(shapeBounds(view, notch, badge));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
 

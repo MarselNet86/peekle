@@ -104,6 +104,10 @@ pub struct UsageConfig {
     /// before a grant would raise the dialog the app is forbidden to raise on
     /// its own. tech.md 6.4 and rule 12.
     pub keychain_granted: bool,
+    /// Whether a resting island shows the percent when the five hour window
+    /// steps into a new ten. The ring stands there all day; the number is an
+    /// event, and it appears only when there is one. tech.md 6.18.
+    pub badge: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +202,7 @@ impl Default for UsageConfig {
             provider: UsageProviderKind::Account,
             keychain_denied: false,
             keychain_granted: false,
+            badge: true,
         }
     }
 }
@@ -325,6 +330,24 @@ mod tests {
         assert_eq!(config.server.port, 5000);
         assert_eq!(config.ui.feed_visible_rows, 6);
         assert!(config.usage.enabled);
+    }
+
+    /// The badge is on out of the box, and a file that says nothing about it
+    /// leaves it on: the island announces a ten, and there is nothing to grant
+    /// and nothing to ask for. tech.md 6.18.
+    #[test]
+    fn the_usage_badge_is_on_until_a_file_says_otherwise() {
+        assert!(Config::default().usage.badge);
+        assert!(
+            Config::from_toml("[usage]\nenabled = true\n")
+                .unwrap()
+                .usage
+                .badge
+        );
+
+        let off = Config::from_toml("[usage]\nbadge = false\n").unwrap();
+        assert!(!off.usage.badge);
+        assert!(off.usage.enabled, "one key off is not the section off");
     }
 
     #[test]
