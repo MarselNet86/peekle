@@ -327,6 +327,9 @@ describe('what the account screen says', () => {
     for (const stage of ['Starting', 'Waiting', 'Finishing'] as const) {
       expect(runCopy(state({ stage }))?.title.length).toBeGreaterThan(0);
     }
+    // Nothing under the title once the field is there: the placeholder
+    // already says what goes in it.
+    expect(runCopy(state({ stage: 'Waiting', needs_code: true }))?.line).toBe('');
     expect(runCopy(state({ stage: 'Idle' }))).toBeNull();
     expect(runCopy(state({ stage: 'Done' }))).toBeNull();
     expect(runCopy(state({ stage: 'Failed' }))).toBeNull();
