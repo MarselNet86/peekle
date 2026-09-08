@@ -24,6 +24,16 @@ pub const TITLE: &str = "Claude is waiting for you";
 /// just signed up for, in the place it will appear from now on. tech.md 6.17.
 pub const SWITCHED_ON: &str = "Turn notices are on. This is what one looks like.";
 
+/// The sound the banner arrives with: the system's own, whatever the person
+/// has picked for it.
+///
+/// A banner without a sound is a banner for someone already looking at the
+/// screen, and the whole point of this channel is the person who is not. The
+/// literal is the one string the macOS layer special-cases into
+/// `NSUserNotificationDefaultSoundName`; any other string is taken as the name
+/// of a sound file, and `"default"` is not one. tech.md 6.17.
+pub const SOUND: &str = "NSUserNotificationDefaultSoundName";
+
 /// The body of the banner a finished turn earns, or nothing at all.
 ///
 /// Three ways to earn nothing, and each is a different statement. The toggle is
@@ -67,6 +77,7 @@ impl<R: tauri::Runtime> Notifier for SystemNotifier<'_, R> {
             .builder()
             .title(title)
             .body(body)
+            .sound(SOUND)
             .show()
             .map_err(|err| err.to_string())
     }
@@ -102,6 +113,13 @@ mod tests {
                 .push((title.to_string(), body.to_string()));
             Ok(())
         }
+    }
+
+    /// The one spelling the macOS layer turns into the system sound. Any other
+    /// string, `"default"` included, is looked up as a file and plays nothing.
+    #[test]
+    fn the_sound_is_the_literal_the_system_layer_special_cases() {
+        assert_eq!(SOUND, "NSUserNotificationDefaultSoundName");
     }
 
     #[test]
