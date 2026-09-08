@@ -11,7 +11,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { commands, events } from '$lib/bridge';
 import { createSignIn } from '$lib/features/signin/signin.svelte';
-import { connectLabel, gateSessions, needsSignIn } from '$lib/features/usage/usage.svelte';
+import {
+  connectLabel,
+  gateSessions,
+  needsSignIn,
+  outOfReach,
+} from '$lib/features/usage/usage.svelte';
+import { accountCopy, runCopy } from '$lib/logic/signin';
 import { barred } from '$lib/logic/sessions';
 import SignInPanel from '$lib/ui/SignInPanel.svelte';
 import type { SignInState } from '$lib/types/generated/SignInState';
@@ -104,11 +110,24 @@ describe('which control a failure earns', () => {
 
 describe('the panel', () => {
   it('starts the sign-in on the press', async () => {
-    const onstart = vi.fn();
-    render(SignInPanel, { props: { signIn: state(), onstart } });
+    const onaction = vi.fn();
+    render(SignInPanel, { props: { signIn: state(), reason: 'NotLoggedIn', onaction } });
 
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(onstart).toHaveBeenCalledOnce();
+    expect(onaction).toHaveBeenCalledOnce();
+  });
+
+  /// A login needs the network it does not have, so the press retries the
+  /// read instead. Same screen, different action, and the label says which.
+  it('offers a retry rather than a login when the network is gone', async () => {
+    const onaction = vi.fn();
+    render(SignInPanel, { props: { signIn: state(), reason: 'Offline', onaction } });
+
+    expect(screen.getByText('No connection')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onaction).toHaveBeenCalledOnce();
   });
 
   /// The browser not opening is ordinary: another default browser, a refused
@@ -120,7 +139,6 @@ describe('the panel', () => {
     render(SignInPanel, {
       props: {
         signIn: state({ stage: 'Waiting', url: 'https://claude.com/cai/oauth/authorize?x=1' }),
-        waiting: 'Opening your browser',
         onopen,
       },
     });
@@ -128,14 +146,14 @@ describe('the panel', () => {
     expect(screen.getByText('Opening your browser')).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open the sign-in page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open the page' }));
     expect(onopen).toHaveBeenCalledOnce();
   });
 
   /// Nothing to open before the CLI has printed an address.
   it('offers nothing to open before there is an address', () => {
     render(SignInPanel, { props: { signIn: state({ stage: 'Starting' }) } });
-    expect(screen.queryByText('Open the sign-in page')).not.toBeInTheDocument();
+    expect(screen.queryByText('Open the page')).not.toBeInTheDocument();
   });
 
   it('sends the code on Enter', async () => {
@@ -144,7 +162,7 @@ describe('the panel', () => {
       props: { signIn: state({ stage: 'Waiting', needs_code: true }), oncode },
     });
 
-    await userEvent.type(screen.getByLabelText('Paste the code'), 'abc123{Enter}');
+    await userEvent.type(screen.getByLabelText('Code from the page'), 'abc123{Enter}');
     expect(oncode).toHaveBeenCalledExactlyOnceWith('abc123');
   });
 
@@ -156,7 +174,7 @@ describe('the panel', () => {
       props: { signIn: state({ stage: 'Waiting', needs_code: true }), oncode },
     });
 
-    await userEvent.type(screen.getByLabelText('Paste the code'), '   {Enter}');
+    await userEvent.type(screen.getByLabelText('Code from the page'), '   {Enter}');
     expect(oncode).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
   });
@@ -173,10 +191,13 @@ describe('the panel', () => {
   /// which is what made the old button feel broken. tech.md 6.4.
   it('says why it failed, in words', () => {
     render(SignInPanel, {
-      props: { signIn: state({ stage: 'Failed', error: 'no claude command found on this Mac' }) },
+      props: {
+        signIn: state({ stage: 'Failed', error: 'No claude command found on this Mac.' }),
+        reason: 'NotLoggedIn',
+      },
     });
 
-    expect(screen.getByText('no claude command found on this Mac')).toBeInTheDocument();
+    expect(screen.getByText('No claude command found on this Mac.')).toBeInTheDocument();
     // And it is pressable again: a dead end is not an outcome.
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });
@@ -221,7 +242,6 @@ describe('the store', () => {
 
     for (const stage of ['Starting', 'Waiting', 'Finishing'] as const) {
       handler(state({ stage }));
-      expect(signIn.waitingText.length).toBeGreaterThan(0);
       expect(signIn.open).toBe(true);
     }
 
@@ -235,18 +255,80 @@ describe('a chat opened while the account is out of reach', () => {
   /// A conversation the island cannot reach is a dead screen with a
   /// scrollbar, so the way back in stands where the chat would be.
   it('shows the sign-in instead of the chat', () => {
-    expect(barred({ needsSignIn: true, hasPrompt: false })).toBe(true);
+    expect(barred({ outOfReach: true, hasPrompt: false })).toBe(true);
   });
 
   /// The one thing the island exists for. A hook waiting on Allow or Deny is
   /// blocking a real agent run, and no account problem may stand in front of
   /// it. tech.md 6.4.
   it('never stands in front of a hook that is waiting', () => {
-    expect(barred({ needsSignIn: true, hasPrompt: true })).toBe(false);
+    expect(barred({ outOfReach: true, hasPrompt: true })).toBe(false);
   });
 
   it('is out of the way whenever the account is reachable', () => {
-    expect(barred({ needsSignIn: false, hasPrompt: false })).toBe(false);
-    expect(barred({ needsSignIn: false, hasPrompt: true })).toBe(false);
+    expect(barred({ outOfReach: false, hasPrompt: false })).toBe(false);
+    expect(barred({ outOfReach: false, hasPrompt: true })).toBe(false);
+  });
+});
+
+describe('what the account screen says', () => {
+  /// The bug it closes: with the network gone, a send into an observed chat
+  /// came back "that chat is busy elsewhere". It named the wrong problem and
+  /// sent the reader hunting for another client to close. tech.md 6.16.
+  it('bars a chat when Anthropic is unreachable, whichever way', () => {
+    expect(outOfReach(snapshot('Offline'))).toBe(true);
+    expect(outOfReach(snapshot('Network'))).toBe(true);
+    expect(outOfReach(snapshot('NotLoggedIn'))).toBe(true);
+  });
+
+  /// Under all of these the agent works, so nothing stands in front of a chat.
+  it('leaves a chat alone for anything the agent survives', () => {
+    for (const reason of [
+      'Disabled',
+      'Unsupported',
+      'RateLimited',
+      'NotGranted',
+      'Denied',
+    ] as const) {
+      expect(outOfReach(snapshot(reason))).toBe(false);
+    }
+    expect(outOfReach(snapshot(null))).toBe(false);
+    expect(outOfReach(null)).toBe(false);
+  });
+
+  /// Each reason gets its own words and its own verb. A screen that says the
+  /// same thing about a dead network and an expired login teaches nothing.
+  it('names the problem and the verb that fixes it', () => {
+    expect(accountCopy('Offline')?.action).toBe('Try again');
+    expect(accountCopy('Network')?.action).toBe('Try again');
+    expect(accountCopy('NotLoggedIn')?.action).toBe('Sign in');
+
+    const titles = (['Offline', 'Network', 'NotLoggedIn'] as const).map(
+      (reason) => accountCopy(reason)?.title,
+    );
+    expect(new Set(titles).size).toBe(3);
+  });
+
+  it('says nothing for a reason no screen should stand on', () => {
+    expect(accountCopy('RateLimited')).toBeNull();
+    expect(accountCopy(null)).toBeNull();
+  });
+
+  /// Short enough to read at a glance, on a screen that is 300px wide.
+  it('keeps every line short', () => {
+    for (const reason of ['Offline', 'Network', 'NotLoggedIn'] as const) {
+      const copy = accountCopy(reason);
+      expect(copy!.title.length).toBeLessThanOrEqual(20);
+      expect(copy!.line.length).toBeLessThanOrEqual(48);
+    }
+  });
+
+  it('has a line for every stage a process is up in, and none otherwise', () => {
+    for (const stage of ['Starting', 'Waiting', 'Finishing'] as const) {
+      expect(runCopy(state({ stage }))?.title.length).toBeGreaterThan(0);
+    }
+    expect(runCopy(state({ stage: 'Idle' }))).toBeNull();
+    expect(runCopy(state({ stage: 'Done' }))).toBeNull();
+    expect(runCopy(state({ stage: 'Failed' }))).toBeNull();
   });
 });

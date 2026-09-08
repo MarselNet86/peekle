@@ -100,12 +100,18 @@ export function classifyContinueOutcome(
 /**
  * Whether a chat the user opened is replaced by the way back into the account.
  *
- * A conversation the island cannot reach is a dead screen with a scrollbar, so
- * the sign-in stands where the chat would be. Never while a hook is waiting:
- * answering a live permission request is the one thing the island exists for,
- * and it must work whatever the usage endpoint says -- which is also why the
- * session list itself is never taken away over this. tech.md 6.4 and 6.16.
+ * An agent needs the network and the account the bars need, so a chat opened
+ * while either is gone is a field that takes words and delivers none. Worse
+ * than useless: sending into an observed chat with no network came back as
+ * "that chat is busy elsewhere", which names the wrong problem entirely and
+ * sends the reader looking for another client to close. The screen says what
+ * is actually wrong instead.
+ *
+ * Never while a hook is waiting: answering a live permission request is the
+ * one thing the island exists for, and it must work whatever the usage
+ * endpoint says -- which is also why the session list itself is never taken
+ * away over this. tech.md 6.4 and 6.16.
  */
-export function barred(state: { needsSignIn: boolean; hasPrompt: boolean }): boolean {
-  return state.needsSignIn && !state.hasPrompt;
+export function barred(state: { outOfReach: boolean; hasPrompt: boolean }): boolean {
+  return state.outOfReach && !state.hasPrompt;
 }

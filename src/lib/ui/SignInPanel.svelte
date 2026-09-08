@@ -1,23 +1,25 @@
 <script lang="ts">
+  import { accountCopy, runCopy } from '$lib/logic/signin';
   import Button from '$lib/ui/Button.svelte';
   import type { SignInState } from '$lib/types/generated/SignInState';
+  import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 
   // Named `signIn`, not `state`: a local called `state` collides with the
   // `$state` rune and Svelte reads `$state.url` as a store subscription.
   let {
     signIn,
+    reason = null,
     busy = false,
-    waiting = '',
-    onstart,
+    onaction,
     oncode,
     onopen,
     oncancel,
   }: {
     signIn: SignInState;
+    /** Why the account is out of reach, which decides what the button does. */
+    reason?: UsageUnavailable | null;
     busy?: boolean;
-    /** What the panel says while the CLI works, from the feature store. */
-    waiting?: string;
-    onstart?: () => void;
+    onaction?: () => void;
     oncode?: (code: string) => void;
     /** Opens the authorize page. Rust does it, because an anchor here would
      * navigate the overlay webview itself. tech.md 6.16. */
@@ -27,9 +29,10 @@
 
   let code = $state('');
 
-  const running = $derived(
-    signIn.stage === 'Starting' || signIn.stage === 'Waiting' || signIn.stage === 'Finishing',
-  );
+  const run = $derived(runCopy(signIn));
+  const rest = $derived(accountCopy(reason));
+  const title = $derived(run?.title ?? rest?.title ?? 'Signed out');
+  const line = $derived(run ? run.line : (signIn.error ?? rest?.line ?? ''));
 
   function submit() {
     // An empty code is not a submission. Sending one would put the CLI's own
@@ -40,118 +43,97 @@
   }
 </script>
 
-<!-- The way back from `NotLoggedIn`. Re-reading the Keychain cannot fix a
-     credential that is missing or expired, so this runs Claude Code's own
-     `auth login` instead of offering a Reconnect that could never work.
+<!-- The way back into the account. Two lines and one action: a screen that
+     stands in front of someone's work earns its space by being short.
      tech.md 6.16. -->
-<div class="signin">
-  {#if !running}
-    <Button
-      label={busy ? 'Signing in' : 'Sign in'}
-      variant="connect"
-      {busy}
-      wide
-      onclick={() => onstart?.()}
+<div class="account">
+  <h2>{title}</h2>
+  {#if line}
+    <p>{line}</p>
+  {/if}
+
+  {#if signIn.needs_code}
+    <input
+      type="text"
+      bind:value={code}
+      placeholder="Code from the page"
+      aria-label="Code from the page"
+      spellcheck="false"
+      autocomplete="off"
+      onkeydown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        }
+      }}
     />
-  {:else}
-    <p class="waiting">{waiting}</p>
+  {/if}
 
-    <!-- The browser not opening is an ordinary outcome: another default
-         browser, a refused `open`. Without the address on screen there is
-         nowhere left to go. tech.md 6.16. -->
-    {#if signIn.url}
-      <button class="url" type="button" onclick={() => onopen?.()}>Open the sign-in page</button>
+  <div class="row">
+    <!-- The browser not opening is ordinary: another default browser, a
+         refused `open`. Kept quiet, because it is the rarer way out. -->
+    {#if signIn.url && run}
+      <button class="quiet" type="button" onclick={() => onopen?.()}>Open the page</button>
     {/if}
+    <span class="gap"></span>
 
-    {#if signIn.needs_code}
-      <div class="field">
-        <input
-          type="text"
-          bind:value={code}
-          placeholder="Paste the code"
-          aria-label="Paste the code"
-          spellcheck="false"
-          autocomplete="off"
-          onkeydown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              submit();
-            }
-          }}
+    {#if run}
+      <Button label="Cancel" onclick={() => oncancel?.()} />
+      {#if signIn.needs_code}
+        <Button
+          label="Continue"
+          variant="connect"
+          disabled={!code.trim()}
+          {busy}
+          onclick={submit}
         />
-      </div>
+      {/if}
+    {:else}
       <Button
-        label="Continue"
+        label={rest?.action ?? 'Sign in'}
         variant="connect"
-        disabled={!code.trim()}
         {busy}
-        wide
-        onclick={submit}
+        onclick={() => onaction?.()}
       />
     {/if}
-
-    <Button label="Cancel" onclick={() => oncancel?.()} wide />
-  {/if}
-
-  <!-- Why it did not work, in words. A press that changes nothing on screen
-       reads as a press that was lost. tech.md 6.4. -->
-  {#if signIn.error}
-    <p class="why">{signIn.error}</p>
-  {/if}
+  </div>
 </div>
 
 <style>
-  .signin {
+  .account {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+    max-width: 300px;
   }
 
-  .waiting {
+  /* The one line that carries weight here, and the only place in the island
+     that goes above 13px: everything else on this screen is support. */
+  h2 {
     margin: 0;
-    text-align: center;
-    font-size: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     color: var(--text);
   }
 
-  .url {
-    border: none;
-    background: none;
-    padding: 0;
-    font: inherit;
-    text-align: center;
-    font-size: 11px;
-    color: var(--accent);
-    cursor: pointer;
-  }
-
-  .url:hover {
-    text-decoration: underline;
-  }
-
-  .url:focus,
-  .url:focus-visible {
-    outline: none;
-  }
-
-  .field {
-    display: flex;
-    align-items: center;
-    padding: 5px 8px;
-    border-radius: 9px;
-    background: var(--bubble);
+  p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-dim);
   }
 
   input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    background: transparent;
+    margin-top: 4px;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    background: var(--bubble);
     color: var(--text);
     font: inherit;
     font-size: 13px;
-    padding: 0;
+    padding: 8px 10px;
   }
 
   input::placeholder {
@@ -164,10 +146,39 @@
     outline: none;
   }
 
-  .why {
-    margin: 0;
-    text-align: center;
+  input:focus {
+    border-color: var(--text-dim);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .gap {
+    flex: 1;
+  }
+
+  /* A way out that is not the way out: plain text, no border, so it never
+     competes with the action beside it. */
+  .quiet {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
     font-size: 11px;
     color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  .quiet:hover {
+    color: var(--text);
+  }
+
+  .quiet:focus,
+  .quiet:focus-visible {
+    outline: none;
   }
 </style>

@@ -263,7 +263,7 @@
   // thing the island exists for, and it must work whatever usage says.
   // tech.md 6.4 and 6.16.
   const barred = $derived(
-    isBarred({ needsSignIn: usage.needsSignIn, hasPrompt: island.prompt !== null }),
+    isBarred({ outOfReach: usage.outOfReach, hasPrompt: island.prompt !== null }),
   );
 
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
@@ -448,14 +448,13 @@
      them under the session list was costing the list the rows it is for.
      tech.md S7. -->
 {#snippet connect()}
-  {#if usage.connectLabel || usage.needsSignIn || usage.failed}
+  {#if usage.outOfReach}
+    <!-- The account screen, in the strip under the list. Says what is wrong
+         and offers the one thing that fixes it. tech.md 6.16. -->
+    <div class="usage">{@render accountPanel()}</div>
+  {:else if usage.connectLabel || usage.failed}
     <div class="usage">
-      <!-- A missing or expired credential is not something re-reading the
-           Keychain can fix, so it gets Claude Code's own login rather than a
-           Reconnect that could never work. tech.md 6.16. -->
-      {#if usage.needsSignIn}
-        {@render signInPanel()}
-      {:else if usage.connectLabel}
+      {#if usage.connectLabel}
         <Button
           label={usage.connecting ? 'Connecting' : usage.connectLabel}
           variant="connect"
@@ -465,22 +464,20 @@
         />
       {/if}
       <!-- Why it is not connected, in words. A press that changes nothing on
-           screen reads as a press that was lost. Not while the sign-in owns
-           this space: it says what is happening and why itself, and two
-           captions under one button contradicted each other. tech.md 6.16. -->
-      {#if usage.failed && !usage.connecting && !usage.needsSignIn}
+           screen reads as a press that was lost. tech.md 6.4. -->
+      {#if usage.failed && !usage.connecting}
         <p class="why">{usage.reason}</p>
       {/if}
     </div>
   {/if}
 {/snippet}
 
-{#snippet signInPanel()}
+{#snippet accountPanel()}
   <SignInPanel
     signIn={signIn.state}
-    busy={signIn.busy}
-    waiting={signIn.waitingText}
-    onstart={() => signIn.begin()}
+    reason={usage.reasonCode}
+    busy={signIn.busy || usage.connecting}
+    onaction={() => (usage.needsSignIn ? signIn.begin() : usage.connect())}
     oncode={(code) => signIn.submit(code)}
     onopen={() => signIn.openPage()}
     oncancel={() => signIn.cancel()}
@@ -508,8 +505,8 @@
                that may or may not do anything is worse than one clear ask.
                tech.md 6.4. -->
           <div class="gate">
-            {#if usage.needsSignIn}
-              {@render signInPanel()}
+            {#if usage.outOfReach}
+              {@render accountPanel()}
             {:else}
               <Button
                 label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
@@ -518,9 +515,9 @@
                 wide
                 onclick={() => usage.connect()}
               />
-            {/if}
-            {#if usage.failed && !usage.connecting && !usage.needsSignIn}
-              <p class="why">{usage.reason}</p>
+              {#if usage.failed && !usage.connecting}
+                <p class="why">{usage.reason}</p>
+              {/if}
             {/if}
           </div>
         {:else}
@@ -565,8 +562,10 @@
         {/if}
       </div>
     {:else if barred}
-      <!-- Instead of the chat, not over it: opening a conversation the island
-           cannot reach is a dead screen with a scrollbar. tech.md 6.16. -->
+      <!-- Instead of the chat, not over it: a conversation the island cannot
+           reach is a field that takes words and delivers none. The block says
+           what is wrong; a header repeating it would be the second title on a
+           screen that has room for one. tech.md 6.16. -->
       <div class="feed">
         <div class="head">
           <button class="back" onclick={() => openList()} aria-label="Back to the session list">
@@ -581,9 +580,8 @@
               />
             </svg>
           </button>
-          <span class="project">Sign in to continue</span>
         </div>
-        <div class="gate">{@render signInPanel()}</div>
+        <div class="blocked">{@render accountPanel()}</div>
       </div>
     {:else if current}
       <div class="feed">
@@ -741,7 +739,7 @@
   .usage {
     flex: none;
     border-top: 1px solid var(--hairline);
-    padding-top: 6px;
+    padding-top: 10px;
   }
 
   /* Fills the list's whole space rather than sitting among rows: nothing
@@ -755,6 +753,18 @@
     align-items: stretch;
     justify-content: center;
     gap: 10px;
+  }
+
+  /* A chat the island cannot reach. The block sits a little above centre --
+     optical centre, not arithmetic: a shape whose top carries a chevron reads
+     as bottom-heavy when its content is measured from the edges. */
+  .blocked {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px 42px;
   }
 
   /* Under the button, dim and small: it explains, it does not shout. */
