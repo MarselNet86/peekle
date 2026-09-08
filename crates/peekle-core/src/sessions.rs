@@ -211,6 +211,15 @@ pub struct SessionRegistry {
     /// one of these describes a session we own; anything else is observed.
     /// tech.md 6.5.
     owned: HashSet<String>,
+    /// Ids of User entries the hook path has already confirmed, but the
+    /// transcript has not shown yet, keyed by session. tech.md 6.11 says the
+    /// file lags: `UserPromptSubmit` reaches `confirm_reply` well before
+    /// Claude Code's own async write does, and the moment it flips a reply
+    /// from `Running` to `Ok` is the moment `adopt_entries` would otherwise
+    /// stop protecting it -- state, not file presence, decided whether a row
+    /// was safe to drop, and those are different questions. A row's id stays
+    /// here until the file actually names it, whatever its displayed state.
+    local_pending: HashMap<String, HashSet<String>>,
 }
 
 impl SessionRegistry {
@@ -310,6 +319,7 @@ impl SessionRegistry {
     pub fn hide(&mut self, session_id: &str) {
         self.overrides.hidden.insert(session_id.to_string());
         self.cards.retain(|c| c.session.session_id != session_id);
+        self.local_pending.remove(session_id);
     }
 
     /// The cards as the user sees them: their titles over the hooks' titles,
@@ -359,6 +369,17 @@ impl SessionRegistry {
                         at,
                     )
                 });
+                // Same protection as a reply the island typed itself: the
+                // hook is what said this happened, the file has not shown it
+                // yet, and it must not vanish in between. Recorded before the
+                // card is borrowed, because `card_mut` takes all of `self`.
+                // tech.md 6.11.
+                if let Some(entry) = &entry {
+                    self.local_pending
+                        .entry(session_id.clone())
+                        .or_default()
+                        .insert(entry.id.clone());
+                }
                 let card = self.card_mut(session, at);
                 if card.title.is_empty() {
                     card.title = truncate(&text, TITLE_LIMIT);
@@ -442,8 +463,24 @@ impl SessionRegistry {
         if trimmed.is_empty() {
             return;
         }
-        let card = self.card_mut(session, at);
         let entry = now_entry(EntryKind::User, trimmed, None, state, at);
+        // A message still on its way to the agent is one the transcript is
+        // going to name and has not named yet, so `adopt_entries` has to keep
+        // it. Recorded by id and read by id, never by `state`: confirming
+        // delivery flips `Running` to `Ok`, and that must not be what ends the
+        // protection, because the file catching up is a separate and later
+        // event. An answer to a permission request arrives `Ok` and is not
+        // recorded at all -- it is not a prompt, so no transcript row will
+        // ever match it and protecting it would pin it to the feed forever.
+        // Recorded before the card is borrowed, because `card_mut` takes all
+        // of `self`. tech.md 6.11.
+        if state == EntryState::Running {
+            self.local_pending
+                .entry(session.session_id.clone())
+                .or_default()
+                .insert(entry.id.clone());
+        }
+        let card = self.card_mut(session, at);
         push_entry(card, entry);
     }
 
@@ -454,10 +491,13 @@ impl SessionRegistry {
     /// are faster and the file is right, so the file wins on everything it
     /// knows about.
     ///
-    /// One thing survives it: a reply typed in the island and not yet in the
-    /// file. It sits `Running` until `UserPromptSubmit` confirms it, and
-    /// dropping it here would take a sent message off the screen. Nothing else
-    /// is kept, because everything else came from the file to begin with.
+    /// One thing survives it: a message the island sent, or a hook reported,
+    /// that the file has not caught up with yet. Those are tracked by id, so
+    /// a reply stays protected across the `UserPromptSubmit` that confirms
+    /// delivery -- being confirmed says the agent has it, not that the file
+    /// does. Dropping it here would take a sent message off the screen and
+    /// put it back a turn later under a different id. Nothing else is kept,
+    /// because everything else came from the file to begin with.
     ///
     /// False means there is no such session yet, so there is nothing to
     /// replace: a transcript never opens a card, the same rule the backfill
@@ -477,15 +517,35 @@ impl SessionRegistry {
         };
 
         let mut adopted = entries;
+        let still_local = self
+            .local_pending
+            .entry(session_id.to_string())
+            .or_default();
         let pending: Vec<FeedEntry> = card
             .entries
             .iter()
-            .filter(|entry| entry.kind == EntryKind::User && entry.state == EntryState::Running)
+            // Locally authored and not yet named by the file -- tracked by
+            // id, not by `state`. A reply the hook already confirmed
+            // (Running -> Ok) is exactly as unwritten to disk as one that
+            // has not been confirmed yet; the file lags either way.
+            // tech.md 6.11.
+            .filter(|entry| entry.kind == EntryKind::User && still_local.contains(&entry.id))
             // Already in the file under its own id, so the local copy has done
             // its job and would only stand there twice.
             .filter(|entry| !adopted.iter().any(|each| each.text == entry.text))
             .cloned()
             .collect();
+
+        // Resolved either way: matched by the file just now (dropped out of
+        // `pending` above), or not present in `pending` at all because it
+        // fell off the cap before the file ever caught up. Either way there
+        // is nothing left here worth protecting on the next read.
+        let carried: HashSet<&str> = pending.iter().map(|entry| entry.id.as_str()).collect();
+        still_local.retain(|id| carried.contains(id.as_str()));
+        if still_local.is_empty() {
+            self.local_pending.remove(session_id);
+        }
+
         adopted.extend(pending);
 
         if adopted.len() > ENTRY_CAP {
@@ -718,6 +778,7 @@ impl SessionRegistry {
             if let Some(dropped) = self.cards.pop() {
                 let id = dropped.session.session_id;
                 self.open_tools.retain(|_, (card_id, _)| card_id != &id);
+                self.local_pending.remove(&id);
             }
         }
     }

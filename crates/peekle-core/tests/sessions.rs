@@ -1035,8 +1035,41 @@ mod adopting_a_transcript {
         assert_eq!(card.entries[0].id, "u-1");
     }
 
-    /// A confirmed reply came from the file to begin with, so keeping a local
-    /// copy of it would double every message the user ever sent.
+    /// The bug this closes: the reply goes grey, `UserPromptSubmit` confirms
+    /// delivery, the same hook refreshes from a transcript the agent has not
+    /// finished writing, and the message the user just sent disappears --
+    /// coming back a turn later under a transcript id. Delivery and the file
+    /// catching up are two different events, so confirming one must not end
+    /// the protection that waits for the other. tech.md 6.11.
+    #[test]
+    fn a_reply_the_hook_confirmed_survives_a_file_that_has_not_caught_up() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "ship it", EntryState::Running, 1);
+        assert!(registry.confirm_reply("s", 2), "the hook confirms delivery");
+
+        registry.adopt_entries("s", vec![row("u-1", EntryKind::Tool, "ls")], None);
+
+        let last = registry.cards()[0].entries.last().unwrap().clone();
+        assert_eq!(last.text, "ship it");
+        assert_eq!(last.state, EntryState::Ok, "delivered, and still on screen");
+
+        // And it goes when the file finally names it, not twice over.
+        registry.adopt_entries(
+            "s",
+            vec![
+                row("u-1", EntryKind::Tool, "ls"),
+                row("u-2", EntryKind::User, "ship it"),
+            ],
+            None,
+        );
+        let card = &registry.cards()[0];
+        assert_eq!(card.entries.len(), 2);
+        assert_eq!(card.entries[1].id, "u-2");
+    }
+
+    /// An answer to a permission request is not a prompt: no transcript row
+    /// will ever name it, so protecting it would pin it to the bottom of the
+    /// feed for the rest of the session. tech.md 6.11.
     #[test]
     fn nothing_but_a_reply_in_flight_survives() {
         let mut registry = registry_with_a_call();
