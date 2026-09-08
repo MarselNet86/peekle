@@ -8,7 +8,17 @@ import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { contextLabel, currentModel, effortOptions, modelLabel } from '$lib/logic/agent';
+import {
+  contextLabel,
+  currentModel,
+  effortOptions,
+  modelLabel,
+  noteTitle,
+  settingsNote,
+  askedLabel,
+  ELSEWHERE_NOTE,
+  FINISHED_NOTE,
+} from '$lib/logic/agent';
 import AgentBar from '$lib/ui/AgentBar.svelte';
 import PickerMenu from '$lib/ui/PickerMenu.svelte';
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
@@ -134,6 +144,36 @@ describe('a session that has not answered yet', () => {
     expect(oncompact).not.toHaveBeenCalled();
   });
 
+  /**
+   * A pick shows as made the moment it is made. The old value staying on
+   * screen read as a menu that did nothing, and on a session that has not
+   * answered yet it stayed there until the first message went. tech.md 6.15.
+   */
+  it('stands on the value asked for while it travels', () => {
+    render(AgentBar, {
+      props: {
+        agent: opus,
+        models,
+        live: true,
+        askedModel: 'sonnet',
+        askedEffort: 'Low' as const,
+        pendingModel: true,
+        pendingEffort: true,
+      },
+    });
+
+    expect(screen.getByRole('button', { name: 'Sonnet 5' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Opus 5' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Low' })).toBeTruthy();
+  });
+
+  /** A pick the catalog has never heard of shows by its own alias. */
+  it('names an unknown pick by its alias rather than by nothing', () => {
+    expect(askedLabel('sonnet', models)).toBe('Sonnet 5');
+    expect(askedLabel('tomorrow', models)).toBe('tomorrow');
+    expect(askedLabel(null, models)).toBe('');
+  });
+
   /** Settings that name no model still leave a working picker: it is for
    * choosing one, not for confirming one. */
   it('offers the picker even when nothing is known', async () => {
@@ -147,19 +187,78 @@ describe('a session that has not answered yet', () => {
   });
 });
 
-describe('the row of a session the island cannot type into', () => {
-  it('reads, and calls nothing', async () => {
+describe('the row of a session the island cannot command', () => {
+  /** A chat another app runs takes text but not commands (6.5), so the row
+   * reads. The chevron is what says so on sight: without it there is nothing
+   * to tell a value that opens a menu from a value that does not, and the
+   * reader has to press to find out. tech.md 6.15. */
+  it('wears no chevron, so it is not read as a menu', async () => {
     const handlers = { onmodel: vi.fn(), oneffort: vi.fn(), oncompact: vi.fn() };
-    render(AgentBar, { props: { agent: opus, models, live: false, ...handlers } });
+    const { container } = render(AgentBar, {
+      props: { agent: opus, models, live: false, note: noteTitle(ELSEWHERE_NOTE), ...handlers },
+    });
 
-    for (const name of ['Opus 5', 'High', /Click to compact/] as const) {
-      await userEvent.click(screen.getByRole('button', { name }));
+    expect(container.querySelectorAll('.chev')).toHaveLength(0);
+    for (const name of ['Opus 5', 'High'] as const) {
+      expect(screen.getByText(name)).toBeTruthy();
     }
+    // Both values carry the note: whichever one the reader looks at, it says
+    // where the setting lives.
+    expect(screen.getAllByTitle(noteTitle(ELSEWHERE_NOTE))).toHaveLength(2);
 
-    expect(screen.getByRole('button', { name: 'Opus 5' })).toBeDisabled();
+    // Pressed, they change nothing, whatever else they do.
+    await userEvent.click(screen.getByText('Opus 5'));
+    await userEvent.click(screen.getByText('High'));
+    await userEvent.click(screen.getByLabelText(/context used/));
     expect(handlers.onmodel).not.toHaveBeenCalled();
     expect(handlers.oneffort).not.toHaveBeenCalled();
     expect(handlers.oncompact).not.toHaveBeenCalled();
+  });
+
+  /** The row that does change things carries the affordance the other lacks. */
+  it('is told apart from a live row by that chevron alone', () => {
+    const { container } = render(AgentBar, { props: { agent: opus, models, live: true } });
+    expect(container.querySelectorAll('.chev')).toHaveLength(2);
+  });
+
+  /** The number is true whoever runs the session; only the invitation goes. */
+  it('keeps the context reading without inviting a click', () => {
+    render(AgentBar, { props: { agent: opus, models, live: false } });
+    expect(screen.getByLabelText('61% of context used, 612k of 1000k.')).toBeTruthy();
+  });
+
+  /** A value that looks like a value gets pressed anyway. Silence is the
+   * worst answer to that, so the press asks the question and the note
+   * answers it. tech.md 6.15. */
+  it('answers a press with the reason instead of nothing', async () => {
+    const onnote = vi.fn();
+    render(AgentBar, { props: { agent: opus, models, live: false, onnote } });
+
+    await userEvent.click(screen.getByText('Opus 5'));
+    await userEvent.click(screen.getByText('High'));
+    await userEvent.click(screen.getByLabelText(/context used/));
+    expect(onnote).toHaveBeenCalledTimes(3);
+  });
+
+  /** Ending a turn lives in this row and only while one is running: Claude
+   * Code puts `esc to interrupt` in the same strip, and a row of its own
+   * would move the field under the hand on every turn. tech.md 6.5. */
+  it('offers Stop only while a turn is running, and once per press', async () => {
+    const onstop = vi.fn();
+    const { rerender } = render(AgentBar, {
+      props: { agent: opus, models, live: true, canStop: false, onstop },
+    });
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+
+    await rerender({ agent: opus, models, live: true, canStop: true, onstop });
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(onstop).toHaveBeenCalledOnce();
+
+    await rerender({ agent: opus, models, live: true, canStop: true, stopping: true, onstop });
+    const pressed = screen.getByRole('button', { name: 'Stopping…' });
+    expect(pressed).toBeDisabled();
+    await userEvent.click(pressed);
+    expect(onstop).toHaveBeenCalledOnce();
   });
 
   /** With nothing to stand on -- no transcript, no defaults -- there is no
@@ -229,6 +328,48 @@ describe('what the row says', () => {
 
   it('says what the ring is showing and what clicking it does', () => {
     expect(contextLabel(opus)).toBe('61% of context used, 612k of 1000k. Click to compact.');
+  });
+
+  /** A ring that cannot be compacted still reports the number: the reading is
+   * true whoever is driving the session. Only the invitation goes. 6.15. */
+  it('drops the invitation when there is nothing to click', () => {
+    expect(contextLabel(opus, false)).toBe('61% of context used, 612k of 1000k.');
+    expect(contextLabel(null, false)).toBe('');
+  });
+
+  /**
+   * S21 left a chat another app runs as an observed one, so its row reads and
+   * does not change: a slash command cannot ride the inbox, which wraps what
+   * it carries. The row says where the setting lives instead of dimming and
+   * leaving the reason to be guessed at. tech.md 6.15.
+   */
+  describe('why the row only reads', () => {
+    it('sends the reader to the app that runs the chat', () => {
+      expect(settingsNote({ origin: 'Observed', status: 'Working' })).toBe(ELSEWHERE_NOTE);
+      expect(settingsNote({ origin: 'Observed', status: 'Idle' })).toBe(ELSEWHERE_NOTE);
+    });
+
+    /** The wall has a door, and the note names it: the moment the other app
+     * lets go, the next message continues the chat here and the row comes
+     * alive with it (6.5). A reason with no way out is half an answer. */
+    it('names the way out rather than only the reason', () => {
+      expect(ELSEWHERE_NOTE.how).toMatch(/Close it there/);
+      expect(FINISHED_NOTE.how).toBeUndefined();
+      // Two halves read as two thoughts; one long line reads as an error.
+      expect(noteTitle(ELSEWHERE_NOTE)).toBe(`${ELSEWHERE_NOTE.fact} ${ELSEWHERE_NOTE.how}`);
+      expect(noteTitle(null)).toBe('');
+      expect(noteTitle(FINISHED_NOTE)).toBe(FINISHED_NOTE.fact);
+    });
+
+    it('says a finished session is finished rather than blaming another app', () => {
+      expect(settingsNote({ origin: 'Owned', status: 'Ended' })).toBe(FINISHED_NOTE);
+    });
+
+    it('says nothing at all when the row changes things', () => {
+      expect(settingsNote({ origin: 'Owned', status: 'Working' })).toBeNull();
+      expect(settingsNote({ origin: 'Owned', status: 'Idle' })).toBeNull();
+      expect(settingsNote(null)).toBeNull();
+    });
   });
 
   it('offers no levels for a model that takes none', () => {

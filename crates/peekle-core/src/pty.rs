@@ -373,6 +373,27 @@ impl PtyHost {
     }
 }
 
+/// The one byte that interrupts a turn: `Esc`, the key the TUI binds to it.
+/// No newline follows -- it is a key, not a line -- and no gap either, since
+/// there is nothing for a gap to separate. tech.md 6.5.
+pub const INTERRUPT: &[u8] = b"\x1b";
+
+impl PtyHost {
+    /// Interrupts the running turn of a session Peekle owns. tech.md 6.5.
+    ///
+    /// Held under the same lock as `send`, so the key cannot land between a
+    /// message's text and its newline.
+    pub fn interrupt(&self, session_id: &str) -> Result<(), PtyError> {
+        let mut sessions = self.lock();
+        let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
+        owned
+            .writer
+            .write_all(INTERRUPT)
+            .and_then(|()| owned.writer.flush())
+            .map_err(|err| PtyError::Pty(err.to_string()))
+    }
+}
+
 /// Shared handle, because commands and the hook sink both reach for it.
 pub type SharedPtyHost = Arc<PtyHost>;
 

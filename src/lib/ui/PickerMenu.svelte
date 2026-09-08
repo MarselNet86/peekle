@@ -78,6 +78,11 @@
     onclick={toggle}
   >
     {label}
+    <!-- What makes it a menu on sight. Without it a value that opens one and
+         a value that only reads are the same eleven pixels of text, and the
+         only way to tell them apart is to press. Hidden from the accessible
+         name: the button is still called by its value. tech.md 6.15. -->
+    <span class="chev" aria-hidden="true">▾</span>
   </button>
 
   {#if open}
@@ -105,6 +110,9 @@
   }
 
   .value {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     border: none;
     background: transparent;
     color: var(--text);
@@ -115,6 +123,12 @@
     border-radius: 999px;
     cursor: pointer;
     white-space: nowrap;
+  }
+
+  .chev {
+    font-size: 8px;
+    line-height: 1;
+    color: var(--text-dim);
   }
 
   .value:hover:not(:disabled) {
