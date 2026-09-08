@@ -1,20 +1,25 @@
 <script lang="ts">
+  import { ArrowLeft, Settings } from '@lucide/svelte';
+
   let {
     name,
     title,
     pressed = false,
     onclick,
   }: {
-    /** Which sign it wears. Drawn here, because a feature that draws its own
-     * svg is a feature that drew its own button. tech.md 9. */
-    name: 'gear';
-    /** What it does, for the pointer and for a reader who cannot see a gear. */
+    /** Which sign it wears. The signs come from the icon set, not from hand
+     * drawn paths: a gear drawn by hand comes out a sun, which is what the
+     * first cut of this did. tech.md 9. */
+    name: 'settings' | 'back';
+    /** What it does, for the pointer and for a reader who sees no icon. */
     title: string;
     /** Held lit while what it opened is open. A control that opens something
      * and then looks untouched reads as one that did nothing. */
     pressed?: boolean;
     onclick?: () => void;
   } = $props();
+
+  const Sign = $derived(name === 'settings' ? Settings : ArrowLeft);
 </script>
 
 <!-- A sign and no word. It stands where a word would not fit and says what it
@@ -27,18 +32,7 @@
   class:pressed
   onclick={() => onclick?.()}
 >
-  {#if name === 'gear'}
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <circle cx="8" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4" />
-      <path
-        d="M8 1.4v1.7M8 12.9v1.7M14.6 8h-1.7M3.1 8H1.4M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2M12.7 12.7l-1.2-1.2M4.5 4.5L3.3 3.3"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.4"
-        stroke-linecap="round"
-      />
-    </svg>
-  {/if}
+  <Sign size={15} strokeWidth={1.75} aria-hidden="true" />
 </button>
 
 <style>

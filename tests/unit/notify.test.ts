@@ -14,7 +14,7 @@ import Toggle from '$lib/ui/Toggle.svelte';
 
 describe('the gear', () => {
   it('says what it does for a reader who cannot see a gear', () => {
-    render(IconButton, { props: { name: 'gear', title: 'Settings' } });
+    render(IconButton, { props: { name: 'settings', title: 'Settings' } });
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
   });
 
@@ -22,17 +22,29 @@ describe('the gear', () => {
   /// then looks untouched reads as one that did nothing.
   it('shows whether what it opened is open', () => {
     const { rerender } = render(IconButton, {
-      props: { name: 'gear', title: 'Settings', pressed: false },
+      props: { name: 'settings', title: 'Settings', pressed: false },
     });
     expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('false');
 
-    rerender({ name: 'gear', title: 'Settings', pressed: true });
+    rerender({ name: 'settings', title: 'Settings', pressed: true });
     expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  /// A view that can be entered and not left is a trap, however small it is.
+  /// The way out stands on the left and points back. tech.md 9.
+  it('has a way back, named for where it goes', async () => {
+    const onclick = vi.fn();
+    render(IconButton, {
+      props: { name: 'back', title: 'Back to the session list', onclick },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to the session list' }));
+    expect(onclick).toHaveBeenCalledTimes(1);
   });
 
   it('calls back on a press', async () => {
     const onclick = vi.fn();
-    render(IconButton, { props: { name: 'gear', title: 'Settings', onclick } });
+    render(IconButton, { props: { name: 'settings', title: 'Settings', onclick } });
 
     await userEvent.click(screen.getByRole('button'));
     expect(onclick).toHaveBeenCalledTimes(1);
