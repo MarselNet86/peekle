@@ -58,8 +58,11 @@ export function runCopy(state: SignInState): { title: string; line: string } | n
     case 'Starting':
       return { title: 'Opening your browser', line: '' };
     case 'Waiting':
+      // No line under the title once the field is there: the placeholder
+      // already says what goes in it, and saying it twice is one sentence
+      // the reader has to skip.
       return state.needs_code
-        ? { title: 'Approve in your browser', line: 'Paste the code it gives you.' }
+        ? { title: 'Approve in your browser', line: '' }
         : { title: 'Opening your browser', line: '' };
     case 'Finishing':
       return { title: 'Signing in', line: '' };

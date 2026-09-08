@@ -102,6 +102,19 @@
     cursor: default;
   }
 
+  /* A filled button at 40% over black is a muddy green that reads as a
+     rendering fault. Unavailable, so the accent goes quiet rather than dim --
+     and it stays the accent, because a primary action that becomes
+     indistinguishable from Cancel loses the reader the thing they came for.
+     tech.md 9. */
+  button[data-variant='connect']:disabled,
+  button[data-variant='primary']:disabled {
+    opacity: 1;
+    color: var(--brand-dim);
+    background: var(--brand-soft);
+    border-color: transparent;
+  }
+
   /* A ring with a gap, turning. The one moving part the product has outside
      the feed, and it exists because a wait with no moving part is read as a
      press that was lost. tech.md 9. */

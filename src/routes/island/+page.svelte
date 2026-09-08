@@ -451,7 +451,7 @@
   {#if usage.outOfReach}
     <!-- The account screen, in the strip under the list. Says what is wrong
          and offers the one thing that fixes it. tech.md 6.16. -->
-    <div class="usage">{@render accountPanel()}</div>
+    <div class="usage">{@render accountPanel(true)}</div>
   {:else if usage.connectLabel || usage.failed}
     <div class="usage">
       {#if usage.connectLabel}
@@ -472,8 +472,9 @@
   {/if}
 {/snippet}
 
-{#snippet accountPanel()}
+{#snippet accountPanel(compact = false)}
   <SignInPanel
+    {compact}
     signIn={signIn.state}
     reason={usage.reasonCode}
     busy={signIn.busy || usage.connecting}

@@ -17,6 +17,13 @@
   /* The sign in the resting mark. Apple's system green, brighter than the
      accent on purpose: it is the one mark that has to read as ours. */
   --brand: #30d158;
+  /* The same green with the volume down, for a primary action that is not
+     available yet. Dimming the filled button instead gave a muddy green over
+     black that read as a rendering fault, and flattening it to the neutral
+     outline lost the one thing the reader needs: which of the two buttons is
+     the one they came for. */
+  --brand-soft: rgba(48, 209, 88, 0.15);
+  --brand-dim: rgba(48, 209, 88, 0.5);
   --warn: #e8b34a;
   --orange: #e8894a;
   --danger: #e8654a;
