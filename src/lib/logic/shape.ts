@@ -28,6 +28,17 @@ export const REST_SIDE = 38;
  */
 export const REST_PILL = { width: 78, height: 20 } as const;
 
+/**
+ * How much wider a resting shape gets on each side while the usage badge
+ * stands.
+ *
+ * Symmetric, and it has to be: the notch is a hole in the middle of the
+ * screen, and the black around it is only convincing while the shape stays
+ * centred on it. So the left edge gains empty fill and the right edge gains
+ * the room the number needs. tech.md 6.18.
+ */
+export const REST_BADGE = 36;
+
 export interface Notch {
   width: number;
   height: number;
@@ -64,9 +75,13 @@ function sane(value: number, fallback: number): number {
  * bezel, and a shape that starts at nothing reads as a window appearing rather
  * than as the notch opening.
  */
-export function shapeBounds(view: IslandView, notch: Notch): ShapeBounds {
+export function shapeBounds(view: IslandView, notch: Notch, badge = false): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
+
+  // Only a resting island carries the badge. An open one shows the same number
+  // on the dials in its header, and a third copy of it is not news. tech.md 6.18.
+  const grown = badge && view === 'Collapsed' ? 2 * REST_BADGE : 0;
 
   // Collapsed keeps exactly the height of the cutout and spends every pixel of
   // its growth on the sides. A strip hanging below the notch reads as a second
@@ -75,8 +90,12 @@ export function shapeBounds(view: IslandView, notch: Notch): ShapeBounds {
   const bounds =
     view === 'Collapsed'
       ? height > 0
-        ? { width: width + 2 * REST_SIDE, height, radius: 12 }
-        : { width: REST_PILL.width, height: REST_PILL.height, radius: REST_PILL.height / 2 }
+        ? { width: width + 2 * REST_SIDE + grown, height, radius: 12 }
+        : {
+            width: REST_PILL.width + grown,
+            height: REST_PILL.height,
+            radius: REST_PILL.height / 2,
+          }
       : view === 'Pill'
         ? { width: 420, height: height + 44, radius: 20 }
         : view === 'Sessions'

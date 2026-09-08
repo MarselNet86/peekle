@@ -938,6 +938,7 @@ mod tests {
             provider: UsageProviderKind::Account,
             keychain_denied: denied,
             keychain_granted: granted,
+            ..UsageConfig::default()
         };
 
         assert_eq!(

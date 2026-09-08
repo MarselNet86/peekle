@@ -116,6 +116,11 @@ export const commands = {
   // ask for the permission at all. tech.md 6.17.
   notifyEnabled: () => call<boolean>('notify_enabled'),
   setNotifyEnabled: (on: boolean) => call<void>('set_notify_enabled', { on }),
+
+  // Whether a resting island shows the percent when the window steps into a
+  // new ten. Nothing to ask the system for, so nothing to fail. tech.md 6.18.
+  usageBadge: () => call<boolean>('usage_badge'),
+  setUsageBadge: (on: boolean) => call<void>('set_usage_badge', { on }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

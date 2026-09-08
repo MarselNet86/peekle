@@ -1,10 +1,33 @@
 <script lang="ts">
   import type { RestStatus } from '$lib/logic/rest';
   import { REST_SIDE } from '$lib/logic/shape';
+  import { usageTone } from '$lib/logic/usage';
   import UsageDial from './UsageDial.svelte';
 
-  let { status, pct, onopen }: { status: RestStatus; pct: number | null; onopen: () => void } =
-    $props();
+  let {
+    status,
+    pct,
+    badge = null,
+    onopen,
+  }: {
+    status: RestStatus;
+    pct: number | null;
+    /** The percent stepping out beside the ring, or null while none is.
+     * tech.md 6.18. */
+    badge?: number | null;
+    onopen: () => void;
+  } = $props();
+
+  // Kept after the badge is taken away, so the number can leave on a
+  // transition rather than blink out of the markup. tech.md 6.18.
+  let last = $state<number | null>(null);
+  const standing = $derived(badge !== null);
+  const number = $derived(badge ?? last ?? 0);
+  const tone = $derived(usageTone(number));
+
+  $effect(() => {
+    if (badge !== null) last = badge;
+  });
 
   const known = $derived(pct !== null);
   const value = $derived(known ? Math.round(Math.min(100, Math.max(0, pct as number))) : 0);
@@ -51,7 +74,14 @@
     </svg>
   </span>
 
-  <UsageDial {pct} size={15} />
+  <!-- The number stands to the left of the ring, the way the system writes
+       `10%` to the left of the battery. It is positioned rather than laid
+       out: the ring rides the growing edge of the shape on the spring of
+       6.10, and a number in the flow would shove it there instead. -->
+  <span class="usage">
+    <span class="pct" class:standing data-tone={tone} aria-hidden="true">{number}%</span>
+    <UsageDial {pct} size={15} />
+  </span>
 </button>
 
 <style>
@@ -81,6 +111,55 @@
   /* The click belongs to the button, never to a child. */
   .mark span {
     pointer-events: none;
+  }
+
+  .usage {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .pct {
+    position: absolute;
+    right: calc(100% + 6px);
+    top: 50%;
+    opacity: 0;
+    /* Content follows the shape rather than arriving with it, and leaves
+       before it. tech.md 6.10 and 6.18. */
+    transform: translate(7px, -50%);
+    transition:
+      opacity 150ms ease-out,
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    color: var(--accent);
+  }
+
+  .pct.standing {
+    opacity: 1;
+    transform: translate(0, -50%);
+    transition-delay: 60ms;
+  }
+
+  /* The number carries the same thresholds as the ring beside it: two
+     readings of one number must never disagree on colour. tech.md 9. */
+  .pct[data-tone='warn'] {
+    color: var(--warn);
+  }
+  .pct[data-tone='orange'] {
+    color: var(--orange);
+  }
+  .pct[data-tone='danger'] {
+    color: var(--danger);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pct {
+      transition: none;
+    }
   }
 
   /* One colour in every state. A sign is recognised by its colour, and

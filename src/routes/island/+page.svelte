@@ -2,6 +2,7 @@
   import { commands, fileSrc } from '$lib/bridge';
   import { createAgent } from '$lib/features/agent/agent.svelte';
   import { createNotify, NOTIFY_HINT } from '$lib/features/notify/notify.svelte';
+  import { createBadge, BADGE_HINT } from '$lib/features/usage/badge.svelte';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
@@ -59,6 +60,7 @@
   const shots = createShots();
   const agent = createAgent();
   const notify = createNotify();
+  const badge = createBadge();
 
   let host = $state<HTMLElement | null>(null);
   // Whether the gear has the list open on settings instead. One shape, so the
@@ -153,6 +155,19 @@
   // The ring on the mark and the 5h bar inside read the same number, so they
   // come from the same place. tech.md 6.7.
   const hourWindow = $derived(usage.bars[0]?.pct ?? null);
+
+  // Every reading is judged, and one in ten of them is news: the window
+  // stepping into a new ten is the only thing the resting island announces
+  // about usage. tech.md 6.18.
+  $effect(() => {
+    badge.track(hourWindow);
+  });
+
+  // A preview the switch promised plays when the island is back on the bezel,
+  // which is the only place the badge exists. tech.md 6.18.
+  $effect(() => {
+    if (island.view === 'Collapsed') badge.rest();
+  });
 
   // Whether this session has an input field at all. One question with one
   // answer: the island types into sessions it started, and into nothing else.
@@ -415,6 +430,7 @@
       shots.start(),
       agent.start(),
       notify.start().then(() => () => {}),
+      badge.start(),
     ]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
@@ -544,9 +560,9 @@
 {/snippet}
 
 <div class="island" bind:this={host}>
-  <Shape view={island.view} notch={island.notch}>
+  <Shape view={island.view} notch={island.notch} badge={badge.wide}>
     {#snippet rest()}
-      <RestMark status={resting} pct={hourWindow} onopen={() => reopen()} />
+      <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />
     {/snippet}
 
     <!-- A screenshot is waiting to be attached, and it outranks a toast: the
@@ -615,6 +631,16 @@
               {#if notify.error}
                 <p class="empty">{notify.error}</p>
               {/if}
+              <!-- Turning it on shows the badge at once: the next ten may be an
+                   hour away, and a switch nobody can see work is a switch
+                   nobody believes. tech.md 6.18. -->
+              <Toggle
+                label="Show usage on the island"
+                hint={BADGE_HINT}
+                checked={badge.on}
+                busy={badge.busy}
+                onchange={(next) => badge.set(next, hourWindow)}
+              />
             </div>
           {:else}
             <!-- Only once there is a list worth searching. tech.md S14. -->
@@ -696,16 +722,6 @@
               <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
             </svg>
             <span>{current.session.project}</span>
-          </button>
-          <!-- The gesture the open dialogue invites: another go at this same
-               project, in a session the island owns. -->
-          <button
-            class="new"
-            onclick={() => startSession(current.session.cwd)}
-            title="Start a new session in this project"
-            aria-label="Start a new session in this project"
-          >
-            +
           </button>
           <!-- The windows in miniature. The full bars stay in the list, where
                there is room for them. tech.md 6.12. -->
@@ -933,26 +949,6 @@
 
   .start {
     padding: 0 2px 8px;
-  }
-
-  .new {
-    margin-left: auto;
-    flex: none;
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-dim);
-    font: inherit;
-    font-size: 13px;
-    line-height: 1;
-    width: 20px;
-    height: 20px;
-    margin-bottom: 4px;
-    cursor: pointer;
-  }
-
-  .new:hover {
-    color: var(--text);
   }
 
   .dials {
