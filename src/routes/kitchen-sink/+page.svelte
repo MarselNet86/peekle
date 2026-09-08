@@ -307,6 +307,10 @@
     <div class="stage messages">
       <FeedRow entry={formatted} />
       <FeedRow entry={{ ...formatted, id: 'k1', kind: 'User', text: 'ship it' }} />
+      <!-- Something the conversation records that nobody said. tech.md 6.15. -->
+      <FeedRow
+        entry={{ ...formatted, id: 'k2', kind: 'Notice', text: 'Switched to claude-opus-5[1m]' }}
+      />
     </div>
   </section>
 

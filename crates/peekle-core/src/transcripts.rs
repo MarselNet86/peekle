@@ -319,6 +319,18 @@ where
                     }
                 }
 
+                // A model change is not a turn and not synthetic noise: it is
+                // a thing that happened to this conversation, and the file is
+                // where it is written down. tech.md 6.15.
+                for name in texts_of(&record).iter().filter_map(|t| switched_model(t)) {
+                    entries.push(entry(
+                        next_id(),
+                        EntryKind::Notice,
+                        format!("Switched to {name}"),
+                        at,
+                    ));
+                }
+
                 for text in texts_of(&record).into_iter().filter_map(|t| spoken(&t)) {
                     if first_turn.is_empty() {
                         first_turn = truncate(&text, TITLE_LIMIT);
@@ -510,6 +522,38 @@ fn texts_of(record: &Value) -> Vec<String> {
 /// The same file read twice has to give the same ids: the live feed re-reads
 /// it after every hook, and fresh keys would rebuild the whole list, throwing
 /// away the scroll position and every expanded row. tech.md 6.11.
+/// The model a `/model` line settled on, out of the line Claude Code prints
+/// for itself.
+///
+/// Two shapes seen live, and both are the same statement: an alias resolved
+/// into a name in backticks, and a display name in bold with a tail about
+/// defaults. What the feed shows is the name and nothing else -- the tail
+/// answers a question about new sessions, not about this one.
+///
+/// Read out of the file rather than written when the island sends `/model`:
+/// the change is Claude Code's to make, it records it, and a switch made in
+/// the terminal or the IDE belongs in the feed exactly as much as ours.
+/// tech.md 6.11 and 6.15.
+pub fn switched_model(text: &str) -> Option<String> {
+    const OPEN: &str = "<local-command-stdout>";
+    const LEAD: &str = "Set model to ";
+
+    let inside = text.trim().strip_prefix(OPEN)?;
+    let plain = crate::auth::strip_escapes(inside);
+    let name = plain.trim().strip_prefix(LEAD)?;
+    let name = name
+        .split(" and saved as")
+        .next()
+        .unwrap_or(name)
+        .trim()
+        .trim_end_matches("</local-command-stdout>")
+        .trim()
+        .trim_matches('`')
+        .trim();
+
+    (!name.is_empty()).then(|| name.to_string())
+}
+
 /// Whether an `assistant` record is the API refusing rather than the model
 /// answering. Claude Code flags it, and names the model `<synthetic>` for
 /// good measure; either mark is enough. tech.md 6.11.

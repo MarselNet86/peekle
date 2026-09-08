@@ -963,6 +963,7 @@ pub fn get_defaults() -> peekle_core::types::AgentSetup {
 /// filter of 6.11 already drops.
 #[tauri::command]
 pub fn set_model(
+    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     model: String,
@@ -970,6 +971,7 @@ pub fn set_model(
     let line = peekle_core::agent::model_command(&model)
         .map_err(|_| "That is not a model name".to_string())?;
     command_session(
+        Some(&app),
         state.inner(),
         &session_id,
         Some((HeldKind::Model, model.trim().to_string())),
@@ -980,11 +982,13 @@ pub fn set_model(
 /// Changes how hard the session is asked to think. tech.md 6.15.
 #[tauri::command]
 pub fn set_effort(
+    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     effort: peekle_core::types::Effort,
 ) -> Result<(), String> {
     command_session(
+        Some(&app),
         state.inner(),
         &session_id,
         Some((HeldKind::Effort, effort.flag().to_string())),
@@ -995,8 +999,13 @@ pub fn set_effort(
 /// Frees up context by summarising the conversation. The ring is the button.
 /// tech.md 6.15.
 #[tauri::command]
-pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> Result<(), String> {
+pub fn compact_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<(), String> {
     command_session(
+        Some(&app),
         state.inner(),
         &session_id,
         None,
@@ -1010,6 +1019,9 @@ pub fn compact_session(state: State<'_, Arc<AppState>>, session_id: String) -> R
 /// observed session has no channel at all, and a setting that silently goes
 /// nowhere is worse than one that says it could not.
 fn command_session(
+    // Present when there is a window to tell about the result. The tests call
+    // this without one: what they check is the refusal, not the redraw.
+    app: Option<&AppHandle>,
     state: &Arc<AppState>,
     session_id: &str,
     // What to hold if the session has not answered yet: the kind, and the
@@ -1041,7 +1053,54 @@ fn command_session(
     state.pty().send(session_id, line).map_err(|err| {
         tracing::warn!(error = %err, session_id, "the pty refused the setting");
         "That session is no longer listening".to_string()
-    })
+    })?;
+
+    // Claude Code writes the change into its transcript, and that record is
+    // what the feed shows (tech.md 6.15). Nothing fires for a slash command,
+    // though, so an idle chat would show it only at the next hook. Read the
+    // file again shortly, twice: once for a quick answer, once for a slow one.
+    if let Some(app) = app {
+        reread_soon(app, state, session_id);
+    }
+    Ok(())
+}
+
+/// Re-reads one session's transcript a moment from now, and again after that.
+///
+/// For the things Claude Code records without telling anyone: a slash command
+/// raises no hook at all, so nothing would otherwise pull the file. Two reads
+/// rather than a poll, because there is exactly one write to wait for.
+fn reread_soon(app: &AppHandle, state: &Arc<AppState>, session_id: &str) {
+    let Some(root) = peekle_core::transcripts::default_root() else {
+        return;
+    };
+    let Some(card) = state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+    else {
+        return;
+    };
+    let path = peekle_core::transcripts::transcript_path(
+        &root,
+        &card.session.cwd,
+        &card.session.session_id,
+    );
+
+    let app = app.clone();
+    let state = Arc::clone(state);
+    let session_id = session_id.to_string();
+    tauri::async_runtime::spawn(async move {
+        for wait in [Duration::from_millis(900), Duration::from_millis(2500)] {
+            tokio::time::sleep(wait).await;
+            crate::hooks::refresh_session(
+                app.clone(),
+                Arc::clone(&state),
+                session_id.clone(),
+                path.to_string_lossy().into_owned(),
+            );
+        }
+    });
 }
 
 /// The webview opened or closed a screenshot at full size. tech.md 6.13.
@@ -1268,6 +1327,7 @@ mod tests {
             peekle_core::agent::COMPACT_COMMAND,
         ] {
             let refused = command_session(
+                None,
                 &state,
                 "someone-elses",
                 Some((HeldKind::Model, "opus".to_string())),
@@ -1345,7 +1405,7 @@ mod tests {
         state.claim_session("ours");
 
         let pick = |kind: HeldKind, value: &str, line: &str| {
-            command_session(&state, "ours", Some((kind, value.to_string())), line)
+            command_session(None, &state, "ours", Some((kind, value.to_string())), line)
         };
         assert_eq!(pick(HeldKind::Model, "opus", "/model opus"), Ok(()));
         assert_eq!(pick(HeldKind::Effort, "max", "/effort max"), Ok(()));
@@ -1483,7 +1543,13 @@ mod tests {
         let state = fresh();
         state.claim_session("ours");
         assert_eq!(
-            command_session(&state, "ours", None, peekle_core::agent::COMPACT_COMMAND),
+            command_session(
+                None,
+                &state,
+                "ours",
+                None,
+                peekle_core::agent::COMPACT_COMMAND
+            ),
             Err("There is nothing to compact yet".to_string())
         );
     }

@@ -209,6 +209,11 @@ pub enum EntryKind {
     /// The agent reasoning with itself, collapsed to a marker. Claude Code
     /// shows the same thing in the terminal. tech.md 6.11.
     Thought,
+    /// Something the conversation records that nobody said: the model was
+    /// changed here. Claude Code writes it into the transcript itself, and the
+    /// feed reads it from there rather than inventing a row of its own.
+    /// tech.md 6.11 and 6.15.
+    Notice,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

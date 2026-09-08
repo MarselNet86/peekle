@@ -44,6 +44,27 @@ describe('FeedRow', () => {
     }
   });
 
+  /// A model change belongs to the conversation but nobody said it, so it
+  /// takes neither side: no bubble, no tool row, a line of its own.
+  /// tech.md 6.15 and 9.
+  it('draws a model switch as a line about the conversation, not in it', () => {
+    const { container } = render(FeedRow, {
+      props: {
+        entry: entry({
+          kind: 'Notice',
+          tool: null,
+          state: 'Ok',
+          text: 'Switched to claude-opus-5[1m]',
+        }),
+      },
+    });
+
+    expect(screen.getByText('Switched to claude-opus-5[1m]')).toBeInTheDocument();
+    expect(container.querySelector('.notice')).not.toBeNull();
+    expect(container.querySelector('.bubble')).toBeNull();
+    expect(container.querySelector('.row')).toBeNull();
+  });
+
   it("draws the user's own turn as a message rather than a row", () => {
     const { container } = render(FeedRow, {
       props: { entry: entry({ kind: 'User', tool: null, text: 'ship it', state: 'Ok' }) },

@@ -5,6 +5,9 @@
   let { entry }: { entry: FeedEntry } = $props();
 
   const spoken = $derived(entry.kind === 'User' || entry.kind === 'Assistant');
+  // Not a message and not an object with a body: a line the conversation
+  // records about itself. tech.md 6.15.
+  const notice = $derived(entry.kind === 'Notice');
   // Collapsed like the terminal shows it, opened by a click. tech.md 6.12.
   let open = $state(false);
   // Parsed into segments and rendered as elements. Never `{@html}`: this text
@@ -15,7 +18,12 @@
 <!-- What a person said and what the agent answered are messages: they wrap,
      they carry their whole text, and the user's own turn is the green one. A
      tool call stays a single quiet line. tech.md 9 and 6.12. -->
-{#if spoken}
+{#if notice}
+  <!-- Centred between two rules, the way Claude Code marks the same thing in
+       its own transcript: it belongs to the conversation but nobody said it,
+       so it takes neither side. tech.md 9. -->
+  <div class="notice"><span>{entry.text}</span></div>
+{:else if spoken}
   <div class="line" data-kind={entry.kind} data-state={entry.state}>
     <div class="bubble">
       {#each parts as block, index (index)}
@@ -126,6 +134,32 @@
     border: 1px solid var(--hairline);
     color: var(--text);
     border-bottom-left-radius: 4px;
+  }
+
+  /* A line about the conversation rather than in it. The rules are drawn by
+     the row itself and grow to fill whatever the words leave. */
+  .notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 2px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .notice::before,
+  .notice::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
+  }
+
+  .notice span {
+    flex: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* An answer that is the API refusing, not the model speaking. The edge
