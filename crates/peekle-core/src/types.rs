@@ -185,6 +185,9 @@ pub enum IslandView {
     Collapsed,
     /// One line of status, width follows the content.
     Pill,
+    /// The compact permission panel: what the tool is, what it wants, and two
+    /// buttons. Answering yes or no needs none of the feed. tech.md 6.7.
+    Ask,
     /// The list of sessions.
     Sessions,
     /// The feed of one session, by its session_id.

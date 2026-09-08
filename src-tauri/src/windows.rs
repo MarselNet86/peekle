@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use peekle_core::island::shape_rect;
-use peekle_core::types::{IslandView, PromptOutcome, PromptRequest, ToastRequest, ToastTone};
+use peekle_core::types::{
+    IslandView, PromptKind, PromptOutcome, PromptRequest, ToastRequest, ToastTone,
+};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
@@ -269,13 +271,41 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     }
 
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
-    set_view(app, IslandView::Session(request.session.session_id.clone()));
+
+    let next = view_for(request.kind, &request.session.session_id, &state.view());
+    if let Some(view) = next.clone() {
+        set_view(app, view);
+    }
 
     // Shown, and now it waits, because a hook is pending and this form is the
     // only place it gets answered. Quiet all the way through means the user is
     // not there, and the island puts itself away with the request still
-    // pending. tech.md 6.7.
-    state.hold_open(Instant::now() + PROMPT_HOLD);
+    // pending -- the panel's twenty seconds are the panel's, never the hook's.
+    // tech.md 6.7.
+    let hold = if next == Some(IslandView::Ask) {
+        ASK_HOLD
+    } else {
+        PROMPT_HOLD
+    };
+    state.hold_open(Instant::now() + hold);
+}
+
+/// Which view a blocking request raises, or None to leave the island alone.
+///
+/// A permission asks for yes or no, and neither answer needs the feed, so it
+/// gets the compact panel. Everything else -- a question with its own options,
+/// a prompt at the end of a turn -- opens the session it belongs to. Nothing
+/// moves at all when the island already stands on that very session: the
+/// person is reading the thing the request is about, and swapping it for a
+/// panel takes it away from them. tech.md 6.7.
+fn view_for(kind: PromptKind, session_id: &str, current: &IslandView) -> Option<IslandView> {
+    if matches!(current, IslandView::Session(open) if open == session_id) {
+        return None;
+    }
+    Some(match kind {
+        PromptKind::Permission => IslandView::Ask,
+        _ => IslandView::Session(session_id.to_string()),
+    })
 }
 
 /// How long an island opened by a blocking request waits for the user before
@@ -285,6 +315,15 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
 /// its own question, up to four options and a description under each, and ten
 /// seconds ran out while the user was still reading. tech.md 6.7.
 const PROMPT_HOLD: Duration = Duration::from_secs(45);
+
+/// How long the compact permission panel stands before the island puts itself
+/// away.
+///
+/// Short because there is nothing to read: a tool name, one line of input and
+/// two buttons. The person who wants more presses the panel and lands in the
+/// session, where the usual rules take over. Nothing is resolved when it runs
+/// out -- the request stays pending and the mark goes on pulsing. tech.md 6.7.
+const ASK_HOLD: Duration = Duration::from_secs(20);
 
 /// The same for an island opened by a turn that just ended. Shorter on purpose:
 /// nothing is pending, so an unread notice is not a reason to sit on top of the
@@ -376,7 +415,49 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 
 #[cfg(test)]
 mod tests {
-    use super::{DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD};
+    use super::{view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD};
+    use peekle_core::types::{IslandView, PromptKind};
+
+    /// The panel is a question with two answers on it, so it does not need the
+    /// forty five seconds a question with four options and descriptions does.
+    /// What it must never be is shorter than the walk to it. tech.md 6.7.
+    #[test]
+    fn the_permission_panel_stands_for_twenty_seconds() {
+        assert_eq!(ASK_HOLD, Duration::from_secs(20));
+        assert!(ASK_HOLD < PROMPT_HOLD);
+        assert!(ASK_HOLD > DISMISS_AFTER);
+    }
+
+    #[test]
+    fn a_permission_raises_the_panel_and_everything_else_raises_the_session() {
+        let collapsed = IslandView::Collapsed;
+        assert_eq!(
+            view_for(PromptKind::Permission, "s1", &collapsed),
+            Some(IslandView::Ask)
+        );
+        assert_eq!(
+            view_for(PromptKind::Question, "s1", &collapsed),
+            Some(IslandView::Session("s1".into()))
+        );
+        assert_eq!(
+            view_for(PromptKind::Idle, "s1", &collapsed),
+            Some(IslandView::Session("s1".into()))
+        );
+    }
+
+    /// Reading the feed of the session that is asking is the best place to be
+    /// asked from. Nothing takes that away.
+    #[test]
+    fn a_session_already_on_screen_is_left_alone() {
+        let open = IslandView::Session("s1".into());
+        assert_eq!(view_for(PromptKind::Permission, "s1", &open), None);
+        assert_eq!(
+            view_for(PromptKind::Permission, "s2", &open),
+            Some(IslandView::Ask),
+            "another session asking is still news"
+        );
+    }
+
     use std::time::Duration;
 
     /// The v44.1 rule: what waits on the user stays up longer than what only

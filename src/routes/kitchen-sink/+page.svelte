@@ -8,6 +8,7 @@
   import IconButton from '$lib/ui/IconButton.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
+  import AskPanel from '$lib/ui/AskPanel.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
@@ -86,6 +87,7 @@
   const views: [string, IslandView][] = [
     ['Collapsed', 'Collapsed'],
     ['Pill', 'Pill'],
+    ['Ask', 'Ask'],
     ['Sessions', 'Sessions'],
     ['Session', { Session: '01J0' }],
   ];
@@ -552,6 +554,16 @@
   </section>
 
   <section>
+    <h2>AskPanel</h2>
+    <!-- On the island fill and at the width the Ask view springs to, because
+         that is the only place it is ever seen. tech.md 6.7. -->
+    <!-- Fresh, so the clock and the hairline are the live ones. -->
+    <div class="ask-stage">
+      <AskPanel request={{ ...permission, created_at: Date.now() }} />
+    </div>
+  </section>
+
+  <section>
     <h2>QuestionPrompt</h2>
     <!-- AskUserQuestion answered one question at a time: single-select
          advances on click, multiSelect needs its own Submit. tech.md 6.14. -->
@@ -697,6 +709,14 @@
     background: var(--notch);
     padding: 10px;
     height: auto;
+  }
+
+  .ask-stage {
+    width: 460px;
+    height: 62px;
+    overflow: hidden;
+    background: var(--notch);
+    border-radius: 0 0 22px 22px;
   }
 
   .mark-stage {

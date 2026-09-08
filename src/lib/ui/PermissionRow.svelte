@@ -44,8 +44,10 @@
   </div>
 
   <div class="actions">
-    <Button label="Deny" onclick={() => ondeny?.()} />
-    <Button label="Allow" variant="primary" onclick={() => onallow?.()} />
+    <!-- The same two buttons the panel carries, because it is the same
+         question in a second place. tech.md 9 and 6.7. -->
+    <Button label="Deny" variant="muted" onclick={() => ondeny?.()} />
+    <Button label="Allow" variant="prominent" onclick={() => onallow?.()} />
   </div>
 </div>
 

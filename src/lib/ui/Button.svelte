@@ -8,7 +8,7 @@
     onclick,
   }: {
     label: string;
-    variant?: 'primary' | 'ghost' | 'connect';
+    variant?: 'primary' | 'ghost' | 'connect' | 'prominent' | 'muted';
     disabled?: boolean;
     /** Fills the row it sits in. For a control that is the only thing there. */
     wide?: boolean;
@@ -74,6 +74,36 @@
   button[data-variant='primary']:hover:not(:disabled) {
     color: var(--notch);
     filter: brightness(1.08);
+  }
+
+  /* The pair a system alert wears, and they are worn where the island plays
+     one: the permission panel and the permission row. White carries the
+     answer that lets the agent through, dark carries the one that does not.
+     Green is not offered here -- `--brand` means Peekle in this product, not
+     yes. tech.md 9 and 6.7. */
+  button[data-variant='prominent'] {
+    color: var(--notch);
+    background: #fff;
+    border-color: #fff;
+    font-weight: 600;
+  }
+
+  button[data-variant='prominent']:hover:not(:disabled) {
+    color: var(--notch);
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(255, 255, 255, 0.88);
+  }
+
+  button[data-variant='muted'] {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: transparent;
+  }
+
+  button[data-variant='muted']:hover:not(:disabled) {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: transparent;
   }
 
   /* Connecting is the one action that gets the product's own green, the same
