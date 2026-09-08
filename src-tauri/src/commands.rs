@@ -429,18 +429,30 @@ pub async fn start_sign_in(
 
     // Asked before the process is spawned, because the answer decides whether
     // spawning one is the right thing at all. A CLI that is signed in while
-    // the endpoint refuses is a network or a region problem, and sending the
-    // user through a login would repeat the mistake Reconnect made under a new
-    // name. tech.md 6.16.
+    // the endpoint refuses is not a login problem: the credential is there and
+    // valid, and driving the user through `auth login` would repeat the
+    // mistake Reconnect made under a new name. tech.md 6.16.
     if tauri::async_runtime::spawn_blocking(cli_signed_in)
         .await
         .ok()
         .flatten()
         == Some(true)
     {
+        // Almost always the snapshot is simply old: Claude Code refreshes the
+        // Keychain entry as it runs, and the reason on screen was written
+        // before that happened. Asking again is the whole fix, and it is what
+        // the press should have done rather than explaining a dead end. Only
+        // if it still fails is there anything to say. tech.md 6.16.
+        let fresh = fetch_usage(&app, &state).await;
+        if fresh.reason.is_none() {
+            return Ok(publish_sign_in(&app, SignInState::idle()));
+        }
         return Ok(publish_sign_in(
             &app,
-            SignInState::failed("Claude Code is signed in, so the API refused for another reason"),
+            SignInState::failed(
+                "Claude Code is signed in, so signing in again will not help. \
+                 Check your connection or VPN.",
+            ),
         ));
     }
 

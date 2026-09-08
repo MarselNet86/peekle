@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, events } from '$lib/bridge';
 import { createSignIn } from '$lib/features/signin/signin.svelte';
 import { connectLabel, gateSessions, needsSignIn } from '$lib/features/usage/usage.svelte';
+import { barred } from '$lib/logic/sessions';
 import SignInPanel from '$lib/ui/SignInPanel.svelte';
 import type { SignInState } from '$lib/types/generated/SignInState';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
@@ -227,5 +228,25 @@ describe('the store', () => {
     handler(state({ stage: 'Done' }));
     expect(signIn.open).toBe(false);
     stop();
+  });
+});
+
+describe('a chat opened while the account is out of reach', () => {
+  /// A conversation the island cannot reach is a dead screen with a
+  /// scrollbar, so the way back in stands where the chat would be.
+  it('shows the sign-in instead of the chat', () => {
+    expect(barred({ needsSignIn: true, hasPrompt: false })).toBe(true);
+  });
+
+  /// The one thing the island exists for. A hook waiting on Allow or Deny is
+  /// blocking a real agent run, and no account problem may stand in front of
+  /// it. tech.md 6.4.
+  it('never stands in front of a hook that is waiting', () => {
+    expect(barred({ needsSignIn: true, hasPrompt: true })).toBe(false);
+  });
+
+  it('is out of the way whenever the account is reachable', () => {
+    expect(barred({ needsSignIn: false, hasPrompt: false })).toBe(false);
+    expect(barred({ needsSignIn: false, hasPrompt: true })).toBe(false);
   });
 });

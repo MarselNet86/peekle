@@ -16,6 +16,7 @@
   import { createSignIn } from '$lib/features/signin/signin.svelte';
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import {
+    barred as isBarred,
     canContinue as canContinueCard,
     classifyContinueOutcome,
     replyReachable,
@@ -175,6 +176,10 @@
 
   async function startSession(cwd: string) {
     startError = null;
+    // No agent is spawned behind a screen that says the account is not
+    // reachable. The button is not offered while barred either; this is the
+    // second lock on the same door. tech.md 6.16.
+    if (barred) return;
     try {
       const session = await commands.startSession(cwd);
       if (session) openSession(session.session_id);
@@ -251,6 +256,15 @@
   // still waiting on the agent to confirm a pick. tech.md 6.15.
   const setup = $derived(current?.agent ?? null);
   const waiting = $derived(agent.pendingFor(current?.session.session_id ?? '', setup));
+
+  // A chat the user opened has nothing to show until the account is reachable,
+  // so the way in stands where the chat would be rather than under it. Never
+  // while a hook is waiting: answering a live permission request is the one
+  // thing the island exists for, and it must work whatever usage says.
+  // tech.md 6.4 and 6.16.
+  const barred = $derived(
+    isBarred({ needsSignIn: usage.needsSignIn, hasPrompt: island.prompt !== null }),
+  );
 
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
   const question = $derived(isQuestion(island.prompt) ? island.prompt : null);
@@ -451,8 +465,10 @@
         />
       {/if}
       <!-- Why it is not connected, in words. A press that changes nothing on
-           screen reads as a press that was lost. tech.md 6.4. -->
-      {#if usage.failed && !usage.connecting && !signIn.open}
+           screen reads as a press that was lost. Not while the sign-in owns
+           this space: it says what is happening and why itself, and two
+           captions under one button contradicted each other. tech.md 6.16. -->
+      {#if usage.failed && !usage.connecting && !usage.needsSignIn}
         <p class="why">{usage.reason}</p>
       {/if}
     </div>
@@ -503,7 +519,7 @@
                 onclick={() => usage.connect()}
               />
             {/if}
-            {#if usage.failed && !usage.connecting && !signIn.open}
+            {#if usage.failed && !usage.connecting && !usage.needsSignIn}
               <p class="why">{usage.reason}</p>
             {/if}
           </div>
@@ -512,7 +528,11 @@
           {#if feed.sessions.length > 3}
             <div class="search"><SearchField bind:value={query} /></div>
           {/if}
-          {#if newestCwd}
+          <!-- Not offered while the account is out of reach: a new chat needs
+               an agent, and starting one behind a screen that says the island
+               cannot reach the account is a session nobody can use. The way in
+               stands at the bottom of this list instead. tech.md 6.16. -->
+          {#if newestCwd && !barred}
             <div class="start">
               <Button label="New session" onclick={() => startSession(newestCwd)} wide />
             </div>
@@ -543,6 +563,27 @@
 
           {@render connect()}
         {/if}
+      </div>
+    {:else if barred}
+      <!-- Instead of the chat, not over it: opening a conversation the island
+           cannot reach is a dead screen with a scrollbar. tech.md 6.16. -->
+      <div class="feed">
+        <div class="head">
+          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+            <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+              <path
+                d="M6.5 1L1.5 6l5 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <span class="project">Sign in to continue</span>
+        </div>
+        <div class="gate">{@render signInPanel()}</div>
       </div>
     {:else if current}
       <div class="feed">

@@ -16,7 +16,7 @@ const REASONS: Record<UsageUnavailable, string> = {
   Disabled: 'usage is off in the config',
   NotGranted: 'needs Keychain access',
   Denied: 'Keychain access was denied',
-  NotLoggedIn: 'log in with the Claude Code CLI',
+  NotLoggedIn: 'not signed in',
   Offline: 'no internet connection',
   Network: 'could not reach the API',
   RateLimited: 'too many requests, it asked to wait',
