@@ -1,9 +1,12 @@
 <script lang="ts">
+  let notifyOn = $state(true);
   import Kbd from '$lib/ui/Kbd.svelte';
   import LabelPill from '$lib/ui/LabelPill.svelte';
   import MessageBlock from '$lib/ui/MessageBlock.svelte';
   import OptionList from '$lib/ui/OptionList.svelte';
   import Button from '$lib/ui/Button.svelte';
+  import IconButton from '$lib/ui/IconButton.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
@@ -372,6 +375,23 @@
          tech.md 6.15. -->
     <NoteBlock fact={ELSEWHERE_NOTE.fact} how={ELSEWHERE_NOTE.how} />
     <NoteBlock fact={FINISHED_NOTE.fact} />
+  </section>
+
+  <section>
+    <h2>IconButton and Toggle</h2>
+    <!-- The gear that opens settings, and the one setting under it.
+         tech.md 6.17. -->
+    <div class="row">
+      <IconButton name="gear" title="Settings" onclick={() => {}} />
+      <IconButton name="gear" title="Settings" pressed onclick={() => {}} />
+    </div>
+    <Toggle
+      label="Notify when a turn ends"
+      hint="macOS decides whether banners appear. Check System Settings › Notifications."
+      checked={notifyOn}
+      onchange={(next) => (notifyOn = next)}
+    />
+    <Toggle label="Waiting on the system" checked={false} busy />
   </section>
 
   <section>

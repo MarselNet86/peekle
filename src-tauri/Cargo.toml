@@ -41,6 +41,11 @@ objc2-app-kit = "0.3.2"
 objc2-foundation = "0.3.2"
 tauri-plugin-global-shortcut = "2.3.2"
 peekle-hotkey = { version = "0.1.0", path = "../crates/peekle-hotkey" }
+tauri-plugin-notification = "2.4.0"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Property tests for the pure decisions of this crate. tech.md 10.
+proptest = "1.11.0"

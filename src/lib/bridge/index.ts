@@ -107,6 +107,11 @@ export const commands = {
   setModel: (sessionId: string, model: string) => call<void>('set_model', { sessionId, model }),
   setEffort: (sessionId: string, effort: Effort) => call<void>('set_effort', { sessionId, effort }),
   compactSession: (sessionId: string) => call<void>('compact_session', { sessionId }),
+  // The banner a finished turn puts on the screen. Reading the switch costs
+  // nothing; flicking it on posts the first banner, which is what makes macOS
+  // ask for the permission at all. tech.md 6.17.
+  notifyEnabled: () => call<boolean>('notify_enabled'),
+  setNotifyEnabled: (on: boolean) => call<void>('set_notify_enabled', { on }),
 };
 
 async function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
