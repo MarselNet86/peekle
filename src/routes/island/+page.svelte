@@ -17,6 +17,7 @@
   import { createSignIn } from '$lib/features/signin/signin.svelte';
   import { noteTitle, settingsNote, type SettingsNote } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
+  import { feedRows } from '$lib/logic/work';
   import {
     barred as isBarred,
     canContinue as canContinueCard,
@@ -40,7 +41,7 @@
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
-  import TypingLine from '$lib/ui/TypingLine.svelte';
+  import WorkLine from '$lib/ui/WorkLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
@@ -69,7 +70,9 @@
     const id = sessionOf(island.view);
     return id ? feed.card(id) : undefined;
   });
-  const rows = $derived(current?.entries ?? []);
+  // Everything said, in order, with each run of calls folded into one line
+  // that carries a clock. tech.md 6.12.
+  const rows = $derived(feedRows(current?.entries ?? [], current?.status === 'Working'));
   // A view naming a session the feed does not have falls back to the list.
   // The alternative is what it used to do: render none of the branches and
   // leave an empty black shape on screen, which reads as a crash.
@@ -712,14 +715,15 @@
           </div>
         </div>
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
-          {#each rows as entry (entry.id)}
-            <FeedRow {entry} />
+          {#each rows as row (row.id)}
+            {#if row.kind === 'said'}
+              <FeedRow entry={row.entry} />
+            {:else}
+              <!-- A whole run of calls, as the one thing asked of it: whether
+                   the agent is out, and for how long. tech.md 6.12. -->
+              <WorkLine running={row.to === null} from={row.from} to={row.to} />
+            {/if}
           {/each}
-          <!-- The agent is mid turn, so the dialogue says so instead of sitting
-               still and reading as broken. tech.md 6.12. -->
-          {#if current.status === 'Working'}
-            <TypingLine />
-          {/if}
         </div>
         <ScrollHint visible={showHint} onclick={() => toBottom()} />
         {@render connect()}
