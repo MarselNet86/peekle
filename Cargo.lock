@@ -2429,10 +2429,12 @@ name = "peekle-core"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "libc",
  "portable-pty",
  "proptest",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.20",
  "tokio",
  "toml 1.1.4+spec-1.1.0",

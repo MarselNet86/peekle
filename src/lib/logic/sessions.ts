@@ -55,10 +55,11 @@ export function replyReachable(state: {
 }
 
 /**
- * The exact refusal `continue_session` gives when another client is driving
- * the chat right now. Matched here rather than treated as an ordinary error,
- * so a rejection can become "wait and try again" instead of a dead end.
- * tech.md 6.5.
+ * The exact refusal `continue_session` gives when a live process holds the
+ * chat and offers no inbox to put words into. Matched here rather than
+ * treated as an ordinary error, so a rejection can become "wait and try
+ * again" instead of a dead end: the process goes, or its inbox appears, and
+ * the next attempt lands. tech.md 6.5.
  */
 export const BUSY_ELSEWHERE = 'That chat is open somewhere else right now';
 
@@ -78,9 +79,10 @@ export type ContinueOutcome =
 
 /**
  * Turns one `continue_session` attempt into an outcome the caller can act on
- * without re-deriving the classification: a real session to open, a chat
- * that is busy and worth trying again, or an error, and neither of the last
- * two is confused with the other. Exactly one of `session`/`error` is ever
+ * without re-deriving the classification: a chat the words reached (into its
+ * live process, or resumed as our own -- same id either way), a chat that is
+ * busy and worth trying again, or an error, and neither of the last two is
+ * confused with the other. Exactly one of `session`/`error` is ever
  * meaningful, matching the one try/catch that produces them. tech.md 6.5.
  */
 export function classifyContinueOutcome(

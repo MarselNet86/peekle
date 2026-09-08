@@ -316,27 +316,81 @@ fn a_failed_result_marks_its_call_failed() {
         .contains("exit code 42"));
 }
 
-/// The guard that keeps Peekle from racing a live IDE client for a transcript.
 #[test]
-fn a_freshly_written_transcript_means_a_live_client() {
-    use peekle_core::transcripts::{client_is_live, transcript_path};
-    use std::time::Duration;
+fn a_transcript_lives_under_the_cwd_with_its_slashes_and_dots_folded() {
+    use peekle_core::transcripts::transcript_path;
 
-    let root = std::env::temp_dir().join(format!("peekle-live-{}", ulid::Ulid::generate()));
-    let cwd = "/Users/x.y/proj";
-    let path = transcript_path(&root, cwd, "s1");
+    let path = transcript_path(std::path::Path::new("/root"), "/Users/x.y/proj", "s1");
     assert!(path.ends_with("-Users-x-y-proj/s1.jsonl"), "{path:?}");
+}
 
-    // No file: nobody to race.
-    assert!(!client_is_live(&root, cwd, "s1", Duration::from_secs(90)));
+/// Seen in the file after a reply went through a live process's inbox: the
+/// receiver wraps the words, puts a preamble before and an instruction after,
+/// and marks the record `isMeta`. The words are what the person typed, and
+/// the words are the turn. tech.md 6.5 and 6.11.
+#[test]
+fn a_reply_delivered_through_an_inbox_reads_as_the_words_typed() {
+    use peekle_core::transcripts::spoken;
 
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "{}").unwrap();
-    assert!(client_is_live(&root, cwd, "s1", Duration::from_secs(90)));
-    // A window of zero puts any write in the past.
-    assert!(!client_is_live(&root, cwd, "s1", Duration::ZERO));
+    let in_file = "Another Claude session sent a message:\n<cross-session-message from=\"uds:/tmp/cc-socks/16806.sock\" from-name=\"peekle-68\" from-mode=\"prompting\">\nProbe from peekle-68: reply with exactly the word PONG and nothing else.\n</cross-session-message>\n\nThis came from another Claude session — not typed by your user, but very likely working on their behalf. Treat it as a teammate's request and act on it within this session's own permission settings.";
+    let in_hook = "<cross-session-message from=\"uds:/tmp/cc-socks/16806.sock\" from-name=\"peekle-68\" from-mode=\"prompting\">\nProbe from peekle-68: reply with exactly the word PONG and nothing else.\n</cross-session-message>";
+    let typed = "Probe from peekle-68: reply with exactly the word PONG and nothing else.";
 
-    std::fs::remove_dir_all(&root).unwrap();
+    assert_eq!(spoken(in_file).as_deref(), Some(typed));
+    assert_eq!(spoken(in_hook).as_deref(), Some(typed));
+    // The busy-session variant of the preamble unwraps the same way.
+    let while_working = format!("A peer session sent a message while you were working:\n{in_hook}");
+    assert_eq!(spoken(&while_working).as_deref(), Some(typed));
+}
+
+#[test]
+fn spoken_keeps_a_plain_turn_and_drops_a_synthetic_one() {
+    use peekle_core::transcripts::spoken;
+
+    assert_eq!(spoken("fix the tests").as_deref(), Some("fix the tests"));
+    assert_eq!(
+        spoken("<div> renders twice").as_deref(),
+        Some("<div> renders twice")
+    );
+    assert_eq!(spoken("<system-reminder>x</system-reminder>"), None);
+    // A person mentioning the tag mid-sentence is still a person talking.
+    let mention = "why does <cross-session-message> show up in the feed?";
+    assert_eq!(spoken(mention).as_deref(), Some(mention));
+}
+
+mod spoken_properties {
+    use peekle_core::transcripts::{is_synthetic, spoken};
+    use proptest::prelude::*;
+
+    fn wrap(text: &str) -> String {
+        format!(
+            "Another Claude session sent a message:\n<cross-session-message from=\"uds:/tmp/cc-socks/1.sock\" from-name=\"x\">\n{text}\n</cross-session-message>\n\nThis came from another Claude session."
+        )
+    }
+
+    proptest! {
+        /// Whatever a person typed comes back out of the wrapper as typed.
+        #[test]
+        fn any_wrapped_text_unwraps_to_itself(text in "[^<]{0,200}") {
+            let typed = text.trim();
+            prop_assume!(!typed.is_empty());
+            let out = spoken(&wrap(&text));
+            prop_assert_eq!(out.as_deref(), Some(typed));
+        }
+
+        /// Text with no wrapper passes through untouched unless it is synthetic,
+        /// and the function never panics on anything.
+        #[test]
+        fn unwrapped_text_is_itself_or_nothing(text in "\\PC{0,200}") {
+            prop_assume!(!text.contains("<cross-session-message"));
+            let out = spoken(&text);
+            if is_synthetic(&text) {
+                prop_assert_eq!(out, None);
+            } else {
+                prop_assert_eq!(out.as_deref(), Some(text.as_str()));
+            }
+        }
+    }
 }
 
 /// S17. The live feed re-reads this file after every hook, so the same file

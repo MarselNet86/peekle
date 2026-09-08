@@ -67,3 +67,14 @@ Answering it does not go through `decision.behavior` alone. Per
 `questions` array back verbatim and add an `answers` object mapping each
 question's text to the chosen label (multi-select answers joined with a
 comma). `"allow"` alone does not answer the tool, only `updatedInput` does.
+
+## `user_prompt_submit_peer.jsonl`
+
+`UserPromptSubmit` as it fires in a process that took a message through its
+inbox (tech.md 6.5): the prompt arrives wrapped in `<cross-session-message>`
+with `from`, `from-name` and `from-mode` attributes, and the words a person
+typed are the body. Captured 2026-09-08 off a headless `claude` 2.1.261
+(`-p --input-format stream-json`) started in a scratch directory with a
+command hook that wrote its stdin to a log, then sent one message over the
+socket from another Claude session. The line is the payload the hook read,
+untouched.

@@ -10,7 +10,7 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
-use crate::state::{AppState, HeldKind, LIVE_CLIENT_WINDOW};
+use crate::state::{AppState, HeldKind};
 use crate::windows;
 
 #[tauri::command]
@@ -587,17 +587,23 @@ pub fn start_session(
     spawn_owned(&app, state.inner(), cwd, None, None)
 }
 
-/// Forks an observed chat into one the island owns. tech.md 6.5.
+/// The one refusal that means "wait, then ask again" rather than "no". The
+/// webview matches these words. tech.md 6.5.
+pub const BUSY_ELSEWHERE: &str = "That chat is open somewhere else right now";
+
+/// Delivers a reply into an observed chat. tech.md 6.5.
 ///
-/// The same move Claude Desktop makes to open an existing chat: it spawns
-/// `claude --resume=<id>` as its own child rather than reaching into a foreign
-/// process, because there is no channel into one. The fork gives the run a new
-/// id -- the one assigned here -- so its hooks are recognised as ours and the
-/// original transcript is left alone.
+/// Where it goes is the registry's call, made now rather than read off the
+/// card: a live process that publishes an inbox takes the words itself, and
+/// the chat stays its own -- the turn runs in the process Desktop or the IDE
+/// has open, the answer lands in the one transcript both clients read. No
+/// process means nobody holds the chat, and it is resumed in a pty of our
+/// own at once. A live process with no inbox is the one honest "busy": the
+/// webview keeps the text and asks again until the process goes or its
+/// inbox appears.
 ///
-/// Refused for a session the island already owns (it has a field already) and
-/// for one a live client is still writing (a fork on a branch someone else is
-/// writing is two agents racing, the hazard of v34). tech.md 6.5.
+/// Refused for a session the island already owns: it has a field already,
+/// and a second process for it would be the two-agents race of v34.
 #[tauri::command]
 pub fn continue_session(
     app: AppHandle,
@@ -619,30 +625,49 @@ pub fn continue_session(
         return Err("That session already has an input field".to_string());
     }
 
-    // A live client on the same conversation would branch under us. The file
-    // it writes on every message is the tell. tech.md 6.5 and v34.
-    if let Some(root) = peekle_core::transcripts::default_root() {
-        if peekle_core::transcripts::client_is_live(
-            &root,
-            &card.session.cwd,
-            &session_id,
-            LIVE_CLIENT_WINDOW,
-        ) {
-            return Err("That chat is open somewhere else right now".to_string());
-        }
-    }
-
-    // The first message is handed to the spawn rather than typed into it: a
-    // TUI that is still starting swallows a written line without a trace.
-    // tech.md 6.5.
     let message = peekle_core::shots::compose(text.trim(), &shots);
-    let session = spawn_owned(
-        &app,
-        state.inner(),
-        card.session.cwd.clone(),
-        Some(card.session.clone()),
-        Some(message.clone()),
-    )?;
+    let sessions_root = peekle_core::registry::default_root();
+    let live = sessions_root
+        .as_deref()
+        .and_then(|root| peekle_core::registry::find_live(root, &session_id));
+
+    let session = match peekle_core::registry::route(live) {
+        peekle_core::registry::Route::Busy => return Err(BUSY_ELSEWHERE.to_string()),
+        peekle_core::registry::Route::Inbox(live) => {
+            let Some(root) = sessions_root.as_deref() else {
+                return Err(BUSY_ELSEWHERE.to_string());
+            };
+            // A process that is alive and refuses is still a process that
+            // is alive: never a reason to start a second one. The webview
+            // asks again. tech.md 6.5.
+            if let Err(err) = peekle_core::inbox::send(root, &live, &message) {
+                tracing::warn!(
+                    session = %session_id,
+                    pid = live.pid,
+                    error = %err,
+                    "the live chat's inbox did not take the message"
+                );
+                return Err(BUSY_ELSEWHERE.to_string());
+            }
+            tracing::info!(
+                session = %session_id,
+                pid = live.pid,
+                entrypoint = live.entrypoint.as_deref().unwrap_or("?"),
+                "delivered into a live chat"
+            );
+            card.session.clone()
+        }
+        // The first message is handed to the spawn rather than typed into
+        // it: a TUI that is still starting swallows a written line without
+        // a trace. tech.md 6.5.
+        peekle_core::registry::Route::Resume => spawn_owned(
+            &app,
+            state.inner(),
+            card.session.cwd.clone(),
+            Some(card.session.clone()),
+            Some(message.clone()),
+        )?,
+    };
 
     // Into the feed at once, the way a reply is: it is already on its way, and
     // a message the user cannot see is a message they will type twice.
@@ -1173,10 +1198,12 @@ mod tests {
         assert!(state.owns_session("ours"));
     }
 
-    /// The live-client window is the detector of v34, not a new number.
+    /// The one refusal the island waits out rather than reports. The webview
+    /// matches it by text (`BUSY_ELSEWHERE` in `logic/sessions.ts`), so the
+    /// words are a contract. tech.md 6.5.
     #[test]
-    fn the_live_client_window_matches_the_detector() {
-        assert_eq!(LIVE_CLIENT_WINDOW, std::time::Duration::from_secs(90));
+    fn the_busy_refusal_reads_as_the_webview_expects() {
+        assert_eq!(BUSY_ELSEWHERE, "That chat is open somewhere else right now");
     }
 
     #[test]
