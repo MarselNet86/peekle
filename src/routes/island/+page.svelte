@@ -648,7 +648,6 @@
                 <p class="empty">{startError}</p>
               {/if}
             </div>
-            <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
             {@render connect()}
           {/if}
