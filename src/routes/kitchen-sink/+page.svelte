@@ -382,8 +382,9 @@
     <!-- The gear that opens settings, and the one setting under it.
          tech.md 6.17. -->
     <div class="row">
-      <IconButton name="gear" title="Settings" onclick={() => {}} />
-      <IconButton name="gear" title="Settings" pressed onclick={() => {}} />
+      <IconButton name="settings" title="Settings" onclick={() => {}} />
+      <IconButton name="settings" title="Settings" pressed onclick={() => {}} />
+      <IconButton name="back" title="Back to the session list" onclick={() => {}} />
     </div>
     <Toggle
       label="Notify when a turn ends"

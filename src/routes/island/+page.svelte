@@ -580,9 +580,20 @@
                what this view is for, and a settings row above every session
                would be a permanent tax on the thing people came to read.
                tech.md 6.17. -->
-          <div class="top">
+          <div class="top" class:open={settingsOpen}>
+            <!-- The way out stands where a way out stands, on the left and
+                 pointing back, and it appears with the thing it leaves. A
+                 view that can be entered and not left is a trap, however
+                 small the view. -->
+            {#if settingsOpen}
+              <IconButton
+                name="back"
+                title="Back to the session list"
+                onclick={() => (settingsOpen = false)}
+              />
+            {/if}
             <IconButton
-              name="gear"
+              name="settings"
               title="Settings"
               pressed={settingsOpen}
               onclick={() => (settingsOpen = !settingsOpen)}
@@ -871,6 +882,12 @@
     justify-content: flex-end;
     flex: none;
     padding-bottom: 2px;
+  }
+
+  /* With a way out on the left, the two controls take the ends of the row
+     between them. */
+  .top.open {
+    justify-content: space-between;
   }
 
   .settings {

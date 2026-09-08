@@ -49,6 +49,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.42.0",
     "@tauri-apps/api": "^2.11.1",
     "bits-ui": "^2.18.1"
   }
