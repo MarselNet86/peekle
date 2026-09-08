@@ -38,6 +38,7 @@
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
   import PromptInput from '$lib/ui/PromptInput.svelte';
+  import AskPanel from '$lib/ui/AskPanel.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
@@ -567,7 +568,17 @@
 
     <!-- A screenshot is waiting to be attached, and it outranks a toast: the
          offer runs out in seconds and a toast can be read afterwards. 6.13. -->
-    {#if island.view === 'Pill' && shots.offer}
+    <!-- A permission asks for yes or no, and neither answer needs the feed.
+         The panel carries the question; pressing it anywhere but the buttons
+         lands in the session it came from. tech.md 6.7. -->
+    {#if island.view === 'Ask' && permission}
+      <AskPanel
+        request={permission}
+        onallow={() => answerPermission('allow')}
+        ondeny={() => answerPermission('deny')}
+        onopen={() => openSession(permission.session.session_id)}
+      />
+    {:else if island.view === 'Pill' && shots.offer}
       <ShotPrompt project={shots.offer.project} left={shots.left} secs={shots.secs} />
     {:else if island.view === 'Pill' && island.toast}
       <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />

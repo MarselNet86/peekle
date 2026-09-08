@@ -98,9 +98,13 @@ export function shapeBounds(view: IslandView, notch: Notch, badge = false): Shap
           }
       : view === 'Pill'
         ? { width: 420, height: height + 44, radius: 20 }
-        : view === 'Sessions'
-          ? { width: 460, height: height + 380, radius: 24 }
-          : { width: 560, height: height + 420, radius: 24 };
+        : // Two lines and two buttons, and nothing else: the answer to a
+          // permission needs no feed. tech.md 6.7.
+          view === 'Ask'
+          ? { width: 460, height: height + 62, radius: 22 }
+          : view === 'Sessions'
+            ? { width: 460, height: height + 380, radius: 24 }
+            : { width: 560, height: height + 420, radius: 24 };
 
   return clamp(bounds);
 }

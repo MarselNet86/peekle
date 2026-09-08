@@ -3,4 +3,4 @@
 /**
  * What the island is showing right now.
  */
-export type IslandView = "Collapsed" | "Pill" | "Sessions" | { "Session": string };
+export type IslandView = "Collapsed" | "Pill" | "Ask" | "Sessions" | { "Session": string };

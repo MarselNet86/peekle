@@ -121,6 +121,7 @@ test.describe('overlay routes', () => {
       'FeedRow',
       'SessionRow',
       'PermissionRow',
+      'AskPanel',
       'Button',
       'FeedRow',
       'ScrollHint',
