@@ -19,28 +19,6 @@ export function isOpen(state: SignInState): boolean {
   return OPEN.includes(state.stage);
 }
 
-/**
- * What the panel says while it waits, in the order the CLI does things.
- *
- * Every stage says something. A panel that goes blank between the press and
- * the address reads as a press that was lost, which is the fault this whole
- * path exists to fix.
- */
-export function waitingText(state: SignInState): string {
-  switch (state.stage) {
-    case 'Starting':
-      return 'Starting Claude Code';
-    case 'Waiting':
-      return state.needs_code
-        ? 'Approve in your browser, then paste the code'
-        : 'Opening your browser';
-    case 'Finishing':
-      return 'Signing in';
-    default:
-      return '';
-  }
-}
-
 export function createSignIn() {
   let state = $state<SignInState>(IDLE);
   let busy = $state(false);
@@ -100,9 +78,6 @@ export function createSignIn() {
     },
     get busy() {
       return busy;
-    },
-    get waitingText() {
-      return waitingText(state);
     },
     begin,
     submit,

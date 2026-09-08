@@ -311,7 +311,16 @@
 
     <h2>SignInPanel</h2>
     <div class="frame">
-      <SignInPanel signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }} />
+      <SignInPanel
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        reason="Offline"
+      />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        reason="NotLoggedIn"
+      />
     </div>
     <div class="frame">
       <SignInPanel
@@ -321,7 +330,7 @@
           needs_code: true,
           error: null,
         }}
-        waiting="Approve in your browser, then paste the code"
+        reason="NotLoggedIn"
       />
     </div>
     <div class="frame">
@@ -330,13 +339,12 @@
           stage: 'Failed',
           url: null,
           needs_code: false,
-          error: 'that code was not accepted',
+          error: 'That code was not accepted.',
         }}
+        reason="NotLoggedIn"
       />
     </div>
-  </section>
 
-  <section>
     <h2>AgentBar</h2>
     <!-- Live, waiting on a pick it has sent, a model that takes no effort, and
          a session nobody can type into. tech.md 6.15. -->

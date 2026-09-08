@@ -88,6 +88,20 @@ export function needsSignIn(snapshot: UsageSnapshot | null): boolean {
 }
 
 /**
+ * Whether the island cannot reach Anthropic at all.
+ *
+ * An agent needs the same network and the same account the bars do, so these
+ * three mean a message typed now goes nowhere useful. The rest do not: usage
+ * switched off, an endpoint that changed shape, a rate limit that clears
+ * itself, a Keychain grant nobody has given -- under every one of those the
+ * agent works and the chat stays open. tech.md 6.16.
+ */
+export function outOfReach(snapshot: UsageSnapshot | null): boolean {
+  const reason = snapshot?.reason;
+  return reason === 'NotLoggedIn' || reason === 'Offline' || reason === 'Network';
+}
+
+/**
  * Whether the session list should be replaced by one big connect screen
  * instead of drawn at all.
  *
@@ -155,6 +169,13 @@ export function createUsage() {
     /** Whether the way back is a sign-in rather than a reconnect. 6.16. */
     get needsSignIn() {
       return needsSignIn(snapshot);
+    },
+    /** Whether Anthropic is unreachable, so an agent cannot work. 6.16. */
+    get outOfReach() {
+      return outOfReach(snapshot);
+    },
+    get reasonCode() {
+      return snapshot?.reason ?? null;
     },
     get connecting() {
       return connecting;
