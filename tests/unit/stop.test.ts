@@ -25,6 +25,48 @@ beforeEach(() => {
   vi.mocked(commands.answerPrompt).mockClear();
 });
 
+/**
+ * The one button under the field. An arrow while there is something to send,
+ * a square while a turn runs, and never two controls to choose between.
+ * tech.md 6.5 and 9.
+ */
+describe('the button under the field', () => {
+  it('sends what was typed while nothing is running', async () => {
+    const onsubmit = vi.fn();
+    const onstop = vi.fn();
+    render(PromptInput, { props: { value: 'ship it', onsubmit, onstop } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith('ship it');
+    expect(onstop).not.toHaveBeenCalled();
+  });
+
+  it('becomes the way to end a turn while one is running', async () => {
+    const onsubmit = vi.fn();
+    const onstop = vi.fn();
+    render(PromptInput, { props: { value: '', working: true, onsubmit, onstop } });
+
+    const button = screen.getByRole('button', { name: 'Stop' });
+    // Empty field or not: there is a turn to end, so the press does something.
+    expect(button).not.toBeDisabled();
+    await userEvent.click(button);
+    expect(onstop).toHaveBeenCalledOnce();
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  /// Typing does not stop while the agent works -- the terminal queues the
+  /// next message, and so does this. Only the button changes. tech.md 6.5.
+  it('still sends on Enter while a turn is running', async () => {
+    const onsubmit = vi.fn();
+    const onstop = vi.fn();
+    render(PromptInput, { props: { value: 'next up', working: true, onsubmit, onstop } });
+
+    await userEvent.type(screen.getByRole('textbox'), '{Enter}');
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith('next up');
+    expect(onstop).not.toHaveBeenCalled();
+  });
+});
+
 describe('the reply field', () => {
   it('sends the typed text on Enter', async () => {
     const onsubmit = vi.fn();

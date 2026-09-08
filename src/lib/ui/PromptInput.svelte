@@ -3,13 +3,20 @@
     value = $bindable(''),
     placeholder = '',
     disabled = false,
+    working = false,
     onsubmit,
+    onstop,
     onescape,
   }: {
     value?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** A turn is running and can be ended from here. The one button turns
+     * into the way to end it, which is where Claude Code puts it too: no
+     * second control appears, and none has to be found. tech.md 6.5. */
+    working?: boolean;
     onsubmit?: (text: string) => void;
+    onstop?: () => void;
     onescape?: () => void;
   } = $props();
 
@@ -22,6 +29,10 @@
   // Nothing to send is nothing to press. A button that does nothing when
   // clicked lies about its own state. tech.md 9.
   const sendable = $derived(!disabled && value.trim().length > 0);
+  // While a turn runs the button ends it, whatever the field holds. Typing
+  // still sends: Enter queues the next message the way the terminal does, and
+  // the button is the only thing that changes. tech.md 6.5.
+  const stops = $derived(working);
 
   function send() {
     if (sendable) onsubmit?.(value);
@@ -57,22 +68,30 @@
        pressing send must not take the field's focus away. tech.md 6.7. -->
   <button
     class="send"
+    class:stop={stops}
     type="button"
-    disabled={!sendable}
-    aria-label="Send"
+    disabled={stops ? false : !sendable}
+    aria-label={stops ? 'Stop' : 'Send'}
     onmousedown={(event) => event.preventDefault()}
-    onclick={send}
+    onclick={() => (stops ? onstop?.() : send())}
   >
-    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-      <path
-        d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
+    {#if stops}
+      <!-- The square everything else uses for stop, filled and centred. -->
+      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1.2" fill="currentColor" />
+      </svg>
+    {:else}
+      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+        <path
+          d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    {/if}
   </button>
 </div>
 
@@ -120,6 +139,16 @@
 
   textarea::placeholder {
     color: var(--text-dim);
+  }
+
+  /* Stopping is the accent doing something, so it wears the accent: a white
+     square on the product's own green. It is never dimmed -- there is always
+     a turn to end while it is shown. tech.md 9. */
+  .send.stop,
+  .send.stop:disabled {
+    background: var(--brand);
+    color: var(--text);
+    opacity: 1;
   }
 
   .send {
