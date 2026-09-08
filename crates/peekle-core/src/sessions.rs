@@ -589,6 +589,16 @@ impl SessionRegistry {
         if adopted.len() > ENTRY_CAP {
             adopted.drain(..adopted.len() - ENTRY_CAP);
         }
+        // A turn that ended in an API error ends without a `Stop`: nothing
+        // fires, and the card would spin `Working` until the stale sweep
+        // gave up on it ten minutes later. The file knows the turn is over,
+        // and the file is right. tech.md 6.11.
+        let ended_in_error = adopted.last().is_some_and(|last| {
+            last.kind == EntryKind::Assistant && last.state == EntryState::Failed
+        });
+        if ended_in_error && card.status == SessionStatus::Working {
+            card.status = SessionStatus::Idle;
+        }
         card.entries = adopted;
         // What the file says the session answers with. A file that names no
         // model leaves the row as it stood: the transcript is written after

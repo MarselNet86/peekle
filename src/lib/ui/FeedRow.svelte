@@ -128,6 +128,12 @@
     border-bottom-left-radius: 4px;
   }
 
+  /* An answer that is the API refusing, not the model speaking. The edge
+     says so; the words inside already do. tech.md 6.11. */
+  .line[data-kind='Assistant'][data-state='Failed'] .bubble {
+    border-color: var(--danger);
+  }
+
   .prose {
     margin: 0;
     white-space: pre-wrap;
