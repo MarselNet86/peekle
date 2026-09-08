@@ -972,6 +972,13 @@ mod adopting_a_transcript {
         }
     }
 
+    fn row_at(id: &str, kind: EntryKind, text: &str, at: i64) -> FeedEntry {
+        FeedEntry {
+            at,
+            ..row(id, kind, text)
+        }
+    }
+
     fn registry_with_a_call() -> SessionRegistry {
         let mut registry = SessionRegistry::new();
         registry.apply(
@@ -1065,6 +1072,103 @@ mod adopting_a_transcript {
         let card = &registry.cards()[0];
         assert_eq!(card.entries.len(), 2);
         assert_eq!(card.entries[1].id, "u-2");
+    }
+
+    /// The bug this closes: two messages go out one after the other, the file
+    /// names the second one and its answer, and the first -- which the file
+    /// never named -- slides under that answer. The user watches the message
+    /// they just sent jump above the one before it, and the conversation
+    /// reads in an order nobody spoke it in. A row the file is missing is not
+    /// the newest row in the feed. tech.md 6.11.
+    #[test]
+    fn a_message_the_file_is_missing_keeps_the_place_it_was_sent_from() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "now then", EntryState::Running, 10);
+        registry.user_turn(session(), "testing peekle", EntryState::Running, 20);
+
+        registry.adopt_entries(
+            "s",
+            vec![
+                row_at("u-1", EntryKind::User, "testing peekle", 20),
+                row_at("u-2", EntryKind::Assistant, "got it", 30),
+            ],
+            None,
+        );
+
+        let cards = registry.cards();
+        let texts: Vec<&str> = cards[0]
+            .entries
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert_eq!(texts, vec!["now then", "testing peekle", "got it"]);
+    }
+
+    /// The file's own order is the record of what happened, and a carried row
+    /// is woven into it rather than allowed to reshuffle it. tech.md 6.11.
+    #[test]
+    fn weaving_a_carried_row_in_leaves_the_file_in_its_own_order() {
+        let mut registry = registry_with_a_call();
+        registry.user_turn(session(), "in between", EntryState::Running, 15);
+
+        registry.adopt_entries(
+            "s",
+            vec![
+                row_at("u-1", EntryKind::User, "before", 10),
+                row_at("u-2", EntryKind::Assistant, "after", 20),
+                row_at("u-3", EntryKind::Tool, "later still", 30),
+            ],
+            None,
+        );
+
+        let cards = registry.cards();
+        let ids: Vec<&str> = cards[0]
+            .entries
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect();
+        assert_eq!(ids[0], "u-1");
+        assert_eq!(ids[2], "u-2");
+        assert_eq!(ids[3], "u-3");
+        assert_eq!(cards[0].entries[1].text, "in between");
+    }
+
+    proptest::proptest! {
+        /// However many messages are waiting on the file and whenever they
+        /// were sent, the feed reads in the order things were said: the file
+        /// keeps its own sequence, and nothing woven into it puts a later row
+        /// above an earlier one. tech.md 6.11.
+        #[test]
+        fn a_woven_feed_still_reads_in_order(
+            local in proptest::collection::vec(0i64..100, 0..4),
+            file in proptest::collection::vec(0i64..100, 0..8),
+        ) {
+            let mut registry = registry_with_a_call();
+            for (n, at) in local.iter().enumerate() {
+                registry.user_turn(session(), &format!("local {n}"), EntryState::Running, *at);
+            }
+
+            let mut times = file.clone();
+            times.sort_unstable();
+            let rows: Vec<FeedEntry> = times
+                .iter()
+                .enumerate()
+                .map(|(n, at)| row_at(&format!("f-{n}"), EntryKind::Assistant, "said", *at))
+                .collect();
+            registry.adopt_entries("s", rows, None);
+
+            let cards = registry.cards();
+            let entries = &cards[0].entries;
+            proptest::prop_assert!(entries.windows(2).all(|pair| pair[0].at <= pair[1].at));
+
+            let kept: Vec<&str> = entries
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .filter(|id| id.starts_with("f-"))
+                .collect();
+            let expected: Vec<String> = (0..times.len()).map(|n| format!("f-{n}")).collect();
+            proptest::prop_assert_eq!(kept, expected);
+        }
     }
 
     /// An answer to a permission request is not a prompt: no transcript row
