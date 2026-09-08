@@ -558,6 +558,17 @@ impl AppState {
         self.pty.owns(session_id)
     }
 
+    /// Whether this reply is still waiting on its `UserPromptSubmit`.
+    pub fn reply_waiting(&self, session_id: &str, entry_id: &str) -> bool {
+        self.lock(&self.sessions)
+            .reply_waiting(session_id, entry_id)
+    }
+
+    /// Submits whatever the session's input box holds. tech.md 6.5.
+    pub fn nudge_session(&self, session_id: &str) -> bool {
+        self.pty.nudge(session_id).is_ok()
+    }
+
     /// Whether this session has ever said what it answers with. Everything
     /// before that first answer is aimed rather than changed. tech.md 6.15.
     pub fn session_has_answered(&self, session_id: &str) -> bool {
