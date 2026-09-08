@@ -98,6 +98,7 @@ pub struct AppState {
     sessions: Mutex<SessionRegistry>,
     /// The sessions Peekle started and can type into. tech.md 6.5.
     pty: peekle_core::pty::SharedPtyHost,
+    sign_in: peekle_core::auth::SharedSignInHost,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -185,6 +186,7 @@ impl AppState {
             queue: Mutex::new(Vec::new()),
             sessions: Mutex::new(SessionRegistry::new()),
             pty: std::sync::Arc::new(peekle_core::pty::PtyHost::new()),
+            sign_in: std::sync::Arc::new(peekle_core::auth::SignInHost::new()),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -438,6 +440,12 @@ impl AppState {
     /// an arriving session is one of ours.
     pub fn pty(&self) -> &peekle_core::pty::SharedPtyHost {
         &self.pty
+    }
+
+    /// The sign-in host. One `claude auth login` at a time, and the only place
+    /// it is held. tech.md 6.16.
+    pub fn sign_in(&self) -> &peekle_core::auth::SharedSignInHost {
+        &self.sign_in
     }
 
     /// Claims an id before the process behind it says anything, so the very

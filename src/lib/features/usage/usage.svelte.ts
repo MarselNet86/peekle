@@ -57,25 +57,34 @@ export function bars(
  *
  * `Disabled` is a config switch and `Unsupported` is the API changing shape:
  * offering a button for either sends the user to press something that cannot
- * help. The other four are all one press away from working again, which is why
- * a dropped session and a first run share the same control. tech.md 6.4.
+ * help. `RateLimited` was reached and answered, and pressing again is the one
+ * thing it asked us not to do. `NotLoggedIn` has a control of its own -- it is
+ * the sign-in of 6.16, not this -- because re-reading the Keychain cannot fix
+ * a credential that is missing or expired, and offering it here was the whole
+ * reason Reconnect earned its reputation. What is left is a first grant and a
+ * network that dropped, and both really are one press from working again.
+ * tech.md 6.4.
  */
 export function connectLabel(snapshot: UsageSnapshot | null): string | null {
   switch (snapshot?.reason) {
     case 'NotGranted':
     case 'Denied':
       return 'Connect';
-    case 'NotLoggedIn':
     case 'Offline':
     case 'Network':
       return 'Reconnect';
-    // Reached and answered: pressing again is what it asked us not to do, so
-    // there is no button, only the reason. tech.md 6.4.
-    case 'RateLimited':
-      return null;
     default:
       return null;
   }
+}
+
+/**
+ * Whether this is a sign-in problem rather than anything a reconnect touches.
+ *
+ * The one reason `claude auth login` is the answer to. tech.md 6.16.
+ */
+export function needsSignIn(snapshot: UsageSnapshot | null): boolean {
+  return snapshot?.reason === 'NotLoggedIn';
 }
 
 /**
@@ -91,7 +100,10 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
  * screen for the instant before `get_state` answers. tech.md 6.4.
  */
 export function gateSessions(snapshot: UsageSnapshot | null): boolean {
-  return !(snapshot?.keychain_granted ?? true) && connectLabel(snapshot) !== null;
+  return (
+    !(snapshot?.keychain_granted ?? true) &&
+    (connectLabel(snapshot) !== null || needsSignIn(snapshot))
+  );
 }
 
 export function createUsage() {
@@ -139,6 +151,10 @@ export function createUsage() {
     },
     get connectLabel() {
       return connectLabel(snapshot);
+    },
+    /** Whether the way back is a sign-in rather than a reconnect. 6.16. */
+    get needsSignIn() {
+      return needsSignIn(snapshot);
     },
     get connecting() {
       return connecting;

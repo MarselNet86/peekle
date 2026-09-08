@@ -24,6 +24,7 @@ import type { ToastRequest } from '$lib/types/generated/ToastRequest';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { PromptOutcome } from '$lib/types/generated/PromptOutcome';
 import type { ShotOffer } from '$lib/types/generated/ShotOffer';
+import type { SignInState } from '$lib/types/generated/SignInState';
 
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
@@ -31,6 +32,7 @@ export const EVENTS = {
   sessions: 'peekle://sessions',
   tasks: 'peekle://tasks',
   usage: 'peekle://usage',
+  signIn: 'peekle://sign-in',
   enabled: 'peekle://enabled',
   toast: 'peekle://toast',
   view: 'peekle://view',
@@ -65,6 +67,10 @@ export const commands = {
   setEnabled: (enabled: boolean) => call<void>('set_enabled', { enabled }),
   refreshUsage: () => call<UsageSnapshot>('refresh_usage'),
   requestUsageAccess: () => call<UsageSnapshot>('request_usage_access'),
+  startSignIn: () => call<SignInState>('start_sign_in'),
+  submitSignInCode: (code: string) => call<SignInState>('submit_sign_in_code', { code }),
+  openSignInPage: () => call<void>('open_sign_in_page'),
+  cancelSignIn: () => call<void>('cancel_sign_in'),
   setUsageEnabled: (enabled: boolean) => call<void>('set_usage_enabled', { enabled }),
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
@@ -114,6 +120,7 @@ export const events = {
     on<SessionCard[]>(EVENTS.sessions, handler),
   onTasks: (handler: (tasks: TaskItem[]) => void) => on<TaskItem[]>(EVENTS.tasks, handler),
   onUsage: (handler: (usage: UsageSnapshot) => void) => on<UsageSnapshot>(EVENTS.usage, handler),
+  onSignIn: (handler: (state: SignInState) => void) => on<SignInState>(EVENTS.signIn, handler),
   onEnabled: (handler: (payload: { enabled: boolean }) => void) =>
     on<{ enabled: boolean }>(EVENTS.enabled, handler),
   onToast: (handler: (toast: ToastRequest) => void) => on<ToastRequest>(EVENTS.toast, handler),

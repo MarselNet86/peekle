@@ -13,6 +13,7 @@
   } from '$lib/features/sessions/sessions.svelte';
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
+  import { createSignIn } from '$lib/features/signin/signin.svelte';
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import {
     canContinue as canContinueCard,
@@ -24,6 +25,7 @@
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
+  import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
@@ -45,6 +47,7 @@
   const island = createIsland(typeof location === 'undefined' ? '' : location.search);
   const feed = createFeed();
   const usage = createUsage();
+  const signIn = createSignIn();
   const shots = createShots();
   const agent = createAgent();
 
@@ -337,6 +340,7 @@
       island.start(),
       feed.start(),
       usage.start(),
+      signIn.start(),
       shots.start(),
       agent.start(),
     ]);
@@ -430,9 +434,14 @@
      them under the session list was costing the list the rows it is for.
      tech.md S7. -->
 {#snippet connect()}
-  {#if usage.connectLabel || usage.failed}
+  {#if usage.connectLabel || usage.needsSignIn || usage.failed}
     <div class="usage">
-      {#if usage.connectLabel}
+      <!-- A missing or expired credential is not something re-reading the
+           Keychain can fix, so it gets Claude Code's own login rather than a
+           Reconnect that could never work. tech.md 6.16. -->
+      {#if usage.needsSignIn}
+        {@render signInPanel()}
+      {:else if usage.connectLabel}
         <Button
           label={usage.connecting ? 'Connecting' : usage.connectLabel}
           variant="connect"
@@ -443,11 +452,23 @@
       {/if}
       <!-- Why it is not connected, in words. A press that changes nothing on
            screen reads as a press that was lost. tech.md 6.4. -->
-      {#if usage.failed && !usage.connecting}
+      {#if usage.failed && !usage.connecting && !signIn.open}
         <p class="why">{usage.reason}</p>
       {/if}
     </div>
   {/if}
+{/snippet}
+
+{#snippet signInPanel()}
+  <SignInPanel
+    signIn={signIn.state}
+    busy={signIn.busy}
+    waiting={signIn.waitingText}
+    onstart={() => signIn.begin()}
+    oncode={(code) => signIn.submit(code)}
+    onopen={() => signIn.openPage()}
+    oncancel={() => signIn.cancel()}
+  />
 {/snippet}
 
 <div class="island" bind:this={host}>
@@ -471,14 +492,18 @@
                that may or may not do anything is worse than one clear ask.
                tech.md 6.4. -->
           <div class="gate">
-            <Button
-              label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
-              variant="connect"
-              busy={usage.connecting}
-              wide
-              onclick={() => usage.connect()}
-            />
-            {#if usage.failed && !usage.connecting}
+            {#if usage.needsSignIn}
+              {@render signInPanel()}
+            {:else}
+              <Button
+                label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
+                variant="connect"
+                busy={usage.connecting}
+                wide
+                onclick={() => usage.connect()}
+              />
+            {/if}
+            {#if usage.failed && !usage.connecting && !signIn.open}
               <p class="why">{usage.reason}</p>
             {/if}
           </div>
