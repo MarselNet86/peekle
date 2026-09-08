@@ -495,6 +495,19 @@ impl SessionRegistry {
         Some(entry_id)
     }
 
+    /// Whether one reply is still `Running`, which is what a reply nothing has
+    /// confirmed looks like from outside. tech.md 6.3.
+    pub fn reply_waiting(&self, session_id: &str, entry_id: &str) -> bool {
+        self.cards
+            .iter()
+            .find(|c| c.session.session_id == session_id)
+            .is_some_and(|card| {
+                card.entries.iter().any(|e| {
+                    e.id == entry_id && e.kind == EntryKind::User && e.state == EntryState::Running
+                })
+            })
+    }
+
     /// Gives up on one reply that nothing confirmed in time. tech.md 6.3.
     ///
     /// By id and only from `Running`: a reply the hook confirmed meanwhile is

@@ -405,17 +405,37 @@ impl PtyHost {
 /// there is nothing for a gap to separate. tech.md 6.5.
 pub const INTERRUPT: &[u8] = b"\x1b";
 
+/// One newline and nothing else: submit whatever is in the input box.
+///
+/// A message is written as text, a pause, then this. When the TUI reads both
+/// halves in one go it takes them for a paste, and a newline inside a paste is
+/// not a send -- the text then sits in the box, typed and unsent, and the turn
+/// never starts. `ENTER_GAP` makes that rare rather than impossible: the gap is
+/// wall clock, and the far end has to be scheduled inside it to see two reads.
+/// So the reply that nothing confirmed is nudged with one of these before it is
+/// given up on. Harmless on an empty box, which is what it finds when the text
+/// did go. tech.md 6.5.
+pub const NUDGE: &[u8] = b"\r";
+
 impl PtyHost {
+    /// Submits whatever the input box holds, without adding to it. tech.md 6.5.
+    pub fn nudge(&self, session_id: &str) -> Result<(), PtyError> {
+        self.write_bytes(session_id, NUDGE)
+    }
+
     /// Interrupts the running turn of a session Peekle owns. tech.md 6.5.
-    ///
-    /// Held under the same lock as `send`, so the key cannot land between a
-    /// message's text and its newline.
     pub fn interrupt(&self, session_id: &str) -> Result<(), PtyError> {
+        self.write_bytes(session_id, INTERRUPT)
+    }
+
+    /// One write, under the same lock as `send`, so nothing lands between a
+    /// message's text and its own newline.
+    fn write_bytes(&self, session_id: &str, bytes: &[u8]) -> Result<(), PtyError> {
         let mut sessions = self.lock();
         let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
         owned
             .writer
-            .write_all(INTERRUPT)
+            .write_all(bytes)
             .and_then(|()| owned.writer.flush())
             .map_err(|err| PtyError::Pty(err.to_string()))
     }
@@ -487,6 +507,16 @@ mod tests {
         // Nothing picked means no flag, not an empty one.
         let args = spawn_args("new-id", false, Some("hi"), Some(" "), None);
         assert_eq!(args, vec!["--session-id", "new-id", "hi"]);
+    }
+
+    /// The nudge is one newline and nothing else. Anything more would be text
+    /// written twice, and a turn started twice is worse than a turn not
+    /// started at all. tech.md 6.5.
+    #[test]
+    fn the_nudge_adds_nothing_to_the_box_it_submits() {
+        assert_eq!(NUDGE, b"\r");
+        assert_eq!(NUDGE, message_writes("anything").last().unwrap().as_slice());
+        assert_ne!(NUDGE, INTERRUPT);
     }
 
     #[test]

@@ -738,11 +738,28 @@ pub fn continue_session(
 /// the lie this closes -- the one a person waits on for a minute before
 /// wondering.
 fn watch_delivery(app: &AppHandle, state: &Arc<AppState>, session_id: String, entry_id: String) {
+    /// How long a reply waits before it is nudged rather than given up on.
+    ///
+    /// Short, because the thing it cures is a message sitting in the input box
+    /// typed and unsent, and every second of that is a person watching a grey
+    /// bubble. Long enough that an ordinary confirmation, which takes well
+    /// under a second, is never raced. tech.md 6.5.
+    const NUDGE_AFTER: Duration = Duration::from_secs(3);
+
     let wait = Duration::from_secs(state.lock_config().behavior.delivery_confirm_secs as u64);
     let app = app.clone();
     let state = Arc::clone(state);
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(wait).await;
+        tokio::time::sleep(NUDGE_AFTER).await;
+        // Still `Running` means no `UserPromptSubmit` named it, which is what
+        // an unsent box looks like from here. One newline submits it if it is
+        // there, and does nothing at all if it is not: nothing is written
+        // twice, so no turn can be started twice. tech.md 6.5.
+        if state.reply_waiting(&session_id, &entry_id) && state.nudge_session(&session_id) {
+            tracing::info!(session = %session_id, "nudging a reply nothing has confirmed");
+        }
+
+        tokio::time::sleep(wait.saturating_sub(NUDGE_AFTER)).await;
         let Some(cards) = state.fail_reply(&session_id, &entry_id, now_ms()) else {
             return;
         };
