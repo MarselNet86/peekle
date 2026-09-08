@@ -11,9 +11,11 @@ workspace = true
 
 [dependencies]
 directories = "6.0.0"
+libc = "0.2.189"
 portable-pty = "0.9.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.10.9"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["sync", "time", "macros", "rt"] }
 toml = "1.1.4"

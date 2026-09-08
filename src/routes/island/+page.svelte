@@ -162,7 +162,7 @@
 
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
-    if (continuing) return 'Continuing…';
+    if (continuing) return 'Sending…';
     if (waitingToHandOff) return 'Will send once the other app is done';
     if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
     return 'Message Claude';
@@ -197,14 +197,15 @@
   const waitingToHandOff = $derived(handoff !== null);
   const HANDOFF_POLL_MS = 5000;
 
-  // One attempt at forking this observed chat into one we own. "Busy
-  // elsewhere" is not this call's failure to report -- continue_session
-  // refuses it and keeps refusing for as long as another client is actually
-  // driving the chat, a fact about the world rather than about this one
-  // attempt -- so it comes back as data (classifyContinueOutcome), and the
-  // caller decides whether to wait it out. Shared by the first press and the
-  // background retry below, so "what happens once a fork lands" is written
-  // in exactly one place. tech.md 6.5.
+  // One attempt at getting the words into this observed chat: into the
+  // inbox of the live process that holds it, or, when no process does, into
+  // a resume of our own. "Busy elsewhere" is not this call's failure to
+  // report -- continue_session refuses it only while a live process holds
+  // the chat and offers no way in, a fact about the world rather than about
+  // this one attempt -- so it comes back as data (classifyContinueOutcome),
+  // and the caller decides whether to wait it out. Shared by the first press
+  // and the background retry below, so "what happens once a reply lands" is
+  // written in exactly one place. tech.md 6.5.
   async function attemptContinue(sessionId: string, text: string, paths: string[]) {
     try {
       const session = await commands.continueSession(sessionId, text, paths);
@@ -310,10 +311,12 @@
     if (!current) return;
     const answering = island.prompt !== null;
 
-    // Typing into an observed chat is what continues it: the reply forks it
-    // into a session we own and lands there. The fork is invisible on purpose
-    // -- Desktop has no button for this either, a chat is just a chat. The
-    // text is only cleared once it has somewhere to go. tech.md 6.5.
+    // Typing into an observed chat is what continues it: the reply goes to
+    // the live process that holds the chat, or resumes it as our own when
+    // nothing does. Which one is Rust's call at the moment of sending, and
+    // invisible on purpose -- Desktop has no button for this either, a chat
+    // is just a chat. The text is only cleared once it has somewhere to go.
+    // tech.md 6.5.
     const id = current.session.session_id;
     if (!answering && canContinue) {
       startError = null;

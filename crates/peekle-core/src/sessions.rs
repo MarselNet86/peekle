@@ -79,13 +79,13 @@ impl FeedEvent {
                 // Not everything arriving as the user was said by one. Dropped
                 // here, before the event exists, so none of what follows
                 // happens: no green bubble, no title taken from it, and no
-                // false confirmation of a reply still in flight. tech.md 6.11.
-                if crate::transcripts::is_synthetic(text) {
-                    return None;
-                }
+                // false confirmation of a reply still in flight. A reply the
+                // island put into a live process's inbox arrives wrapped, and
+                // the words inside are the turn. tech.md 6.11.
+                let text = crate::transcripts::spoken(text)?;
                 Some(Self::UserTurn {
                     session: session_ref_of(payload),
-                    text: text.to_string(),
+                    text,
                 })
             }
             "PreToolUse" => Some(Self::ToolStarted {

@@ -1102,3 +1102,29 @@ mod adopting_a_transcript {
         assert_eq!(registry.cards()[0].entries.len(), ENTRY_CAP);
     }
 }
+
+/// Captured 2026-09-08 off a headless 2.1.261 session that took a message
+/// through its inbox (tech.md 6.5): `UserPromptSubmit` fires in that process
+/// with the prompt wrapped as a cross-session message. The turn is the words
+/// inside, and it confirms the reply the island put in the feed. tech.md 6.11.
+#[test]
+fn a_prompt_delivered_through_an_inbox_is_the_words_typed_and_confirms_the_reply() {
+    let events = events("user_prompt_submit_peer.jsonl");
+    assert_eq!(events.len(), 1, "{events:?}");
+    let FeedEvent::UserTurn { session, text } = &events[0] else {
+        panic!("UserPromptSubmit produced {:?}", events[0]);
+    };
+    assert_eq!(
+        text,
+        "Probe from peekle-68: reply with exactly the word PONG and nothing else."
+    );
+    assert_eq!(session.session_id, "11111111-2222-4333-8444-555555555555");
+
+    let mut registry = SessionRegistry::new();
+    registry.user_turn(session.clone(), text, EntryState::Running, 1);
+    assert!(registry.confirm_reply(&session.session_id, 2));
+    let card = &registry.cards()[0];
+    assert_eq!(card.entries.len(), 1);
+    assert_eq!(card.entries[0].state, EntryState::Ok);
+    assert_eq!(card.entries[0].text, *text);
+}

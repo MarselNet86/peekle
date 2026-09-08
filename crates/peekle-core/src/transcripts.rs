@@ -9,7 +9,6 @@
 //! replaced by one from a file.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use serde_json::Value;
 
@@ -59,6 +58,51 @@ pub fn is_synthetic(text: &str) -> bool {
     SYNTHETIC_MARKERS
         .iter()
         .any(|marker| trimmed.starts_with(marker))
+}
+
+/// The tag a message delivered through a process's inbox arrives in. The
+/// receiver wraps it, both in `UserPromptSubmit` and in the file; in the
+/// file it also puts a preamble before and an instruction after. tech.md 6.5.
+pub const PEER_TAG_OPEN: &str = "<cross-session-message";
+pub const PEER_TAG_CLOSE: &str = "</cross-session-message>";
+
+/// What the receiver writes before the tag in the transcript. The one form
+/// seen live; the second is the variant its code has for a busy session.
+const PEER_PREAMBLES: &[&str] = &[
+    "Another Claude session sent a message",
+    "A peer session sent a message",
+];
+
+/// What a person said in a turn, or `None` for a turn nobody said.
+///
+/// Three cases, in one place so the file and the hook agree. Synthetic text
+/// is dropped (`is_synthetic`). Text wrapped as a cross-session message is a
+/// reply the island put into a live process's inbox, and what the person
+/// typed is the inside of the tag: that is what goes in the feed, in the
+/// title, and into `confirm_reply`. Everything else is what it looks like.
+/// tech.md 6.11.
+pub fn spoken(text: &str) -> Option<String> {
+    if is_synthetic(text) {
+        return None;
+    }
+    Some(unwrap_peer(text).unwrap_or(text).to_string())
+}
+
+fn unwrap_peer(text: &str) -> Option<&str> {
+    let start = text.find(PEER_TAG_OPEN)?;
+    let lead = text[..start].trim();
+    let expected_lead = lead.is_empty()
+        || PEER_PREAMBLES
+            .iter()
+            .any(|preamble| lead.starts_with(preamble));
+    if !expected_lead {
+        return None;
+    }
+    let tagged = &text[start..];
+    let open_end = tagged.find('>')?;
+    let body = &tagged[open_end + 1..];
+    let close = body.find(PEER_TAG_CLOSE)?;
+    Some(body[..close].trim())
 }
 
 /// Where Claude Code keeps them, under the user's home.
@@ -268,7 +312,7 @@ where
                     }
                 }
 
-                for text in texts_of(&record).into_iter().filter(|t| !is_synthetic(t)) {
+                for text in texts_of(&record).into_iter().filter_map(|t| spoken(&t)) {
                     if first_turn.is_empty() {
                         first_turn = truncate(&text, TITLE_LIMIT);
                     }
@@ -542,18 +586,4 @@ pub fn transcript_path(root: &Path, cwd: &str, session_id: &str) -> PathBuf {
         .map(|c| if c == '/' || c == '.' { '-' } else { c })
         .collect();
     root.join(key).join(format!("{session_id}.jsonl"))
-}
-
-/// Whether a live client wrote this session's transcript within `window`.
-///
-/// The registry's status is Peekle's bookkeeping, not a fact about the world:
-/// a session open in an IDE sends no hooks and reads as idle while its client
-/// is writing this very file. The file cannot lie. No file, or no readable
-/// mtime, reads as standing: there is nobody to race. tech.md 6.5.
-pub fn client_is_live(root: &Path, cwd: &str, session_id: &str, window: Duration) -> bool {
-    std::fs::metadata(transcript_path(root, cwd, session_id))
-        .and_then(|meta| meta.modified())
-        .ok()
-        .and_then(|modified| std::time::SystemTime::now().duration_since(modified).ok())
-        .is_some_and(|age| age < window)
 }

@@ -35,10 +35,6 @@ pub struct HeldSettings {
     effort: Option<String>,
 }
 
-/// How recently a transcript was written for its client to count as live.
-/// The detector of v34. tech.md 6.5.
-pub const LIVE_CLIENT_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
-
 pub struct AppState {
     pub config: Mutex<Config>,
     pub pending: PendingRegistry,
