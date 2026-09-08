@@ -30,6 +30,56 @@ fn a_captured_transcript_becomes_a_card() {
 
 /// Claude Code writes its own title for its own list, so reusing it beats
 /// cutting the first line in half.
+/// Both shapes Claude Code prints for `/model`, captured live on 2026-09-08:
+/// an alias resolved into a name in backticks, and a display name in bold
+/// with a tail about defaults. The feed shows the name and drops the tail --
+/// it answers a question about new sessions, not about this one.
+/// tech.md 6.11 and 6.15.
+#[test]
+fn a_model_switch_is_read_out_of_the_line_claude_code_prints() {
+    use peekle_core::transcripts::switched_model;
+
+    assert_eq!(
+        switched_model(
+            "<local-command-stdout>Set model to `claude-opus-5[1m]`</local-command-stdout>"
+        ),
+        Some("claude-opus-5[1m]".to_string())
+    );
+    assert_eq!(
+        switched_model(
+            "<local-command-stdout>Set model to \u{1b}[1mSonnet 5\u{1b}[22m and saved as your default for new sessions</local-command-stdout>"
+        ),
+        Some("Sonnet 5".to_string())
+    );
+
+    // Everything else this tag carries is not a model change.
+    assert_eq!(
+        switched_model("<local-command-stdout>Ran 4 tests</local-command-stdout>"),
+        None
+    );
+    assert_eq!(switched_model("Set model to opus"), None, "outside the tag");
+    assert_eq!(switched_model("плюс какой-то текст"), None);
+}
+
+/// In the feed it is a row of its own: nobody said it, and it is not a reply.
+/// The command itself stays synthetic and adds nothing. tech.md 6.11.
+#[test]
+fn a_model_switch_stands_in_the_feed_as_a_notice() {
+    let lines = [
+        r#"{"type":"user","uuid":"u1","sessionId":"s","cwd":"/tmp/p","timestamp":"2026-09-08T17:00:00.000Z","message":{"role":"user","content":"<command-name>/model</command-name>
+<command-args>opus[1m]</command-args>"}}"#,
+        r#"{"type":"user","uuid":"u2","sessionId":"s","timestamp":"2026-09-08T17:00:01.000Z","message":{"role":"user","content":"<local-command-stdout>Set model to `claude-opus-5[1m]`</local-command-stdout>"}}"#,
+        r#"{"type":"user","uuid":"u3","sessionId":"s","timestamp":"2026-09-08T17:00:02.000Z","message":{"role":"user","content":"go on"}}"#,
+    ];
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+
+    let kinds: Vec<EntryKind> = card.entries.iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, vec![EntryKind::Notice, EntryKind::User]);
+    assert_eq!(card.entries[0].text, "Switched to claude-opus-5[1m]");
+    // The switch is not what the chat is called: a title is what a person said.
+    assert_eq!(card.title, "go on");
+}
+
 /// The shape Claude Code writes when the API refuses a turn, as seen live on
 /// 2026-09-08: an `assistant` record flagged `isApiErrorMessage` with the
 /// model named `<synthetic>`. It is a failed answer in the feed and not a
