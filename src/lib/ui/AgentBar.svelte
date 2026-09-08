@@ -27,8 +27,6 @@
     models = [],
     live = false,
     note = '',
-    canStop = false,
-    stopping = false,
     askedModel = null,
     askedEffort = null,
     pendingModel = false,
@@ -37,7 +35,6 @@
     onmodel,
     oneffort,
     oncompact,
-    onstop,
     onnote,
   }: {
     agent: AgentSetup | null;
@@ -53,8 +50,6 @@
     /** Why it only reads, shown on the values themselves. Empty when live. */
     note?: string;
     /** A turn is running and there is somewhere to send the stop. 6.5. */
-    canStop?: boolean;
-    stopping?: boolean;
     /** What was chosen and has not come back yet. The row stands on this
      * while it travels, so a choice shows as made. tech.md 6.15. */
     askedModel?: string | null;
@@ -65,7 +60,6 @@
     onmodel?: (alias: string) => void;
     oneffort?: (effort: Effort) => void;
     oncompact?: () => void;
-    onstop?: () => void;
     /** A value that only reads was pressed anyway. A press deserves an
      * answer, and the answer is `note`. tech.md 6.15. */
     onnote?: () => void;
@@ -89,14 +83,6 @@
 
 {#if shown}
   <div class="agent-bar">
-    <!-- Where Claude Code puts "esc to interrupt": the same strip, under the
-         field, so ending a turn never costs a row of its own. tech.md 6.5. -->
-    {#if canStop}
-      <button class="stop" disabled={stopping} onclick={() => onstop?.()}>
-        {stopping ? 'Stopping…' : 'Stop'}
-      </button>
-    {/if}
-
     {#if live}
       <PickerMenu
         label={modelText}
@@ -167,31 +153,6 @@
 
   /* Ending the turn is the one action in this strip that is not a setting, so
      it sits at the other end of it, away from the three that are. */
-  .stop {
-    margin-right: auto;
-    border: 1px solid var(--hairline);
-    background: transparent;
-    color: var(--text-dim);
-    font: inherit;
-    font-size: 11px;
-    line-height: 1;
-    padding: 3px 9px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition:
-      color 120ms ease,
-      border-color 120ms ease;
-  }
-
-  .stop:hover:not(:disabled) {
-    color: var(--text);
-    border-color: var(--text-dim);
-  }
-
-  .stop:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
 
   /* The same metrics as a menu button with the affordance taken off: no
      chevron, no hover, and a cursor that promises nothing. It still takes a

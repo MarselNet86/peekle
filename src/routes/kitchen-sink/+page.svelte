@@ -360,13 +360,9 @@
     <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
     <AgentBar agent={opus} models={modelRows} live pendingModel pendingCompact />
     <AgentBar agent={haiku} models={modelRows} live />
-    <!-- Mid turn: Stop sits at the other end of the same strip. 6.5. -->
-    <AgentBar agent={opus} models={modelRows} live canStop onstop={() => {}} />
-    <AgentBar agent={opus} models={modelRows} live canStop stopping />
     <!-- A chat another app runs: reading, with the note saying where the
-         setting lives. Stop still works there, over the inbox. 6.15. -->
+         setting lives. Stopping still works there, over the inbox. 6.15. -->
     <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} />
-    <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} canStop />
     <!-- A pick on its way: the row stands on what was asked for, dimmed. -->
     <AgentBar agent={opus} models={modelRows} live askedModel="sonnet" pendingModel />
     <!-- Not answered yet: standing on the defaults, ring empty. 6.15. -->
@@ -478,6 +474,11 @@
     <h2>PromptInput</h2>
     <div class="frame"><PromptInput bind:value={text} placeholder="Reply to Claude" /></div>
     <div class="frame"><PromptInput value="disabled" disabled /></div>
+    <!-- Mid turn the one button becomes the way to end it: a white square on
+         the product's green, where the arrow was. tech.md 6.5. -->
+    <div class="frame">
+      <PromptInput placeholder="Message Claude" working onstop={() => {}} />
+    </div>
   </section>
 
   <section>

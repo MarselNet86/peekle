@@ -1082,6 +1082,15 @@ fn command_session(
     Ok(())
 }
 
+/// The card's own `SessionRef`, for the paths that hold only an id.
+fn session_for(state: &Arc<AppState>, session_id: &str) -> Option<peekle_core::types::SessionRef> {
+    state
+        .sessions()
+        .into_iter()
+        .find(|c| c.session.session_id == session_id)
+        .map(|c| c.session)
+}
+
 /// Re-reads one session's transcript a moment from now, and again after that.
 ///
 /// For the things Claude Code records without telling anyone: a slash command
@@ -1157,12 +1166,39 @@ pub const NOTHING_RUNNING: &str = "Nothing is running there";
 /// tool boundary the way any queued line is. No feed row is added on that
 /// path: the request arrives as a user turn and `UserPromptSubmit` adds it.
 #[tauri::command]
-pub fn stop_session(state: State<'_, Arc<AppState>>, session_id: String) -> Result<(), String> {
+pub fn stop_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<(), String> {
     if state.owns_session(&session_id) {
-        return state.pty().interrupt(&session_id).map_err(|err| {
+        state.pty().interrupt(&session_id).map_err(|err| {
             tracing::warn!(session = %session_id, error = %err, "could not interrupt");
             NOTHING_RUNNING.to_string()
-        });
+        })?;
+
+        // Nothing reports an interrupted turn: `Stop` does not fire for one,
+        // so the card would keep spinning `Working` until the stale sweep
+        // gave up ten minutes later, and the button that ended the turn would
+        // still be offering to end it. Measured live on 2026-09-08: the turn
+        // is over 0.2s after the key. We pressed it, so we know. tech.md 6.5.
+        let cards = state.set_session_status(
+            &session_for(state.inner(), &session_id).unwrap_or_else(|| {
+                peekle_core::types::SessionRef {
+                    session_id: session_id.clone(),
+                    cwd: String::new(),
+                    project: String::new(),
+                    pid: None,
+                    tty: None,
+                }
+            }),
+            peekle_core::types::SessionStatus::Idle,
+            now_ms(),
+        );
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+        return Ok(());
     }
 
     let sessions_root = peekle_core::registry::default_root();
@@ -1540,6 +1576,37 @@ mod tests {
         assert_eq!(status_after(&PromptOutcome::Dismissed), SessionStatus::Idle);
         assert_eq!(status_after(&PromptOutcome::TimedOut), SessionStatus::Idle);
         assert_eq!(status_after(&PromptOutcome::Bypassed), SessionStatus::Idle);
+    }
+
+    /// An interrupt is the one end of a turn nobody reports: `Stop` does not
+    /// fire for it. We pressed the key, so the card is put to rest here --
+    /// otherwise the button that just ended the turn would go on offering to
+    /// end it, which is what "cancel does nothing" looked like. tech.md 6.5.
+    #[test]
+    fn a_session_we_interrupted_is_put_to_rest_by_the_press_that_did_it() {
+        let state = fresh();
+        let session = peekle_core::types::SessionRef {
+            session_id: "ours".to_string(),
+            cwd: "/tmp".to_string(),
+            project: "tmp".to_string(),
+            pid: None,
+            tty: None,
+        };
+        state.claim_session(&session.session_id);
+        state.open_owned_session(session.clone(), 1);
+        state.set_session_status(&session, peekle_core::types::SessionStatus::Working, 2);
+        assert_eq!(
+            state.sessions()[0].status,
+            peekle_core::types::SessionStatus::Working
+        );
+
+        // What `stop_session` does once the key is on the wire.
+        let cards = state.set_session_status(&session, peekle_core::types::SessionStatus::Idle, 3);
+        assert_eq!(cards[0].status, peekle_core::types::SessionStatus::Idle);
+        assert_eq!(
+            session_for(&state, "ours").map(|s| s.cwd),
+            Some("/tmp".to_string())
+        );
     }
 
     /// A stop for a session nobody runs is refused in words the webview shows.

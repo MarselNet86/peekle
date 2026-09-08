@@ -240,27 +240,6 @@ describe('the row of a session the island cannot command', () => {
     expect(onnote).toHaveBeenCalledTimes(3);
   });
 
-  /** Ending a turn lives in this row and only while one is running: Claude
-   * Code puts `esc to interrupt` in the same strip, and a row of its own
-   * would move the field under the hand on every turn. tech.md 6.5. */
-  it('offers Stop only while a turn is running, and once per press', async () => {
-    const onstop = vi.fn();
-    const { rerender } = render(AgentBar, {
-      props: { agent: opus, models, live: true, canStop: false, onstop },
-    });
-    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
-
-    await rerender({ agent: opus, models, live: true, canStop: true, onstop });
-    await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    expect(onstop).toHaveBeenCalledOnce();
-
-    await rerender({ agent: opus, models, live: true, canStop: true, stopping: true, onstop });
-    const pressed = screen.getByRole('button', { name: 'Stopping…' });
-    expect(pressed).toBeDisabled();
-    await userEvent.click(pressed);
-    expect(onstop).toHaveBeenCalledOnce();
-  });
-
   /** With nothing to stand on -- no transcript, no defaults -- there is no
    * row. Zeroes would claim an empty context, which is a different claim. */
   it('draws nothing at all with neither a reading nor a default', () => {

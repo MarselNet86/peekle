@@ -173,7 +173,8 @@
 
   // Whether there is a turn to stop, and whether a press is already on its
   // way. One press at a time: Esc twice into a pty is still one interrupt,
-  // but two requests into an inbox are two turns. tech.md 6.5.
+  // but two requests into an inbox are two turns. The control is the field's
+  // own button, which becomes the way to stop while a turn runs. tech.md 6.5.
   const canStop = $derived(
     stopAvailable({
       status: current?.status,
@@ -765,8 +766,6 @@
               models={agent.models}
               live={owned}
               note={noteTitle(settingsNote(current))}
-              {canStop}
-              {stopping}
               askedModel={asked.model}
               askedEffort={asked.effort}
               pendingModel={waiting.model}
@@ -775,7 +774,6 @@
               onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
               oneffort={(level) => current && agent.setEffort(current.session.session_id, level)}
               oncompact={() => current && agent.compact(current.session.session_id, setup)}
-              onstop={stop}
               onnote={() => (rowNote = settingsNote(current))}
             />
             {#if agent.error}
@@ -798,7 +796,9 @@
               bind:value={reply}
               placeholder={replyHint}
               disabled={!reachable}
+              working={canStop && !stopping}
               onsubmit={send}
+              onstop={stop}
               onescape={() => (handoff ? cancelHandoff() : island.dismiss())}
             />
           </div>
