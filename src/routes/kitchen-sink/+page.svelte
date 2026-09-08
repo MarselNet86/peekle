@@ -13,7 +13,7 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
-  import TypingLine from '$lib/ui/TypingLine.svelte';
+  import WorkLine from '$lib/ui/WorkLine.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
   import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
@@ -445,8 +445,13 @@
   </section>
 
   <section>
-    <h2>TypingLine</h2>
-    <div class="stage messages"><TypingLine /></div>
+    <h2>WorkLine</h2>
+    <!-- Both halves of a run: the clock while it goes, the span once it is
+         over. tech.md 6.12. -->
+    <div class="stage messages">
+      <WorkLine running from={Date.now() - 42_000} />
+      <WorkLine running={false} from={0} to={74_000} />
+    </div>
   </section>
 
   <section>

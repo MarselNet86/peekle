@@ -108,7 +108,7 @@ test.describe('overlay routes', () => {
       'AgentBar',
       'PickerMenu',
       'Objects with a body',
-      'TypingLine',
+      'WorkLine',
       'ShotPrompt',
       'ShotChip',
       'ShotPreview',
