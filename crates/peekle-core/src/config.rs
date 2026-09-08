@@ -52,6 +52,8 @@ pub struct Config {
     pub behavior: BehaviorConfig,
     #[serde(default)]
     pub shots: ShotsConfig,
+    #[serde(default)]
+    pub notify: NotifyConfig,
 
     /// Sections this build does not know. Kept so a round trip does not delete
     /// a newer Peekle's settings.
@@ -110,6 +112,17 @@ pub enum UsageProviderKind {
     Account,
     Fake,
     Off,
+}
+
+/// The banner a finished turn puts on the screen. tech.md 6.17.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotifyConfig {
+    /// Off until the user turns it on and macOS grants the permission. Nothing
+    /// else sets it: posting the first banner raises a system dialog, and rule
+    /// 12 forbids raising one without a person asking for it. The same
+    /// discipline `keychain_granted` lives by. tech.md 6.17.
+    pub enabled: bool,
 }
 
 /// Watching the pasteboard for screenshots. tech.md 6.13.
@@ -324,6 +337,32 @@ mod tests {
         assert!(!config.behavior.enabled);
         assert_eq!(config.behavior.permission_wait_secs, 300);
         assert_eq!(config.behavior.delivery_confirm_secs, 20);
+    }
+
+    /// Off on a fresh install, and nothing but the switch turns it on: the
+    /// first banner is what makes macOS ask, and an app that asks on its own
+    /// breaks rule 12. tech.md 6.17.
+    #[test]
+    fn turn_notices_are_off_until_the_user_says_otherwise() {
+        assert!(!Config::default().notify.enabled);
+        assert!(
+            !Config::from_toml("[server]\nport = 5000\n")
+                .unwrap()
+                .notify
+                .enabled
+        );
+    }
+
+    /// What the switch wrote survives being read back, which is the whole job
+    /// of the key: the answer to "is this on" outlives the run that answered
+    /// it. tech.md 6.17.
+    #[test]
+    fn the_notify_switch_survives_a_round_trip() {
+        let config = Config::from_toml("[notify]\nenabled = true\n").unwrap();
+        assert!(config.notify.enabled);
+
+        let written = toml::to_string_pretty(&config).unwrap();
+        assert!(Config::from_toml(&written).unwrap().notify.enabled);
     }
 
     #[test]

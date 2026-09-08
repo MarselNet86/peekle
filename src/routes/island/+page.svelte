@@ -1,6 +1,7 @@
 <script lang="ts">
   import { commands, fileSrc } from '$lib/bridge';
   import { createAgent } from '$lib/features/agent/agent.svelte';
+  import { createNotify, NOTIFY_HINT } from '$lib/features/notify/notify.svelte';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
@@ -28,6 +29,7 @@
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
+  import IconButton from '$lib/ui/IconButton.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -37,6 +39,7 @@
   import RestMark from '$lib/ui/RestMark.svelte';
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import TypingLine from '$lib/ui/TypingLine.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
@@ -54,8 +57,13 @@
   const signIn = createSignIn();
   const shots = createShots();
   const agent = createAgent();
+  const notify = createNotify();
 
   let host = $state<HTMLElement | null>(null);
+  // Whether the gear has the list open on settings instead. One shape, so the
+  // setting stands where the list stood rather than in a window of its own.
+  // tech.md 6.17.
+  let settingsOpen = $state(false);
 
   const current = $derived.by(() => {
     const id = sessionOf(island.view);
@@ -402,6 +410,7 @@
       signIn.start(),
       shots.start(),
       agent.start(),
+      notify.start().then(() => () => {}),
     ]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
@@ -567,44 +576,71 @@
             {/if}
           </div>
         {:else}
-          <!-- Only once there is a list worth searching. tech.md S14. -->
-          {#if feed.sessions.length > 3}
-            <div class="search"><SearchField bind:value={query} /></div>
-          {/if}
-          <!-- Not offered while the account is out of reach: a new chat needs
+          <!-- The gear stands in the corner and nowhere else: the list is
+               what this view is for, and a settings row above every session
+               would be a permanent tax on the thing people came to read.
+               tech.md 6.17. -->
+          <div class="top">
+            <IconButton
+              name="gear"
+              title="Settings"
+              pressed={settingsOpen}
+              onclick={() => (settingsOpen = !settingsOpen)}
+            />
+          </div>
+          {#if settingsOpen}
+            <div class="settings">
+              <Toggle
+                label="Notify when a turn ends"
+                hint={NOTIFY_HINT}
+                checked={notify.on}
+                busy={notify.busy}
+                onchange={(next) => notify.set(next)}
+              />
+              {#if notify.error}
+                <p class="empty">{notify.error}</p>
+              {/if}
+            </div>
+          {:else}
+            <!-- Only once there is a list worth searching. tech.md S14. -->
+            {#if feed.sessions.length > 3}
+              <div class="search"><SearchField bind:value={query} /></div>
+            {/if}
+            <!-- Not offered while the account is out of reach: a new chat needs
                an agent, and starting one behind a screen that says the island
                cannot reach the account is a session nobody can use. The way in
                stands at the bottom of this list instead. tech.md 6.16. -->
-          {#if newestCwd && !barred}
-            <div class="start">
-              <Button label="New session" onclick={() => startSession(newestCwd)} wide />
-            </div>
-          {/if}
-          <div class="rows" bind:this={scroller} onscroll={readScroll}>
-            {#each cards as card (card.session.session_id)}
-              <SessionRow
-                {card}
-                onopen={() => openSession(card.session.session_id)}
-                onrename={(title) => renameSession(card.session.session_id, title)}
-                onhide={() => hideSession(card.session.session_id)}
-              />
-            {/each}
-            <!-- An empty list opened from the mark says so. Collapsing on the
+            {#if newestCwd && !barred}
+              <div class="start">
+                <Button label="New session" onclick={() => startSession(newestCwd)} wide />
+              </div>
+            {/if}
+            <div class="rows" bind:this={scroller} onscroll={readScroll}>
+              {#each cards as card (card.session.session_id)}
+                <SessionRow
+                  {card}
+                  onopen={() => openSession(card.session.session_id)}
+                  onrename={(title) => renameSession(card.session.session_id, title)}
+                  onhide={() => hideSession(card.session.session_id)}
+                />
+              {/each}
+              <!-- An empty list opened from the mark says so. Collapsing on the
                  click the user just made reads as a broken island. tech.md S12. -->
-            {#if cards.length === 0}
-              <p class="empty">
-                {query
-                  ? 'Nothing matches that.'
-                  : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
-              </p>
-            {/if}
-            {#if startError}
-              <p class="empty">{startError}</p>
-            {/if}
-          </div>
-          <ScrollHint visible={showHint} onclick={() => toBottom()} />
+              {#if cards.length === 0}
+                <p class="empty">
+                  {query
+                    ? 'Nothing matches that.'
+                    : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
+                </p>
+              {/if}
+              {#if startError}
+                <p class="empty">{startError}</p>
+              {/if}
+            </div>
+            <ScrollHint visible={showHint} onclick={() => toBottom()} />
 
-          {@render connect()}
+            {@render connect()}
+          {/if}
         {/if}
       </div>
     {:else if barred}
@@ -828,6 +864,17 @@
     color: var(--text-dim);
     font-size: 11px;
     text-align: center;
+  }
+
+  .top {
+    display: flex;
+    justify-content: flex-end;
+    flex: none;
+    padding-bottom: 2px;
+  }
+
+  .settings {
+    flex: none;
   }
 
   .search {

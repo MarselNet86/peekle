@@ -10,6 +10,7 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
+use crate::notify::Notifier;
 use crate::state::{AppState, HeldKind};
 use crate::windows;
 
@@ -1022,6 +1023,45 @@ pub fn stop_session(state: State<'_, Arc<AppState>>, session_id: String) -> Resu
         tracing::warn!(session = %session_id, pid = live.pid, error = %err, "stop request refused");
         NOTHING_RUNNING.to_string()
     })
+}
+
+/// Whether a finished turn puts a banner on the screen. tech.md 6.17.
+#[tauri::command]
+pub fn notify_enabled(state: State<'_, Arc<AppState>>) -> bool {
+    state.lock_config().notify.enabled
+}
+
+/// Turns the banner on or off, and shows the first one on the way in.
+///
+/// There is no separate permission to ask for on desktop: macOS raises its own
+/// dialog on the first banner an app posts, so the first banner has to be a
+/// consequence of the press. It is also the only honest confirmation the
+/// switch can give -- the person sees the thing they just asked for, in the
+/// place it will appear from now on. A system that swallows banners says
+/// nothing about it, here or anywhere, which is what the line under the
+/// switch is for. tech.md 6.17 and rule 12.
+#[tauri::command]
+pub fn set_notify_enabled(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    on: bool,
+) -> Result<(), String> {
+    {
+        // Scoped: `save_config` takes the same lock, and holding it across the
+        // call would deadlock the island on its own settings.
+        state.lock_config().notify.enabled = on;
+    }
+    state.save_config();
+
+    if !on {
+        return Ok(());
+    }
+    crate::notify::SystemNotifier(&app)
+        .post(crate::notify::TITLE, crate::notify::SWITCHED_ON)
+        .map_err(|err| {
+            tracing::warn!(error = %err, "the system refused the first notice");
+            "macOS would not show a notification".to_string()
+        })
 }
 
 /// A message that will never leave says so rather than sitting dim forever.

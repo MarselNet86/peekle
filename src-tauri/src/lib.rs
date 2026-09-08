@@ -2,6 +2,7 @@ mod commands;
 mod events;
 mod hooks;
 mod hotkey;
+mod notify;
 mod panel;
 mod shots;
 mod state;
@@ -22,6 +23,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_nspanel::init())
+        // Banners for a finished turn. Registering the plugin posts
+        // nothing and asks nothing: macOS raises its dialog on the
+        // first banner, and the first banner is the toggle's own.
+        // tech.md 6.17.
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -179,6 +185,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::send_message,
             commands::end_session,
             commands::stop_session,
+            commands::notify_enabled,
+            commands::set_notify_enabled,
             commands::rename_session,
             commands::hide_session,
             commands::get_models,
@@ -212,6 +220,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::send_message,
             commands::end_session,
             commands::stop_session,
+            commands::notify_enabled,
+            commands::set_notify_enabled,
             commands::rename_session,
             commands::hide_session,
             commands::get_models,

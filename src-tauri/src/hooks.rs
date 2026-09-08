@@ -19,6 +19,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
 use crate::events;
+use crate::notify;
 use crate::state::AppState;
 use crate::windows;
 
@@ -95,6 +96,22 @@ impl AppSink {
         else {
             return;
         };
+        // The banner first, and on its own rules. It does not take the
+        // island's view from anything, so what is on screen decides the pill
+        // and not it: the only session it stays quiet for is the one already
+        // open, where the person is looking. tech.md 6.17.
+        let watching = matches!(
+            self.state.view(),
+            IslandView::Session(ref open) if open == &session.session_id
+        );
+        notify::say(
+            &self.app,
+            self.state.lock_config().notify.enabled,
+            watching,
+            &session.project,
+            &said,
+        );
+
         if self.state.view() != IslandView::Collapsed || self.state.active_prompt().is_some() {
             tracing::debug!("something is on screen already, so the turn stays quiet");
             return;
