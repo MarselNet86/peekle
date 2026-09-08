@@ -67,13 +67,12 @@ pub(crate) fn settle(
             }
 
             // Answering unblocks the hook, so the agent is running again by the
-            // time this returns. Saying idle would leave the island still while
-            // work is happening. tech.md 6.3.
-            let status = if answered.is_some() {
-                peekle_core::types::SessionStatus::Working
-            } else {
-                peekle_core::types::SessionStatus::Idle
-            };
+            // time this returns, whichever way it was answered: a deny is read
+            // and worked around, not obeyed as a stop. Saying idle would leave
+            // the island still while work is happening, and hide the `Stop`
+            // that is the way to end it. A dismissal or a timeout hands the
+            // question back to the terminal instead. tech.md 6.3 and 6.5.
+            let status = status_after(&outcome);
             let cards = state.set_session_status(&request.session, status, at);
             if let Err(err) = app.emit(events::SESSIONS, &cards) {
                 tracing::warn!(error = %err, "failed to emit sessions");
@@ -91,6 +90,16 @@ pub(crate) fn settle(
     // After release_prompt, so the collapse can tell whether anything queued
     // behind this one.
     windows::close_prompt(app, prompt_id, &outcome);
+}
+
+/// What a session is doing once its blocking prompt is settled. Any answer,
+/// allow or deny, releases the hook and the agent runs; a dismissal or a
+/// timeout hands the question back to the terminal. tech.md 6.3 and 6.5.
+pub fn status_after(outcome: &PromptOutcome) -> peekle_core::types::SessionStatus {
+    match outcome {
+        PromptOutcome::Answered(_) => peekle_core::types::SessionStatus::Working,
+        _ => peekle_core::types::SessionStatus::Idle,
+    }
 }
 
 fn now_ms() -> i64 {
@@ -980,6 +989,41 @@ pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: 
     }
 }
 
+/// What `stop_session` says when there is no turn to stop. tech.md 6.5.
+pub const NOTHING_RUNNING: &str = "Nothing is running there";
+
+/// Stops the running turn of a session. tech.md 6.5.
+///
+/// Our own session takes the key that interrupts a turn in the TUI, `Esc`,
+/// written into its pty. A live process that is not ours has no interrupt
+/// channel -- its inbox carries no such frame and a signal would end the
+/// process, not the turn -- so it gets a request to stop, read at its next
+/// tool boundary the way any queued line is. No feed row is added on that
+/// path: the request arrives as a user turn and `UserPromptSubmit` adds it.
+#[tauri::command]
+pub fn stop_session(state: State<'_, Arc<AppState>>, session_id: String) -> Result<(), String> {
+    if state.owns_session(&session_id) {
+        return state.pty().interrupt(&session_id).map_err(|err| {
+            tracing::warn!(session = %session_id, error = %err, "could not interrupt");
+            NOTHING_RUNNING.to_string()
+        });
+    }
+
+    let sessions_root = peekle_core::registry::default_root();
+    let live = sessions_root
+        .as_deref()
+        .and_then(|root| peekle_core::registry::find_live(root, &session_id));
+    let (Some(root), peekle_core::registry::Route::Inbox(live)) =
+        (sessions_root.as_deref(), peekle_core::registry::route(live))
+    else {
+        return Err(NOTHING_RUNNING.to_string());
+    };
+    peekle_core::inbox::send(root, &live, peekle_core::inbox::STOP_REQUEST).map_err(|err| {
+        tracing::warn!(session = %session_id, pid = live.pid, error = %err, "stop request refused");
+        NOTHING_RUNNING.to_string()
+    })
+}
+
 /// A message that will never leave says so rather than sitting dim forever.
 fn fail_replies(app: &AppHandle, state: &Arc<AppState>, session_id: &str) {
     let cards = state.replies_failed(session_id, now_ms());
@@ -1204,6 +1248,39 @@ mod tests {
     #[test]
     fn the_busy_refusal_reads_as_the_webview_expects() {
         assert_eq!(BUSY_ELSEWHERE, "That chat is open somewhere else right now");
+    }
+
+    /// A deny releases the hook like an allow does: the agent reads the
+    /// refusal and carries on, so the card says Working and `Stop` is
+    /// offered. Only a question handed back to the terminal leaves it idle.
+    /// tech.md 6.5.
+    #[test]
+    fn any_answer_leaves_the_session_working_and_a_dismissal_leaves_it_idle() {
+        use peekle_core::types::{PromptAnswer, SessionStatus};
+
+        let deny_without_a_word = PromptOutcome::Answered(PromptAnswer {
+            prompt_id: "p".to_string(),
+            choice: Some("deny".to_string()),
+            text: None,
+            answers: Vec::new(),
+        });
+        assert_eq!(status_after(&deny_without_a_word), SessionStatus::Working);
+        assert_eq!(status_after(&PromptOutcome::Dismissed), SessionStatus::Idle);
+        assert_eq!(status_after(&PromptOutcome::TimedOut), SessionStatus::Idle);
+        assert_eq!(status_after(&PromptOutcome::Bypassed), SessionStatus::Idle);
+    }
+
+    /// A stop for a session nobody runs is refused in words the webview shows.
+    #[test]
+    fn a_stop_with_nothing_running_is_refused_not_signalled() {
+        let state = fresh();
+        assert!(!state.owns_session("nobody"));
+        assert_eq!(NOTHING_RUNNING, "Nothing is running there");
+        // The pty host knows no such session, which is the owned path's refusal.
+        assert!(matches!(
+            state.pty().interrupt("nobody"),
+            Err(peekle_core::pty::PtyError::NotOwned)
+        ));
     }
 
     #[test]

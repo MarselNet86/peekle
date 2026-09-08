@@ -23,7 +23,9 @@
   import UsageBar from '$lib/ui/UsageBar.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
   import { effortOptions, modelOptions } from '$lib/logic/agent';
+  import { ELSEWHERE_NOTE, FINISHED_NOTE, noteTitle } from '$lib/logic/agent';
   import AgentBar from '$lib/ui/AgentBar.svelte';
+  import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
@@ -351,9 +353,25 @@
     <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
     <AgentBar agent={opus} models={modelRows} live pendingModel pendingCompact />
     <AgentBar agent={haiku} models={modelRows} live />
-    <AgentBar agent={opus} models={modelRows} />
+    <!-- Mid turn: Stop sits at the other end of the same strip. 6.5. -->
+    <AgentBar agent={opus} models={modelRows} live canStop onstop={() => {}} />
+    <AgentBar agent={opus} models={modelRows} live canStop stopping />
+    <!-- A chat another app runs: reading, with the note saying where the
+         setting lives. Stop still works there, over the inbox. 6.15. -->
+    <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} />
+    <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} canStop />
+    <!-- A pick on its way: the row stands on what was asked for, dimmed. -->
+    <AgentBar agent={opus} models={modelRows} live askedModel="sonnet" pendingModel />
     <!-- Not answered yet: standing on the defaults, ring empty. 6.15. -->
     <AgentBar agent={null} defaults={fresh} models={modelRows} live />
+  </section>
+
+  <section>
+    <h2>NoteBlock</h2>
+    <!-- The answer a pressed reading gives: what is so, and the way out.
+         tech.md 6.15. -->
+    <NoteBlock fact={ELSEWHERE_NOTE.fact} how={ELSEWHERE_NOTE.how} />
+    <NoteBlock fact={FINISHED_NOTE.fact} />
   </section>
 
   <section>

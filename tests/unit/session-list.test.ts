@@ -14,6 +14,7 @@ import {
   isBusyElsewhere,
   replyReachable,
   searchSessions,
+  stopAvailable,
 } from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
@@ -25,6 +26,42 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   entries: [],
   agent: null,
   updated_at: 0,
+});
+
+/**
+ * S22. `Stop` stands under the field only while there is a turn to stop and
+ * somewhere to send the stop: a working session, no open request, and a
+ * field that is reachable. tech.md 6.5.
+ */
+describe('the stop button', () => {
+  const statuses = ['Working', 'Idle', 'Ended', undefined] as const;
+
+  it('stands only over a working session with a reachable field and no open request', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...statuses),
+        fc.boolean(),
+        fc.boolean(),
+        fc.boolean(),
+        (status, hasPrompt, owned, canContinue) => {
+          const shown = stopAvailable({ status, hasPrompt, owned, canContinue });
+          expect(shown).toBe(status === 'Working' && !hasPrompt && (owned || canContinue));
+        },
+      ),
+    );
+  });
+
+  it('is offered for an observed chat that is working, since its inbox takes the request', () => {
+    expect(
+      stopAvailable({ status: 'Working', hasPrompt: false, owned: false, canContinue: true }),
+    ).toBe(true);
+  });
+
+  it('is not offered over Allow and Deny', () => {
+    expect(
+      stopAvailable({ status: 'Working', hasPrompt: true, owned: true, canContinue: false }),
+    ).toBe(false);
+  });
 });
 
 describe('the age of a session', () => {

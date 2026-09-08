@@ -55,6 +55,24 @@ export function replyReachable(state: {
 }
 
 /**
+ * Whether the `Stop` button stands under the field.
+ *
+ * Only while the agent is mid turn: there is nothing to stop otherwise, and a
+ * button that does nothing reads as broken. Never over an open request --
+ * that is Allow and Deny's row, and a deny puts the session back to Working,
+ * where `Stop` then appears. And only where the field itself is reachable: a
+ * session with no process and no pty has no turn to end. tech.md 6.5.
+ */
+export function stopAvailable(state: {
+  status: 'Working' | 'Idle' | 'Ended' | undefined;
+  hasPrompt: boolean;
+  owned: boolean;
+  canContinue: boolean;
+}): boolean {
+  return state.status === 'Working' && !state.hasPrompt && (state.owned || state.canContinue);
+}
+
+/**
  * The exact refusal `continue_session` gives when a live process holds the
  * chat and offers no inbox to put words into. Matched here rather than
  * treated as an ordinary error, so a rejection can become "wait and try

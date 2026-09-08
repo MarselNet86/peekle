@@ -68,6 +68,17 @@ export function createAgent() {
      * arriving and never by a clock: a setting that has not applied yet is
      * not a setting that was lost. tech.md 6.15.
      */
+    /**
+     * What was chosen in this session and has not come back yet, whether or
+     * not it has applied. The row shows this rather than the value still in
+     * force: a choice answered by the old value reads as a choice that did
+     * not land. tech.md 6.15.
+     */
+    asked(sessionId: string) {
+      const waiting = picked[sessionId] ?? NOTHING;
+      return { model: waiting.model, effort: waiting.effort };
+    },
+
     pendingFor(sessionId: string, agent: AgentSetup | null) {
       const waiting = picked[sessionId] ?? NOTHING;
       return {

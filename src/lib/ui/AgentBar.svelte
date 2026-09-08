@@ -6,6 +6,7 @@
    * what I am typing. tech.md 6.15 and 9.
    */
   import {
+    askedLabel,
     contextLabel,
     effortLabel,
     effortOptions,
@@ -25,12 +26,19 @@
     defaults = null,
     models = [],
     live = false,
+    note = '',
+    canStop = false,
+    stopping = false,
+    askedModel = null,
+    askedEffort = null,
     pendingModel = false,
     pendingEffort = false,
     pendingCompact = false,
     onmodel,
     oneffort,
     oncompact,
+    onstop,
+    onnote,
   }: {
     agent: AgentSetup | null;
     /** What the session runs as before it has answered once: Claude Code's
@@ -39,15 +47,28 @@
     defaults?: AgentSetup | null;
     models?: ModelChoice[];
     /** Whether anything here can be changed: an owned session, still running.
-     * An observed one has no channel at all, so its row reads and nothing
-     * more. tech.md 6.15. */
+     * A chat another app is running takes text but not commands, so its row
+     * reads and says where the settings live. tech.md 6.15. */
     live?: boolean;
+    /** Why it only reads, shown on the values themselves. Empty when live. */
+    note?: string;
+    /** A turn is running and there is somewhere to send the stop. 6.5. */
+    canStop?: boolean;
+    stopping?: boolean;
+    /** What was chosen and has not come back yet. The row stands on this
+     * while it travels, so a choice shows as made. tech.md 6.15. */
+    askedModel?: string | null;
+    askedEffort?: Effort | null;
     pendingModel?: boolean;
     pendingEffort?: boolean;
     pendingCompact?: boolean;
     onmodel?: (alias: string) => void;
     oneffort?: (effort: Effort) => void;
     oncompact?: () => void;
+    onstop?: () => void;
+    /** A value that only reads was pressed anyway. A press deserves an
+     * answer, and the answer is `note`. tech.md 6.15. */
+    onnote?: () => void;
   } = $props();
 
   // What the row is standing on: the transcript when there is one, the
@@ -59,44 +80,76 @@
 
   const modelRows = $derived<PickOption[]>(modelOptions(models));
   const effortRows = $derived<PickOption[]>(effortOptions(shown));
-  const picked = $derived(currentModel(shown, models));
+  // While a pick travels, both the label and the tick stand on it: the choice
+  // is the freshest true thing about the session, even before it applies.
+  const picked = $derived(askedModel ?? currentModel(shown, models));
+  const modelText = $derived(askedLabel(askedModel, models) || modelLabel(shown) || 'Model');
+  const effortShown = $derived(askedEffort ?? shown?.effort ?? null);
 </script>
 
 {#if shown}
   <div class="agent-bar">
-    <PickerMenu
-      label={modelLabel(shown) || 'Model'}
-      options={modelRows}
-      value={picked}
-      disabled={!live}
-      pending={pendingModel}
-      onpick={(alias) => onmodel?.(alias)}
-    />
-
-    <!-- A model that takes no effort is not offered a dead menu. 6.15. -->
-    {#if effortRows.length > 0}
-      <PickerMenu
-        label={effortLabel(shown.effort) || 'Effort'}
-        options={effortRows}
-        value={shown.effort ?? ''}
-        disabled={!live}
-        pending={pendingEffort}
-        onpick={(level) => oneffort?.(level as Effort)}
-      />
+    <!-- Where Claude Code puts "esc to interrupt": the same strip, under the
+         field, so ending a turn never costs a row of its own. tech.md 6.5. -->
+    {#if canStop}
+      <button class="stop" disabled={stopping} onclick={() => onstop?.()}>
+        {stopping ? 'Stopping…' : 'Stop'}
+      </button>
     {/if}
 
-    <!-- The ring is the button, exactly as it is in Claude Code: what it
-         shows is what clicking it acts on. tech.md 6.15. -->
-    <button
-      class="context"
-      class:pending={pendingCompact}
-      disabled={!live || !measured}
-      title={contextLabel(agent) || 'Nothing in the context yet'}
-      aria-label={contextLabel(agent) || 'Nothing in the context yet'}
-      onclick={() => oncompact?.()}
-    >
-      <UsageDial pct={measured ? shown.context_pct : null} size={13} />
-    </button>
+    {#if live}
+      <PickerMenu
+        label={modelText}
+        options={modelRows}
+        value={picked}
+        pending={pendingModel}
+        onpick={(alias) => onmodel?.(alias)}
+      />
+
+      <!-- A model that takes no effort is not offered a dead menu. 6.15. -->
+      {#if effortRows.length > 0}
+        <PickerMenu
+          label={effortLabel(effortShown) || 'Effort'}
+          options={effortRows}
+          value={effortShown ?? ''}
+          pending={pendingEffort}
+          onpick={(level) => oneffort?.(level as Effort)}
+        />
+      {/if}
+
+      <!-- The ring is the button, exactly as it is in Claude Code: what it
+           shows is what clicking it acts on. tech.md 6.15. -->
+      <button
+        class="context"
+        class:pending={pendingCompact}
+        disabled={!measured}
+        title={contextLabel(agent) || 'Nothing in the context yet'}
+        aria-label={contextLabel(agent) || 'Nothing in the context yet'}
+        onclick={() => oncompact?.()}
+      >
+        <UsageDial pct={measured ? shown.context_pct : null} size={13} />
+      </button>
+    {:else}
+      <!-- Reading, not a control that does nothing. A dimmed menu that never
+           opens is read as a broken button; plain text is read as what it is,
+           and the note says where the setting lives. tech.md 6.15. -->
+      <button class="reading" title={note} onclick={() => onnote?.()}>
+        {modelLabel(shown) || 'Model'}
+      </button>
+      {#if shown.effort}
+        <button class="reading" title={note} onclick={() => onnote?.()}>
+          {effortLabel(shown.effort)}
+        </button>
+      {/if}
+      <button
+        class="context"
+        title={contextLabel(agent, false) || 'Nothing in the context yet'}
+        aria-label={contextLabel(agent, false) || 'Nothing in the context yet'}
+        onclick={() => onnote?.()}
+      >
+        <UsageDial pct={measured ? shown.context_pct : null} size={13} />
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -110,6 +163,50 @@
     justify-content: flex-end;
     gap: 2px;
     padding: 0 2px 8px;
+  }
+
+  /* Ending the turn is the one action in this strip that is not a setting, so
+     it sits at the other end of it, away from the three that are. */
+  .stop {
+    margin-right: auto;
+    border: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition:
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .stop:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .stop:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  /* The same metrics as a menu button with the affordance taken off: no
+     chevron, no hover, and a cursor that promises nothing. It still takes a
+     press, because a value that looks like a value gets pressed anyway, and
+     silence is the worst possible answer to that. tech.md 6.15. */
+  .reading {
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    white-space: nowrap;
+    cursor: default;
   }
 
   .context {
@@ -128,6 +225,15 @@
 
   .context:disabled {
     cursor: default;
+  }
+
+  /* A ring that cannot compact is a reading like the two values beside it. */
+  .agent-bar:has(.reading) .context {
+    cursor: default;
+  }
+
+  .agent-bar:has(.reading) .context:hover {
+    background: transparent;
   }
 
   /* A compact takes minutes and confirms itself by the number falling, so the

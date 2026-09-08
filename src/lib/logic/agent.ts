@@ -62,13 +62,71 @@ export function currentModel(agent: AgentSetup | null, models: ModelChoice[]): s
 
 /**
  * How full the context is, as a whole number for the ring's tooltip.
+ *
+ * The invitation to click is only there when clicking does something. A ring
+ * that cannot be compacted still reports the number, because the number is
+ * true whoever is driving the session. tech.md 6.15.
  */
-export function contextLabel(agent: AgentSetup | null): string {
+export function contextLabel(agent: AgentSetup | null, canCompact = true): string {
   if (!agent) return '';
   const pct = Math.round(agent.context_pct);
   const used = Math.round(agent.context_tokens / 1000);
   const window = Math.round(agent.context_window / 1000);
-  return `${pct}% of context used, ${used}k of ${window}k. Click to compact.`;
+  const reading = `${pct}% of context used, ${used}k of ${window}k`;
+  return canCompact ? `${reading}. Click to compact.` : `${reading}.`;
+}
+
+/**
+ * Why the row reads and does not change, or an empty string when it changes.
+ *
+ * The inbox of a live process takes text and refuses commands, and refuses
+ * them on purpose: it stamps every message it receives as coming from
+ * another session and enqueues it with slash commands switched off. So there
+ * is no way to send `/model` into a chat another app is running, and no
+ * cleverness will make one.
+ *
+ * There is a way to get the controls back, though, and the note names it
+ * rather than leaving the reader at a wall: the moment the other app lets go
+ * of the chat, the next message from here continues it in a session of our
+ * own, and the row comes alive with it. tech.md 6.15 and 6.5.
+ */
+/** What is so, and what to do about it. Two halves because they are read
+ * differently: the first answers the press, the second is only worth reading
+ * if the first is unwelcome. */
+export type SettingsNote = { fact: string; how?: string };
+
+export const ELSEWHERE_NOTE: SettingsNote = {
+  fact: 'Another app is running this chat, so its model and effort are set there.',
+  how: 'Close it there and your next message brings the chat here, controls and all.',
+};
+export const FINISHED_NOTE: SettingsNote = { fact: 'This session has finished.' };
+
+export function settingsNote(
+  card: { origin: 'Owned' | 'Observed'; status: 'Working' | 'Idle' | 'Ended' } | null | undefined,
+): SettingsNote | null {
+  if (!card) return null;
+  if (card.origin !== 'Owned') return ELSEWHERE_NOTE;
+  return card.status === 'Ended' ? FINISHED_NOTE : null;
+}
+
+/** The whole note on one line, for a tooltip that has no room for two. */
+export function noteTitle(note: SettingsNote | null): string {
+  if (!note) return '';
+  return note.how ? `${note.fact} ${note.how}` : note.fact;
+}
+
+/**
+ * What the row says while a pick is still on its way.
+ *
+ * The value asked for, not the one still in force: the user just chose it,
+ * and a row that answers a choice by repeating the old value reads as a
+ * choice that did not land. Dimming says it has not applied yet; the label
+ * says what is coming. A pick that names nothing the catalog knows shows its
+ * own alias rather than a blank. tech.md 6.15.
+ */
+export function askedLabel(alias: string | null, models: ModelChoice[]): string {
+  if (!alias) return '';
+  return models.find((model) => model.alias === alias)?.label ?? alias;
 }
 
 /**

@@ -14,18 +14,21 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { createSignIn } from '$lib/features/signin/signin.svelte';
+  import { noteTitle, settingsNote, type SettingsNote } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import {
     barred as isBarred,
     canContinue as canContinueCard,
     classifyContinueOutcome,
     replyReachable,
+    stopAvailable,
     searchSessions,
   } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
+  import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
@@ -160,6 +163,41 @@
     replyReachable({ hasPrompt: island.prompt !== null, owned, canContinue, continuing }),
   );
 
+  // Whether there is a turn to stop, and whether a press is already on its
+  // way. One press at a time: Esc twice into a pty is still one interrupt,
+  // but two requests into an inbox are two turns. tech.md 6.5.
+  const canStop = $derived(
+    stopAvailable({
+      status: current?.status,
+      hasPrompt: island.prompt !== null,
+      owned,
+      canContinue,
+    }),
+  );
+  // Why the row only reads, said out loud because it was pressed. A tooltip
+  // answers a question the reader already has; a press is the question being
+  // asked, and it deserves an answer where the eye already is. It goes on the
+  // next look elsewhere: it is an answer, not a state. tech.md 6.15.
+  let rowNote = $state<SettingsNote | null>(null);
+  $effect(() => {
+    // Reading `current` subscribes this to the session on screen.
+    void current?.session.session_id;
+    rowNote = null;
+  });
+
+  let stopping = $state(false);
+  async function stop() {
+    if (!current || stopping) return;
+    stopping = true;
+    try {
+      await commands.stopSession(current.session.session_id);
+    } catch (err) {
+      startError = String(err);
+    } finally {
+      stopping = false;
+    }
+  }
+
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
     if (continuing) return 'Sending…';
@@ -257,6 +295,10 @@
   // still waiting on the agent to confirm a pick. tech.md 6.15.
   const setup = $derived(current?.agent ?? null);
   const waiting = $derived(agent.pendingFor(current?.session.session_id ?? '', setup));
+  // What was chosen and has not landed yet. The row stands on it while it
+  // travels: a pick that leaves the old value on screen reads as a pick that
+  // did nothing, which is exactly how it read. tech.md 6.15.
+  const asked = $derived(agent.asked(current?.session.session_id ?? ''));
 
   // A chat the user opened has nothing to show until the account is reachable,
   // so the way in stands where the chat would be rather than under it. Never
@@ -676,12 +718,19 @@
               defaults={agent.defaults}
               models={agent.models}
               live={owned}
+              note={noteTitle(settingsNote(current))}
+              {canStop}
+              {stopping}
+              askedModel={asked.model}
+              askedEffort={asked.effort}
               pendingModel={waiting.model}
               pendingEffort={waiting.effort}
               pendingCompact={waiting.compact}
               onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
               oneffort={(level) => current && agent.setEffort(current.session.session_id, level)}
               oncompact={() => current && agent.compact(current.session.session_id, setup)}
+              onstop={stop}
+              onnote={() => (rowNote = settingsNote(current))}
             />
             {#if agent.error}
               <p class="empty">{agent.error}</p>
@@ -696,6 +745,8 @@
                 <span>That chat is busy elsewhere — sending as soon as it frees up</span>
                 <Button label="Cancel" onclick={cancelHandoff} />
               </p>
+            {:else if rowNote}
+              <NoteBlock fact={rowNote.fact} how={rowNote.how} />
             {/if}
             <PromptInput
               bind:value={reply}

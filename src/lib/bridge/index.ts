@@ -91,6 +91,9 @@ export const commands = {
   sendMessage: (sessionId: string, text: string, shots: string[] = []) =>
     call<void>('send_message', { sessionId, text, shots }),
   endSession: (sessionId: string) => call<void>('end_session', { sessionId }),
+  // Stops the running turn: Esc into a pty we own, or a request to stop into
+  // the inbox of a live process that is not ours. tech.md 6.5.
+  stopSession: (sessionId: string) => call<void>('stop_session', { sessionId }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
   hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
