@@ -767,6 +767,7 @@
               onsubmit={send}
               onstop={stop}
               onescape={() => island.dismiss()}
+              onpasteimage={() => current && shots.paste(current.session.session_id)}
             >
               <!-- In the capsule, under the text: what will answer what is
                    being typed belongs to the typing. tech.md 6.15. -->

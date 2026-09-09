@@ -108,6 +108,12 @@ export const commands = {
   setModel: (sessionId: string, model: string) => call<void>('set_model', { sessionId, model }),
   setEffort: (sessionId: string, effort: Effort) => call<void>('set_effort', { sessionId, effort }),
   compactSession: (sessionId: string) => call<void>('compact_session', { sessionId }),
+
+  // ⌘V in the field, when the clipboard holds a picture rather than text. The
+  // PNG becomes a file and arrives back as `shot-attached`, exactly as the
+  // attach key's image does. Null means the pasteboard held no image after
+  // all. tech.md 6.13.
+  pasteShot: (sessionId: string) => call<string | null>('paste_shot', { sessionId }),
   // The cards as they stand. Asked for once on mount: an event sent before
   // the subscription landed reaches nobody, and the backfill emits at start.
   // tech.md 6.1 and section 8.

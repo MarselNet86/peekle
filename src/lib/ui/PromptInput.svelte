@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import { looksLikeImagePaste } from '$lib/logic/shots';
+
   let {
     value = $bindable(''),
     placeholder = '',
@@ -10,6 +12,7 @@
     onsubmit,
     onstop,
     onescape,
+    onpasteimage,
   }: {
     value?: string;
     placeholder?: string;
@@ -25,6 +28,10 @@
     onsubmit?: (text: string) => void;
     onstop?: () => void;
     onescape?: () => void;
+    /** ⌘V with a picture on the clipboard and no text. The field never reads
+     * the clipboard itself: it says a picture was pasted and the page turns
+     * it into an attachment. tech.md 6.13. */
+    onpasteimage?: () => void;
   } = $props();
 
   let field: HTMLTextAreaElement | undefined = $state();
@@ -43,6 +50,17 @@
 
   function send() {
     if (sendable) onsubmit?.(value);
+  }
+
+  // Text pastes the way it pastes anywhere: the webview does it and nothing
+  // here interferes. Only a paste that is a picture and not text is taken
+  // over, because that is the one the field cannot handle by itself.
+  // tech.md 6.13.
+  function paste(event: ClipboardEvent) {
+    const types = [...(event.clipboardData?.types ?? [])];
+    if (!looksLikeImagePaste(types)) return;
+    event.preventDefault();
+    onpasteimage?.();
   }
 
   function keydown(event: KeyboardEvent) {
@@ -69,7 +87,8 @@
     {disabled}
     rows="1"
     spellcheck="false"
-    onkeydown={keydown}></textarea>
+    onkeydown={keydown}
+    onpaste={paste}></textarea>
 
   <div class="tools">
     <div class="left">
