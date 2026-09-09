@@ -9,14 +9,48 @@ Add an entry when a feature merges. Keep it to what a person needs to recognise
 the thing on screen — the reasoning belongs in `tech.md`, the mechanics belong
 in the code.
 
-| Version | Feature                                                            | Contract           |
-| ------- | ------------------------------------------------------------------ | ------------------ |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided) | 6.3, 6.12, 6.16, 9 |
-| v60     | [Composer layout](#v60--composer-layout)                           | 6.12, 6.15, 9      |
-| v59     | [Permission panel](#v59--permission-panel)                         | 6.3, 6.7, 9        |
-| v58     | [Usage badge](#v58--usage-badge)                                   | 6.8, 6.10, 6.18, 9 |
-| v57     | [Work line](#v57--work-line)                                       | 6.12, 9            |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)         | 6.5, 6.15, 9       |
+| Version | Feature                                                                       | Contract           |
+| ------- | ----------------------------------------------------------------------------- | ------------------ |
+| v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9  |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it) | 6.4                |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)            | 6.3, 6.12, 6.16, 9 |
+| v60     | [Composer layout](#v60--composer-layout)                                      | 6.12, 6.15, 9      |
+| v59     | [Permission panel](#v59--permission-panel)                                    | 6.3, 6.7, 9        |
+| v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9 |
+| v57     | [Work line](#v57--work-line)                                                  | 6.12, 9            |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9       |
+
+## v63 — Permission mode
+
+2026-09-09 · `451c2e0`
+
+![The composer with the mode chip](permission-mode.png)
+
+The mode sits in the composer closest to the send button, because it decides
+what pressing send will be allowed to do: `Manual`, `Edit automatically`,
+`Plan`, `Auto`, each with a line under it in the menu.
+
+Read from `permission_mode`, which every hook of a live session carries. Set
+with `--permission-mode` on a session Peekle starts — the CLI has no slash
+command for the mode, and its inbox does not speak the control protocol that
+does. A session already under way reads instead of picking: cycling Shift+Tab
+blind through a list that contains `bypassPermissions` is not something to do
+on someone's behalf.
+
+## v62 — Usage request, as the CLI sends it
+
+2026-09-09 · `23dcc7e`
+
+Claude Code sends two headers on its claude.ai OAuth calls —
+`Authorization: Bearer` and `anthropic-beta: oauth-2025-04-20` — and
+`/api/oauth/usage` is one of them. Peekle sent the first only, so a good token
+came back refused and the island called it `Signed out`.
+
+Two more things copied from the same binary: the CLI checks `expiresAt`
+against the clock rather than waiting for a 401 (120s soft, 30s hard), and on
+a 401 it refreshes and retries once. Peekle cannot refresh — the entry belongs
+to Claude Code — so it declines to spend a request on a spent credential, and
+its retry is a second read of the entry.
 
 ## v61 — Sign in says what it decided
 
