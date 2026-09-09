@@ -121,6 +121,17 @@ pub fn access_token(raw: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// When that token stops being accepted, unix ms, as Claude Code writes it.
+///
+/// The same field the CLI reads before every authenticated call, and the
+/// reason it almost never sees a 401: it refreshes on the clock rather than
+/// on a refusal. Absent in an entry written by an older CLI, which is not an
+/// error -- it only means the clock cannot be consulted. tech.md 6.4.
+pub fn expires_at(raw: &str) -> Option<i64> {
+    let parsed: serde_json::Value = serde_json::from_str(raw).ok()?;
+    parsed.get("claudeAiOauth")?.get("expiresAt")?.as_i64()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

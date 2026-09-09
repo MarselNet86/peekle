@@ -16,10 +16,26 @@ use peekle_core::types::{
 };
 use serde_json::Value;
 
-use crate::credentials::{access_token, CredentialError, CredentialStore};
+use crate::credentials::{access_token, expires_at, CredentialError, CredentialStore};
 use crate::UsageProvider;
 
 const ENDPOINT: &str = "https://api.anthropic.com/api/oauth/usage";
+
+/// The beta every claude.ai OAuth request of the CLI carries.
+///
+/// Read out of `claude` 2.1.263: the branch that builds headers for
+/// `auth === "claude-ai-oauth"` sends exactly two, `Authorization: Bearer ...`
+/// and `anthropic-beta: oauth-2025-04-20`, and `/api/oauth/usage` is one of
+/// those requests. A bearer token minted for this scope is not accepted
+/// without it, which is what a `401` here has been all along. tech.md 6.4.
+const OAUTH_BETA: &str = "oauth-2025-04-20";
+
+/// How close to expiry the CLI stops trusting a token: it refreshes below 120
+/// seconds and blocks on a refresh below 30. Peekle cannot refresh -- the
+/// entry is Claude Code's and minting against its client id would be passing
+/// Peekle off as Claude Code -- but it can decline to spend a request on a
+/// credential the CLI itself would have replaced first. tech.md 6.4.
+const SKEW_MS: i64 = 30_000;
 /// What the background poll allows one request. A press allows less: see
 /// `snapshot_within`. tech.md 6.4.
 pub const TIMEOUT: Duration = Duration::from_secs(10);
@@ -110,13 +126,33 @@ impl AccountUsage {
         }
     }
 
+    /// The token Claude Code last wrote, and only while it is still good for
+    /// something.
+    ///
+    /// The CLI checks the clock before every call and refreshes rather than
+    /// waiting to be refused. Peekle copies the check and stops there: a
+    /// token inside the skew is spent, the request would come back `401`, and
+    /// the honest answer is the one the CLI gives itself in the same place --
+    /// there is no usable claude.ai login until it runs again. tech.md 6.4.
     fn token(&self) -> Result<String, UsageUnavailable> {
-        match self.store.read() {
-            Ok(raw) => access_token(&raw).ok_or(UsageUnavailable::NotLoggedIn),
-            Err(CredentialError::Denied) => Err(UsageUnavailable::Denied),
-            Err(CredentialError::NotLoggedIn) => Err(UsageUnavailable::NotLoggedIn),
-            Err(CredentialError::Transient) => Err(UsageUnavailable::Network),
+        let raw = match self.store.read() {
+            Ok(raw) => raw,
+            Err(CredentialError::Denied) => return Err(UsageUnavailable::Denied),
+            Err(CredentialError::NotLoggedIn) => return Err(UsageUnavailable::NotLoggedIn),
+            Err(CredentialError::Transient) => return Err(UsageUnavailable::Network),
+        };
+
+        if let Some(expiry) = expires_at(&raw) {
+            if now_ms() + SKEW_MS >= expiry {
+                tracing::debug!(
+                    late_by_ms = now_ms() - expiry,
+                    "the credential is spent; Claude Code refreshes it on its next run"
+                );
+                return Err(UsageUnavailable::NotLoggedIn);
+            }
         }
+
+        access_token(&raw).ok_or(UsageUnavailable::NotLoggedIn)
     }
 
     /// One request. Returns the snapshot, or the status code when the server
@@ -129,6 +165,8 @@ impl AccountUsage {
             .header("user-agent", &self.agent)
             // The only place the token is used, and it goes nowhere else.
             .header("authorization", &format!("Bearer {token}"))
+            // The pair the CLI sends, copied rather than invented. tech.md 6.4.
+            .header("anthropic-beta", OAUTH_BETA)
             .call();
 
         match response {
@@ -184,12 +222,19 @@ impl UsageProvider for AccountUsage {
 
         match self.ask(&token, budget) {
             Ok(snapshot) => snapshot,
-            // An expired token is not worth an agent turn to refresh: Claude
-            // Code rewrites the Keychain entry the next time it runs, and the
-            // next poll reads it. tech.md 6.4 step 4.
-            Err(AskError::Status(401 | 403)) => {
-                unavailable(UsageUnavailable::NotLoggedIn, now_ms())
-            }
+            // What the CLI does with a `401` on this very endpoint: refresh
+            // the token and send the request again, once. Refreshing is
+            // Claude Code's to do, and the Keychain entry is where it puts
+            // the result, so Peekle's refresh is a second read of it. A token
+            // that came back unchanged has already been refused, and asking
+            // twice with it would only spend the budget. tech.md 6.4.
+            Err(AskError::Status(401 | 403)) => match self.token() {
+                Ok(fresh) if fresh != token => match self.ask(&fresh, budget) {
+                    Ok(snapshot) => snapshot,
+                    _ => unavailable(UsageUnavailable::NotLoggedIn, now_ms()),
+                },
+                _ => unavailable(UsageUnavailable::NotLoggedIn, now_ms()),
+            },
             // Reached and answered: asked to wait, not unreachable. Calling it
             // a network failure would offer a Reconnect that makes it worse.
             Err(AskError::Status(429)) => unavailable(UsageUnavailable::RateLimited, now_ms()),
