@@ -8,6 +8,7 @@
   import {
     askedLabel,
     effortLabel,
+    modeIcon,
     modeLabel,
     modeOptions,
     noteTitle,
@@ -37,6 +38,7 @@
     canPickMode = false,
     pendingModel = false,
     pendingEffort = false,
+    pendingMode = false,
     onmodel,
     oneffort,
     onmode,
@@ -69,6 +71,7 @@
     canPickMode?: boolean;
     pendingModel?: boolean;
     pendingEffort?: boolean;
+    pendingMode?: boolean;
     onmodel?: (alias: string) => void;
     oneffort?: (effort: Effort) => void;
     onmode?: (mode: PermissionMode) => void;
@@ -126,6 +129,8 @@
           label={modeLabel(modeShown)}
           options={modeOptions()}
           value={modeShown}
+          icon={modeIcon(modeShown)}
+          pending={pendingMode}
           onpick={(next) => onmode?.(next as PermissionMode)}
         />
       {:else}
@@ -167,10 +172,13 @@
      chevron, no hover, and a cursor that promises nothing. It still takes a
      press, because a value that looks like a value gets pressed anyway, and
      silence is the worst possible answer to that. tech.md 6.15. */
+  /* A value that only reads, drawn as one. With the chevron gone (9) this is
+     what separates it from a value that opens a menu: that one is lit and
+     lights its own ground on hover, this one is quiet and does neither. */
   .reading {
     border: none;
     background: transparent;
-    color: var(--text);
+    color: var(--text-dim);
     font: inherit;
     font-size: 11px;
     line-height: 1;

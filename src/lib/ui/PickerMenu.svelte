@@ -6,12 +6,19 @@
    * It opens upward because it lives in the bottom strip of the island, and a
    * menu that opens down there is a menu drawn off the shape.
    */
-  import type { PickOption } from '$lib/logic/agent';
+  import { CodeXml, Hand, ScrollText, Zap } from '@lucide/svelte';
+
+  import type { PickIcon, PickOption } from '$lib/logic/agent';
+
+  /** The signs the rows wear. Names are the icon set's own: a hand drawn by
+   * hand comes out a blob. tech.md 9. */
+  const SIGNS = { hand: Hand, code: CodeXml, plan: ScrollText, bolt: Zap };
 
   let {
     label,
     options,
     value = '',
+    icon,
     disabled = false,
     pending = false,
     onpick,
@@ -19,6 +26,10 @@
     /** What the button says when nothing is picked yet. */
     label: string;
     options: PickOption[];
+    /** The sign the button wears. It is what tells a value that opens a menu
+     * from a value that only reads, now that the chevron is gone: a sign is
+     * seen without being read, which a small triangle never was. tech.md 9. */
+    icon?: PickIcon;
     value?: string;
     disabled?: boolean;
     /** The pick has been sent and the agent has not confirmed it. 6.15. */
@@ -77,12 +88,15 @@
     aria-expanded={open}
     onclick={toggle}
   >
+    <!-- The sign says this opens something, which is what the chevron used
+         to say and said badly: a triangle at eight pixels is noise, a hand
+         and a bolt are read at a glance. Hidden from the accessible name --
+         the button is still called by its value. tech.md 9. -->
+    {#if icon}
+      {@const Sign = SIGNS[icon]}
+      <Sign size={13} strokeWidth={1.75} aria-hidden="true" />
+    {/if}
     {label}
-    <!-- What makes it a menu on sight. Without it a value that opens one and
-         a value that only reads are the same eleven pixels of text, and the
-         only way to tell them apart is to press. Hidden from the accessible
-         name: the button is still called by its value. tech.md 6.15. -->
-    <span class="chev" aria-hidden="true">▾</span>
   </button>
 
   {#if open}
@@ -95,6 +109,10 @@
           onclick={() => pick(option.id)}
         >
           <span class="tick" aria-hidden="true">{option.id === value ? '✓' : ''}</span>
+          {#if option.icon}
+            {@const Sign = SIGNS[option.icon]}
+            <span class="sign"><Sign size={15} strokeWidth={1.6} aria-hidden="true" /></span>
+          {/if}
           <!-- A row that needs explaining says so under itself, the way the
                original's own mode menu does. tech.md 6.19. -->
           <span class="text">
@@ -119,7 +137,7 @@
   .value {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
     border: none;
     background: transparent;
     color: var(--text);
@@ -130,12 +148,6 @@
     border-radius: 999px;
     cursor: pointer;
     white-space: nowrap;
-  }
-
-  .chev {
-    font-size: 8px;
-    line-height: 1;
-    color: var(--text-dim);
   }
 
   .value:hover:not(:disabled) {
@@ -240,9 +252,22 @@
     margin-top: 1px;
   }
 
-  /* Descriptions need room the value menus never did. */
+  /* Descriptions need room the value menus never did, and the room has to be
+     taken rather than offered: a menu sized by its longest word wraps every
+     line of every hint. tech.md 6.19. */
   .menu:has(.hint) {
-    max-width: 280px;
+    min-width: 300px;
+  }
+
+  .sign {
+    flex: none;
+    display: flex;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .option[aria-checked='true'] .sign {
+    color: var(--text);
   }
 
   .index {

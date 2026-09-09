@@ -281,10 +281,20 @@ describe('the row of a session the island cannot command', () => {
     expect(handlers.oneffort).not.toHaveBeenCalled();
   });
 
-  /** The row that does change things carries the affordance the other lacks. */
-  it('is told apart from a live row by that chevron alone', () => {
-    const { container } = render(AgentBar, { props: { agent: opus, models, live: true } });
-    expect(container.querySelectorAll('.chev')).toHaveLength(2);
+  /** No chevrons anywhere: a triangle at eight pixels was noise, and what
+   * separates a value that opens a menu from one that only reads is that the
+   * first is lit and takes a hover. tech.md 9. */
+  it('carries no chevrons, and reads quietly where it cannot be changed', () => {
+    const live = render(AgentBar, {
+      props: { agent: opus, models, live: true, canPickMode: true },
+    });
+    expect(live.container.querySelectorAll('.chev')).toHaveLength(0);
+    expect(live.container.querySelectorAll('.reading')).toHaveLength(0);
+    live.unmount();
+
+    const reading = render(AgentBar, { props: { agent: opus, models, live: false } });
+    expect(reading.container.querySelectorAll('.chev')).toHaveLength(0);
+    expect(reading.container.querySelectorAll('.reading').length).toBeGreaterThan(0);
   });
 
   /** A value that looks like a value gets pressed anyway. Silence is the

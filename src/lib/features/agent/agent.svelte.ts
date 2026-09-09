@@ -92,6 +92,18 @@ export function createAgent() {
       };
     },
 
+    /**
+     * Whether a mode was asked for and the session has not reported it yet.
+     *
+     * Confirmed by the session's own hooks, never by the write: the keys go
+     * into a TUI, and nothing about writing them says they landed.
+     * tech.md 6.19.
+     */
+    modePending(sessionId: string, mode: PermissionMode | null) {
+      const waiting = picked[sessionId] ?? NOTHING;
+      return waiting.mode !== null && waiting.mode !== mode;
+    },
+
     setModel(sessionId: string, alias: string) {
       return send(sessionId, { model: alias }, () => commands.setModel(sessionId, alias));
     },

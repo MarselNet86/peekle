@@ -277,7 +277,29 @@ pub enum PermissionMode {
     DontAsk,
 }
 
+/// The order `Shift+Tab` walks, measured on a live TUI of 2.1.263: from
+/// `manual` one press gives `accept edits on`, the next `plan mode on`, the
+/// next `auto mode on`, and the fourth is back to `manual`. Four states and
+/// no more -- `bypassPermissions` and `dontAsk` are not in the cycle at all,
+/// which is what makes stepping it safe to do on someone's behalf.
+/// tech.md 6.19.
+pub const MODE_CYCLE: [PermissionMode; 4] = [
+    PermissionMode::Manual,
+    PermissionMode::AcceptEdits,
+    PermissionMode::Plan,
+    PermissionMode::Auto,
+];
+
 impl PermissionMode {
+    /// How many presses of `Shift+Tab` take `self` to `target`, or `None`
+    /// when either end is outside the cycle: a mode the keyboard cannot
+    /// reach is one the island must not pretend to reach. tech.md 6.19.
+    pub fn steps_to(self, target: Self) -> Option<usize> {
+        let from = MODE_CYCLE.iter().position(|mode| *mode == self)?;
+        let to = MODE_CYCLE.iter().position(|mode| *mode == target)?;
+        Some((to + MODE_CYCLE.len() - from) % MODE_CYCLE.len())
+    }
+
     /// What a hook payload calls it. Unknown names are `None` rather than a
     /// guess: reporting the wrong permission mode is worse than reporting
     /// none. tech.md 6.19.

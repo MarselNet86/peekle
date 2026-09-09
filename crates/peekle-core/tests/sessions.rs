@@ -1414,3 +1414,68 @@ mod the_permission_mode {
         assert_eq!(PermissionMode::DontAsk.flag(), "dontAsk");
     }
 }
+
+/// The cycle `Shift+Tab` walks, measured on a live TUI of 2.1.263 rather than
+/// assumed: from `manual` one press reads `accept edits on`, then `plan mode
+/// on`, then `auto mode on`, and the fourth press is back at `manual`.
+/// tech.md 6.19.
+mod the_mode_cycle {
+    use peekle_core::types::{PermissionMode, MODE_CYCLE};
+
+    #[test]
+    fn walks_the_four_the_keyboard_reaches() {
+        assert_eq!(
+            MODE_CYCLE,
+            [
+                PermissionMode::Manual,
+                PermissionMode::AcceptEdits,
+                PermissionMode::Plan,
+                PermissionMode::Auto
+            ]
+        );
+    }
+
+    #[test]
+    fn counts_the_presses_forward_and_wraps() {
+        assert_eq!(
+            PermissionMode::Manual.steps_to(PermissionMode::AcceptEdits),
+            Some(1)
+        );
+        assert_eq!(
+            PermissionMode::Manual.steps_to(PermissionMode::Auto),
+            Some(3)
+        );
+        // Backwards is forwards the long way: the key only goes one way.
+        assert_eq!(
+            PermissionMode::Auto.steps_to(PermissionMode::Manual),
+            Some(1)
+        );
+        assert_eq!(
+            PermissionMode::Plan.steps_to(PermissionMode::Manual),
+            Some(2)
+        );
+    }
+
+    /// Asking for the mode you are already in is zero presses, not four.
+    #[test]
+    fn asking_for_the_mode_it_is_in_costs_nothing() {
+        for mode in MODE_CYCLE {
+            assert_eq!(mode.steps_to(mode), Some(0));
+        }
+    }
+
+    /// No number of presses reaches these, so no number is offered. This is
+    /// what makes stepping the cycle safe to do on someone's behalf.
+    #[test]
+    fn never_counts_a_way_into_the_modes_that_ask_for_nothing() {
+        for mode in MODE_CYCLE {
+            assert_eq!(mode.steps_to(PermissionMode::Bypass), None);
+            assert_eq!(mode.steps_to(PermissionMode::DontAsk), None);
+        }
+        assert_eq!(
+            PermissionMode::Bypass.steps_to(PermissionMode::Manual),
+            None,
+            "and a session already in one is not stepped out of it either"
+        );
+    }
+}

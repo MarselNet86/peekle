@@ -429,7 +429,35 @@ pub const INTERRUPT: &[u8] = b"\x1b";
 /// did go. tech.md 6.5.
 pub const NUDGE: &[u8] = b"\r";
 
+/// `Shift+Tab`, the key the TUI binds to cycling the permission mode. CSI Z,
+/// the terminal's back-tab. tech.md 6.19.
+pub const CYCLE_MODE: &[u8] = b"\x1b[Z";
+
+/// How long the TUI is given to redraw between two presses.
+///
+/// Measured on a live session: presses land as separate keys well inside a
+/// second. A gap that is too small risks two presses read as one, and the
+/// cost of being wrong is a session left in a mode nobody chose, so this is
+/// generous rather than tight. tech.md 6.19.
+pub const CYCLE_GAP: std::time::Duration = std::time::Duration::from_millis(250);
+
 impl PtyHost {
+    /// Steps the permission mode `steps` places along the cycle.
+    ///
+    /// One key per step, spaced, exactly as a person would press it. There is
+    /// nothing else to write: the CLI has no line for the mode. Sending zero
+    /// keys is not an error -- it is what asking for the mode you are already
+    /// in means. tech.md 6.19.
+    pub fn cycle_mode(&self, session_id: &str, steps: usize) -> Result<(), PtyError> {
+        for step in 0..steps {
+            if step > 0 {
+                std::thread::sleep(CYCLE_GAP);
+            }
+            self.write_bytes(session_id, CYCLE_MODE)?;
+        }
+        Ok(())
+    }
+
     /// Submits whatever the input box holds, without adding to it. tech.md 6.5.
     pub fn nudge(&self, session_id: &str) -> Result<(), PtyError> {
         self.write_bytes(session_id, NUDGE)

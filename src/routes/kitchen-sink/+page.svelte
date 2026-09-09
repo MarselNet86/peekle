@@ -413,7 +413,7 @@
     <AgentBar agent={opus} models={modelRows} live pendingModel />
     <!-- Aiming a session that has not started: the mode is a menu. Under way
          it reads instead. tech.md 6.19. -->
-    <AgentBar agent={null} defaults={opus} models={modelRows} live canPickMode onmode={() => {}} />
+    <AgentBar agent={opus} models={modelRows} live canPickMode mode="Auto" onmode={() => {}} />
     <AgentBar agent={opus} models={modelRows} live mode="Auto" />
     <AgentBar agent={haiku} models={modelRows} live />
     <!-- A chat another app runs: reading, with the note saying where the
@@ -542,9 +542,11 @@
             agent={opus}
             models={modelRows}
             live
+            canPickMode
             mode="Auto"
             onmodel={() => {}}
             oneffort={() => {}}
+            onmode={() => {}}
           />
         {/snippet}
       </PromptInput>
