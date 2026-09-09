@@ -22,6 +22,7 @@ const card = (
   entries: [],
   agent: null,
   mode: null,
+  thinking: null,
   updated_at: 0,
 });
 

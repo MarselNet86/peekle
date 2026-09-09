@@ -22,12 +22,22 @@ type Picked = {
   effort: Effort | null;
   /** The mode asked for before the session started. tech.md 6.19. */
   mode: PermissionMode | null;
+  /** Whether ultracode was asked for. Held here and nowhere else: the file
+   * records `xhigh`, which is what ultracode runs at, so nothing confirms it
+   * back. tech.md 6.15. */
+  ultra: boolean;
   /** What the context stood at when the compact was asked for. It is done
    * when the number falls below it, which is the only signal there is. */
   compactFrom: number | null;
 };
 
-const NOTHING: Picked = { model: null, effort: null, mode: null, compactFrom: null };
+const NOTHING: Picked = {
+  model: null,
+  effort: null,
+  mode: null,
+  ultra: false,
+  compactFrom: null,
+};
 
 export function createAgent() {
   let models = $state<ModelChoice[]>([]);
@@ -49,7 +59,13 @@ export function createAgent() {
     try {
       await run();
     } catch (err) {
-      mark(sessionId, { model: null, effort: null, mode: null, compactFrom: null });
+      mark(sessionId, {
+        model: null,
+        effort: null,
+        mode: null,
+        ultra: false,
+        compactFrom: null,
+      });
       error = String(err);
     }
   }
@@ -116,7 +132,21 @@ export function createAgent() {
     },
 
     setEffort(sessionId: string, effort: Effort) {
-      return send(sessionId, { effort }, () => commands.setEffort(sessionId, effort));
+      return send(sessionId, { effort, ultra: false }, () => commands.setEffort(sessionId, effort));
+    },
+
+    /** Whether this session was put on ultracode. Nothing reports it back, so
+     * the answer is the ask. tech.md 6.15. */
+    ultra(sessionId: string) {
+      return (picked[sessionId] ?? NOTHING).ultra;
+    },
+
+    setUltracode(sessionId: string) {
+      return send(sessionId, { ultra: true }, () => commands.setUltracode(sessionId));
+    },
+
+    setThinking(sessionId: string, on: boolean) {
+      return send(sessionId, {}, () => commands.setThinking(sessionId, on));
     },
 
     compact(sessionId: string, agent: AgentSetup | null) {

@@ -122,6 +122,14 @@ export const commands = {
   // spawn flag, not a line. tech.md 6.19.
   setMode: (sessionId: string, mode: PermissionMode) => call<void>('set_mode', { sessionId, mode }),
 
+  // Thinking is an environment variable the process reads once, so it is set
+  // before a session runs and read after. tech.md 6.20.
+  setThinking: (sessionId: string, on: boolean) => call<void>('set_thinking', { sessionId, on }),
+
+  // `/effort ultracode`: xhigh plus dynamic workflows, this session only. Its
+  // own call because `--effort` does not take it. tech.md 6.15.
+  setUltracode: (sessionId: string) => call<void>('set_ultracode', { sessionId }),
+
   // Whether a resting island shows the percent when the window steps into a
   // new ten. Nothing to ask the system for, so nothing to fail. tech.md 6.18.
   usageBadge: () => call<boolean>('usage_badge'),

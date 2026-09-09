@@ -804,9 +804,16 @@ fn spawn_owned(
         model: held.model,
         effort: held.effort,
         mode: held.mode,
+        thinking: held.thinking,
     };
 
     state.claim_session(&spec.session_id);
+    // Peekle set it, so Peekle is the one that can say what it is: nothing
+    // reports thinking back. tech.md 6.20.
+    let cards = state.note_thinking(&spec.session_id, spec.thinking.unwrap_or(true));
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
 
     let handle = app.clone();
     let owner = state.clone();
@@ -1033,6 +1040,61 @@ pub fn set_mode(
         .pty()
         .cycle_mode(&session_id, steps)
         .map_err(|err| err.to_string())
+}
+
+/// Whether a session starts with thinking on. tech.md 6.20.
+///
+/// Before it starts and nowhere else. `MAX_THINKING_TOKENS=0` is an
+/// environment variable, so it is read once by the process at startup; the
+/// CLI offers no slash command and no key for it, and writing
+/// `alwaysThinkingEnabled` into the user's own settings would change every
+/// session on the machine rather than this one. tech.md 6.20.
+#[tauri::command]
+pub fn set_thinking(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    on: bool,
+) -> Result<(), String> {
+    let state = state.inner();
+    if !state.owns_session(&session_id) {
+        return Err("Peekle can only set this on sessions it starts".to_string());
+    }
+    if state.session_has_answered(&session_id) {
+        return Err("Thinking is set when a session starts".to_string());
+    }
+
+    state.hold_setting(
+        &session_id,
+        HeldKind::Thinking,
+        if on { "on" } else { "off" }.to_string(),
+    );
+    let cards = state.note_thinking(&session_id, on);
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+    Ok(())
+}
+
+/// Runs this session at ultracode: xhigh effort plus dynamic workflows.
+///
+/// Its own command because `--effort` does not take it -- the CLI's own help
+/// lists `low, medium, high, xhigh, max` and nothing else -- while
+/// `/effort ultracode` does, and says why: it holds for this session only.
+/// tech.md 6.15.
+#[tauri::command]
+pub fn set_ultracode(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<(), String> {
+    command_session(
+        Some(&app),
+        state.inner(),
+        &session_id,
+        None,
+        "/effort ultracode",
+    )
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.

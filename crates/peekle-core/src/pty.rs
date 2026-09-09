@@ -50,6 +50,11 @@ pub struct SpawnSpec {
     /// Which permission mode to start in, as `--permission-mode` takes it.
     /// tech.md 6.19.
     pub mode: Option<String>,
+    /// Whether to start with thinking on. `Some(false)` puts
+    /// `MAX_THINKING_TOKENS=0` in the environment, which is the CLI's own way
+    /// of turning it off; `None` leaves the user's own settings alone.
+    /// tech.md 6.20.
+    pub thinking: Option<bool>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -312,6 +317,12 @@ impl PtyHost {
         // An interactive session needs a terminal type; a GUI process has none
         // to inherit, and Claude Code draws a TUI.
         command.env("TERM", "xterm-256color");
+        // The CLI names this itself, in the message it prints when an effort
+        // needs thinking: "unset MAX_THINKING_TOKENS=0". Zero is off; leaving
+        // it alone is whatever the user's settings say. tech.md 6.20.
+        if spec.thinking == Some(false) {
+            command.env("MAX_THINKING_TOKENS", "0");
+        }
         command.env("PATH", session_path());
         for key in inherited_session_markers() {
             command.env_remove(key);
@@ -681,6 +692,7 @@ mod tests {
             model: None,
             effort: None,
             mode: None,
+            thinking: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
@@ -701,6 +713,7 @@ mod tests {
             model: None,
             effort: None,
             mode: None,
+            thinking: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(Path::new("/bin/echo"), &spec, move |id| {

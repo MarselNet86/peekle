@@ -130,6 +130,9 @@
     align-items: center;
     gap: 2px;
     min-width: 0;
+    /* Fills the row, so what the row puts at its right edge lands next to the
+       send button rather than in the middle of nothing. tech.md 6.15. */
+    flex: 1;
     /* The first control's own padding pulled back, so its label starts on the
        same line the text above it starts on. */
     margin-left: -6px;

@@ -50,7 +50,11 @@ export function modelLabel(agent: AgentSetup | null): string {
 }
 
 export function modelOptions(models: ModelChoice[]): PickOption[] {
-  return models.map((model) => ({ id: model.alias, label: model.label }));
+  // The id under the name, because it is what the transcript will say and the
+  // only description of a model this product actually holds. The original
+  // writes a sentence about each; ours would be a sentence we made up.
+  // tech.md 6.15.
+  return models.map((model) => ({ id: model.alias, label: model.label, hint: model.id }));
 }
 
 export function effortOptions(agent: AgentSetup | null): PickOption[] {
@@ -90,6 +94,28 @@ const MODE_LABELS: Record<PermissionMode, string> = {
   Bypass: 'No permissions',
   DontAsk: 'Never asks',
 };
+
+/**
+ * What each effort level is for, in Claude Code's own words: the five lines
+ * its `/effort` slider carries, read out of 2.1.263. tech.md 6.15.
+ */
+const EFFORT_HINTS: Record<Effort, string> = {
+  Low: 'Quick, straightforward implementation',
+  Medium: 'Balanced approach with standard testing',
+  High: 'Comprehensive implementation with extensive testing',
+  XHigh: 'Extended reasoning with thorough analysis',
+  Max: 'Maximum capability with deepest reasoning',
+};
+
+/** The stop past the last one. Not an `Effort`: `--effort` does not take it,
+ * `/effort ultracode` does, and it holds for the running session only.
+ * tech.md 6.15. */
+export const ULTRACODE = 'Ultracode';
+export const ULTRACODE_HINT = 'xhigh + dynamic workflows, this session only';
+
+export function effortHint(level: Effort): string {
+  return EFFORT_HINTS[level];
+}
 
 export function modeOptions(): PickOption[] {
   return MODE_ROWS.map((row) => ({

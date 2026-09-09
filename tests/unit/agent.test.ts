@@ -22,6 +22,7 @@ import {
   FINISHED_NOTE,
 } from '$lib/logic/agent';
 import AgentBar from '$lib/ui/AgentBar.svelte';
+import ContextRing from '$lib/ui/ContextRing.svelte';
 import UsageCorner from '$lib/ui/UsageCorner.svelte';
 import PickerMenu from '$lib/ui/PickerMenu.svelte';
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
@@ -54,138 +55,169 @@ const haiku: AgentSetup = {
   context_pct: 12,
 };
 
-describe('the row of a live session', () => {
-  it('names the model and the effort', () => {
+describe('the block of a live session', () => {
+  const block = () => screen.getByRole('button', { name: /Opus 5/ });
+
+  it('names the model and the weight beside it', () => {
     render(AgentBar, { props: { agent: opus, models, live: true } });
 
-    expect(screen.getByRole('button', { name: 'Opus 5' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'High' })).toBeInTheDocument();
+    expect(block()).toHaveTextContent('Opus 5');
+    expect(block()).toHaveTextContent('High');
   });
 
   it('sends the alias of the model that was picked, not its label', async () => {
     const onmodel = vi.fn();
     render(AgentBar, { props: { agent: opus, models, live: true, onmodel } });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Opus 5' }));
+    await userEvent.click(block());
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Sonnet 5/ }));
 
     expect(onmodel).toHaveBeenCalledExactlyOnceWith('sonnet');
   });
 
-  it('sends the level that was picked', async () => {
+  /** The effort is a track at the foot of the same menu, the way the
+   * original draws it: one stop per level. tech.md 6.15. */
+  it('sends the level whose stop was pressed', async () => {
     const oneffort = vi.fn();
     render(AgentBar, { props: { agent: opus, models, live: true, oneffort } });
 
-    await userEvent.click(screen.getByRole('button', { name: 'High' }));
-    await userEvent.click(screen.getByRole('menuitemradio', { name: /Max/ }));
+    await userEvent.click(block());
+    await userEvent.click(screen.getByRole('button', { name: 'Max' }));
 
     expect(oneffort).toHaveBeenCalledExactlyOnceWith('Max');
+  });
+
+  /** `--effort` does not take ultracode and `/effort ultracode` does, and it
+   * holds for a running session only. So it is a stop past the end of the
+   * track, and only there is one. tech.md 6.15. */
+  it('offers ultracode past the last level, and only to a running session', async () => {
+    const onultra = vi.fn();
+    const { unmount } = render(AgentBar, {
+      props: { agent: opus, models, live: true, canUltra: true, onultra },
+    });
+
+    await userEvent.click(block());
+    await userEvent.click(screen.getByRole('button', { name: 'Ultracode' }));
+    expect(onultra).toHaveBeenCalledOnce();
+    unmount();
+
+    render(AgentBar, { props: { agent: opus, models, live: true, canUltra: false } });
+    await userEvent.click(block());
+    expect(screen.queryByRole('button', { name: 'Ultracode' })).not.toBeInTheDocument();
+  });
+
+  /** Nothing reports ultracode back -- the file records the xhigh it runs at
+   * -- so the block says it itself, in the colour the original uses. */
+  it('wears ultracode on the block', () => {
+    const { container } = render(AgentBar, {
+      props: { agent: opus, models, live: true, ultra: true, canUltra: true },
+    });
+
+    expect(container.querySelector('.chip')).toHaveClass('ultra');
+    expect(screen.getByRole('button', { name: /Ultracode/ })).toBeInTheDocument();
   });
 
   /** Nothing confirms a write to a pty, so a pick stands dimmed until the
    * transcript names it back. tech.md 6.15. */
   it('marks a pick that the agent has not confirmed', () => {
-    render(AgentBar, {
+    const { container } = render(AgentBar, {
       props: { agent: opus, models, live: true, pendingModel: true },
     });
 
-    expect(screen.getByRole('button', { name: 'Opus 5' })).toHaveClass('pending');
+    expect(container.querySelector('.name')).toHaveClass('pending');
   });
 
-  /** The ring left this row for the corner where the other two live: three
-   * readings of "how much is left" belong together. tech.md 6.15. */
-  it('carries no ring at all: that lives in the corner now', () => {
-    const { container } = render(AgentBar, { props: { agent: opus, models, live: true } });
+  /** The ring is back where the original keeps it: the far end of this row,
+   * furthest from send, because it acts on what is already spent. */
+  it('carries the context ring, and pressing it compacts', async () => {
+    const oncompact = vi.fn();
+    render(AgentBar, {
+      props: { agent: opus, models, live: true, contextTitle: 'ring', oncompact },
+    });
 
-    expect(container.querySelector('.usage-dial')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'ring' }));
+    expect(oncompact).toHaveBeenCalledOnce();
   });
 
-  /** Haiku takes no effort at all, so it is not offered a dead menu. */
-  it('offers no effort menu to a model that takes none', () => {
+  /** Haiku takes no effort at all, so it is offered no track. */
+  it('draws no effort track for a model that takes none', async () => {
     render(AgentBar, { props: { agent: haiku, models, live: true } });
 
-    expect(screen.getByRole('button', { name: 'Haiku 4.5' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Effort' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Haiku 4.5/ }));
+    expect(screen.queryByRole('button', { name: 'Max' })).not.toBeInTheDocument();
+  });
+
+  /** Set on the spawn and reported by nothing, so it is offered before a
+   * session runs and read after. tech.md 6.20. */
+  it('switches thinking before the session runs', async () => {
+    const onthinking = vi.fn();
+    render(AgentBar, {
+      props: { agent: opus, models, live: true, canSetThinking: true, thinking: true, onthinking },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Thinking' }));
+    await userEvent.click(screen.getByRole('switch', { name: /Thinking/ }));
+    expect(onthinking).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('says when thinking is off without being opened', () => {
+    render(AgentBar, { props: { agent: opus, models, live: true, thinking: false } });
+
+    expect(screen.getByRole('button', { name: /Thinking/ })).toHaveTextContent('off');
   });
 });
 
 /**
- * The ring moved to the corner where the other two readings live, and it took
- * its one action with it. tech.md 6.15 and 6.12.
+ * The corner keeps the two windows. The context ring went back to the row
+ * under the field in v65, and took its one action with it. tech.md 6.15.
  */
 describe('UsageCorner', () => {
-  it('carries all three readings of how much is left', () => {
-    render(UsageCorner, {
-      props: { hour: 42, week: 68, context: 61.2, contextTitle: '61% of context used', live: true },
-    });
+  it('carries the two windows and nothing else', () => {
+    const { container } = render(UsageCorner, { props: { hour: 42, week: 68 } });
 
     expect(screen.getByText('42% 5h')).toBeInTheDocument();
     expect(screen.getByText('68% 7d')).toBeInTheDocument();
-    expect(screen.getByText('61% ctx')).toBeInTheDocument();
+    expect(container.querySelector('button')).toBeNull();
   });
+});
 
-  /** The ring is the button, exactly as it is in Claude Code. */
-  it('compacts when the ring is clicked', async () => {
-    const oncompact = vi.fn();
-    render(UsageCorner, {
-      props: {
-        hour: 42,
-        week: 68,
-        context: 61.2,
-        contextTitle: '61% of context used',
-        live: true,
-        oncompact,
-      },
+describe('ContextRing', () => {
+  it('says what it shows and what pressing it does', () => {
+    render(ContextRing, {
+      props: { pct: 56, title: '56% of context used. Click to compact.', live: true },
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /61% of context used/ }));
-    expect(oncompact).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole('button', { name: '56% of context used. Click to compact.' }),
+    ).toBeInTheDocument();
+  });
+
+  it('compacts when pressed', async () => {
+    const onclick = vi.fn();
+    render(ContextRing, { props: { pct: 56, title: 'ring', live: true, onclick } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'ring' }));
+    expect(onclick).toHaveBeenCalledOnce();
   });
 
   /** Nothing has been asked of the window, and an empty ring says that. A
    * drawn zero would be a measurement nobody made. */
-  it('leaves the ring empty and refuses to compact before the first answer', async () => {
-    const oncompact = vi.fn();
-    render(UsageCorner, {
-      props: {
-        hour: null,
-        week: null,
-        context: null,
-        contextTitle: 'Nothing in the context yet',
-        live: true,
-        oncompact,
-      },
-    });
+  it('refuses to compact before the first answer', async () => {
+    const onclick = vi.fn();
+    render(ContextRing, { props: { pct: null, title: 'ring', live: true, onclick } });
 
-    const ring = screen.getByRole('button', { name: 'Nothing in the context yet' });
+    const ring = screen.getByRole('button', { name: 'ring' });
     expect(ring).toBeDisabled();
     await userEvent.click(ring);
-    expect(oncompact).not.toHaveBeenCalled();
-  });
-
-  /** The number is true whoever runs the session; only the invitation goes. */
-  it('keeps the reading of a session it cannot compact', () => {
-    render(UsageCorner, {
-      props: { hour: 42, week: 68, context: 61.2, contextTitle: '61% of context used' },
-    });
-
-    expect(screen.getByText('61% ctx')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /61% of context used/ })).toBeDisabled();
+    expect(onclick).not.toHaveBeenCalled();
   });
 
   it('waits visibly while a compact travels', () => {
-    const { container } = render(UsageCorner, {
-      props: {
-        hour: 42,
-        week: 68,
-        context: 61.2,
-        contextTitle: '61% of context used',
-        live: true,
-        pending: true,
-      },
+    const { container } = render(ContextRing, {
+      props: { pct: 56, title: 'ring', live: true, pending: true },
     });
 
-    expect(container.querySelector('.context')).toHaveClass('pending');
+    expect(container.querySelector('.ring')).toHaveClass('pending');
   });
 });
 
@@ -206,7 +238,7 @@ describe('a session that has not answered yet', () => {
     const onmodel = vi.fn();
     render(AgentBar, { props: { agent: null, defaults, models, live: true, onmodel } });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Opus 5' }));
+    await userEvent.click(screen.getByRole('button', { name: /Opus 5/ }));
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Haiku 4.5/ }));
 
     expect(onmodel).toHaveBeenCalledExactlyOnceWith('haiku');
@@ -230,9 +262,11 @@ describe('a session that has not answered yet', () => {
       },
     });
 
-    expect(screen.getByRole('button', { name: 'Sonnet 5' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Opus 5' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Low' })).toBeTruthy();
+    // The block stands on what was asked for, both halves of it.
+    const block = screen.getByRole('button', { name: /Sonnet 5/ });
+    expect(block).toHaveTextContent('Sonnet 5');
+    expect(block).toHaveTextContent('Low');
+    expect(block).not.toHaveTextContent('Opus 5');
   });
 
   /** A pick the catalog has never heard of shows by its own alias. */
@@ -270,15 +304,15 @@ describe('the row of a session the island cannot command', () => {
     for (const name of ['Opus 5', 'High'] as const) {
       expect(screen.getByText(name)).toBeTruthy();
     }
-    // Every value carries the note -- model, effort and mode -- so whichever
-    // one the reader looks at says where the setting lives.
-    expect(screen.getAllByTitle(noteTitle(ELSEWHERE_NOTE))).toHaveLength(3);
+    // The block carries the note, so the reader who looks at it is told where
+    // the setting lives.
+    expect(screen.getAllByTitle(noteTitle(ELSEWHERE_NOTE)).length).toBeGreaterThan(0);
 
-    // Pressed, they change nothing, whatever else they do.
+    // Pressed, it changes nothing and opens nothing, whatever else it does.
     await userEvent.click(screen.getByText('Opus 5'));
-    await userEvent.click(screen.getByText('High'));
     expect(handlers.onmodel).not.toHaveBeenCalled();
     expect(handlers.oneffort).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument();
   });
 
   /** No chevrons anywhere: a triangle at eight pixels was noise, and what
