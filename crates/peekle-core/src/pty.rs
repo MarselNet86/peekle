@@ -34,6 +34,17 @@ pub struct SpawnSpec {
     /// the point -- one chat, one transcript, and every other client watching
     /// that id sees the turns Peekle adds. tech.md 6.5.
     pub resume: bool,
+    /// The chat to copy into `session_id`, when this spawn is a fork.
+    ///
+    /// The one case `--resume` in place cannot serve: another client holds
+    /// that chat and takes no messages, so continuing in place would put two
+    /// processes with two histories into one transcript, which is exactly
+    /// what the CLI documents as interleaving. A fork copies the conversation
+    /// under a new id and leaves the original alone. Measured live on 2.1.263:
+    /// `--resume <old> --fork-session --session-id <new>` answers questions
+    /// about the old conversation and writes only to the new transcript.
+    /// tech.md 6.5.
+    pub fork_from: Option<String>,
     /// The first message, handed to the spawn rather than typed into it.
     ///
     /// A freshly started TUI is not ready to receive a line for many seconds,
@@ -84,20 +95,28 @@ pub enum PtyError {
 pub fn spawn_args(
     session_id: &str,
     resume: bool,
+    fork_from: Option<&str>,
     prompt: Option<&str>,
     model: Option<&str>,
     effort: Option<&str>,
     mode: Option<&str>,
 ) -> Vec<String> {
-    // Two ways to end up with a session of a known id: assign one to a fresh
-    // run, or resume the chat that already has it. Never both -- the CLI
-    // refuses `--session-id` with `--resume` unless the session is forked, and
-    // forking is exactly what must not happen here: a fork is a new id and a
-    // new transcript, invisible to every other client watching the old one.
-    let mut args = if resume {
-        vec!["--resume".to_string(), session_id.to_string()]
-    } else {
-        vec!["--session-id".to_string(), session_id.to_string()]
+    // Three ways to end up with a session of a known id: assign one to a
+    // fresh run, resume the chat that already has it, or copy another chat
+    // into it. The CLI refuses `--session-id` beside `--resume` in the second
+    // case and takes all three flags together in the third, which is what
+    // makes a fork addressable: without `--session-id` the CLI picks the new
+    // id and Peekle would not know where the conversation went. tech.md 6.5.
+    let mut args = match (fork_from, resume) {
+        (Some(from), _) => vec![
+            "--resume".to_string(),
+            from.to_string(),
+            "--fork-session".to_string(),
+            "--session-id".to_string(),
+            session_id.to_string(),
+        ],
+        (None, true) => vec!["--resume".to_string(), session_id.to_string()],
+        (None, false) => vec!["--session-id".to_string(), session_id.to_string()],
     };
     // What was picked before the first turn rides as flags, ahead of the
     // prompt: `--model` and `--effort` are the CLI's own, and they take effect
@@ -306,6 +325,7 @@ impl PtyHost {
         for arg in spawn_args(
             &spec.session_id,
             spec.resume,
+            spec.fork_from.as_deref(),
             spec.prompt.as_deref(),
             spec.model.as_deref(),
             spec.effort.as_deref(),
@@ -502,7 +522,7 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc", false, None, None, None, None),
+            spawn_args("abc", false, None, None, None, None, None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
     }
@@ -512,25 +532,76 @@ mod tests {
     /// transcript that no other client is watching. tech.md 6.5.
     #[test]
     fn continuing_a_chat_keeps_its_own_id_and_never_forks() {
-        let args = spawn_args("chat-id", true, None, None, None, None);
+        let args = spawn_args("chat-id", true, None, None, None, None, None);
         assert_eq!(args, vec!["--resume".to_string(), "chat-id".to_string()]);
         assert!(!args.iter().any(|a| a == "--fork-session"));
         // Never both: the CLI refuses the pair unless it forks.
         assert!(!args.iter().any(|a| a == "--session-id"));
     }
 
+    /// The one combination the CLI takes all three flags in: measured live on
+    /// 2.1.263, a fork with an assigned id answers questions about the old
+    /// conversation and writes only to the new transcript. Without
+    /// `--session-id` the CLI picks the new id and Peekle loses the chat it
+    /// just made. tech.md 6.5.
+    #[test]
+    fn a_fork_names_the_chat_it_copies_and_the_id_it_becomes() {
+        let args = spawn_args(
+            "new-id",
+            false,
+            Some("old-id"),
+            Some("hi"),
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "--resume",
+                "old-id",
+                "--fork-session",
+                "--session-id",
+                "new-id",
+                "hi"
+            ]
+        );
+    }
+
+    /// A fork is never in place: the chat it copies and the chat it becomes
+    /// are two different ids, and running both rules would put the copy back
+    /// on top of the original.
+    #[test]
+    fn forking_beats_resuming_in_place_when_both_are_asked_for() {
+        let args = spawn_args("new-id", true, Some("old-id"), None, None, None, None);
+
+        assert_eq!(args.first().map(String::as_str), Some("--resume"));
+        assert_eq!(args.get(1).map(String::as_str), Some("old-id"));
+        assert!(args.iter().any(|arg| arg == "--fork-session"));
+        assert_eq!(args.iter().filter(|arg| *arg == "--resume").count(), 1);
+    }
+
     /// The first message of a fork rides as an argument, because a TUI that is
     /// still starting swallows anything written into it. tech.md 6.5.
     #[test]
     fn the_first_message_is_handed_over_rather_than_typed() {
-        let args = spawn_args("chat-id", true, Some("what did I say?"), None, None, None);
+        let args = spawn_args(
+            "chat-id",
+            true,
+            None,
+            Some("what did I say?"),
+            None,
+            None,
+            None,
+        );
         assert_eq!(args.last().map(String::as_str), Some("what did I say?"));
         // Positional: it carries no flag of its own and cannot be read as one.
         assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
 
         // Nothing to say means nothing appended, not an empty argument.
         for empty in [Some(""), Some("   "), None] {
-            let args = spawn_args("new-id", false, empty, None, None, None);
+            let args = spawn_args("new-id", false, None, empty, None, None, None);
             assert_eq!(args, vec!["--session-id".to_string(), "new-id".to_string()]);
         }
     }
@@ -543,6 +614,7 @@ mod tests {
         let args = spawn_args(
             "new-id",
             false,
+            None,
             Some("hi"),
             Some("opus"),
             Some("high"),
@@ -567,7 +639,7 @@ mod tests {
         assert_eq!(args, expected);
 
         // Nothing picked means no flag, not an empty one.
-        let args = spawn_args("new-id", false, Some("hi"), Some(" "), None, None);
+        let args = spawn_args("new-id", false, None, Some("hi"), Some(" "), None, None);
         assert_eq!(args, vec!["--session-id", "new-id", "hi"]);
     }
 
@@ -688,6 +760,7 @@ mod tests {
             cols: 120,
             rows: 40,
             resume: false,
+            fork_from: None,
             prompt: None,
             model: None,
             effort: None,
@@ -709,6 +782,7 @@ mod tests {
             cols: 120,
             rows: 40,
             resume: false,
+            fork_from: None,
             prompt: None,
             model: None,
             effort: None,

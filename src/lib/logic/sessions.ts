@@ -20,17 +20,20 @@ export function searchSessions(cards: SessionCard[], query: string): SessionCard
 }
 
 /**
- * Whether this chat can be forked into one the island owns.
+ * Whether this chat takes words through the continue path.
  *
- * Only an observed chat: an owned one already has a field. Whether a live
- * client is writing it right now is not guessed here -- that read is a
- * filesystem stat with a shelf life of seconds, and baking it into every card
- * handed to the island turned into a dead field the moment it went stale. Rust
- * makes the real, fresh check at the instant it actually matters: when a
- * message is about to be sent. tech.md 6.5.
+ * Every chat the island knows, which since v66 is every chat: one that
+ * nobody holds is resumed under its own id, one a live process holds takes
+ * the words through that process's inbox, and one that is held and takes
+ * nothing is copied. Which of the three is Rust's call at the instant of
+ * sending, never a flag baked into the card here -- that read is a filesystem
+ * stat with a shelf life of seconds, and a field disabled on a stale one is a
+ * field that lies. The only chat that does not come this way is one the
+ * island already owns and still holds the process of: it has a pty to write
+ * into. tech.md 6.5.
  */
 export function canContinue(card: SessionCard | undefined): boolean {
-  return card?.origin === 'Observed';
+  return card !== undefined;
 }
 
 /**
@@ -54,6 +57,15 @@ export function replyReachable(state: {
   return state.hasPrompt || state.owned || (state.canContinue && !state.continuing);
 }
 
+/** The words for a chat that carried on in a copy, because the one it came
+ * from is held by another app and takes no messages. Said once, where the
+ * conversation now is: the id changed, and a person who is not told reads it
+ * as the island having lost their chat. tech.md 6.5. */
+export const FORKED_NOTE = {
+  fact: 'Another app is holding that chat, so this is a copy of it.',
+  how: 'Everything said so far came along. The original stays open where it was.',
+};
+
 /**
  * Whether the `Stop` button stands under the field.
  *
@@ -72,49 +84,30 @@ export function stopAvailable(state: {
   return state.status === 'Working' && !state.hasPrompt && (state.owned || state.canContinue);
 }
 
-/**
- * The exact refusal `continue_session` gives when a live process holds the
- * chat and offers no inbox to put words into. Matched here rather than
- * treated as an ordinary error, so a rejection can become "wait and try
- * again" instead of a dead end: the process goes, or its inbox appears, and
- * the next attempt lands. tech.md 6.5.
- */
-export const BUSY_ELSEWHERE = 'That chat is open somewhere else right now';
-
-export function isBusyElsewhere(error: unknown): boolean {
-  return String(error) === BUSY_ELSEWHERE;
-}
-
 /** What one attempt at continuing a chat came back with. */
 export type ContinueOutcome =
   | { ok: true; sessionId: string }
-  | { ok: false; busy: true }
   // `error` is null for "there is no Tauri to answer" (dev, Playwright),
   // where nothing surfaces a message about a backend that was never expected
   // to exist -- every other command in the island route stays quiet there
   // too.
-  | { ok: false; busy: false; error: string | null };
+  | { ok: false; error: string | null };
 
 /**
- * Turns one `continue_session` attempt into an outcome the caller can act on
- * without re-deriving the classification: a chat the words reached (into its
- * live process, or resumed as our own -- same id either way), a chat that is
- * busy and worth trying again, or an error, and neither of the last two is
- * confused with the other. Exactly one of `session`/`error` is ever
- * meaningful, matching the one try/catch that produces them. tech.md 6.5.
+ * Turns one `continue_session` attempt into an outcome the caller can act on.
+ *
+ * Two outcomes now, not three: the words reached a chat, or they did not.
+ * "Busy elsewhere" was the third until v66, and it is gone because nothing
+ * refuses any more -- a chat that takes no messages is copied rather than
+ * declined. The id that comes back is the chat the words actually landed in,
+ * which is the same one for every route but the copy. tech.md 6.5.
  */
 export function classifyContinueOutcome(
   session: { session_id: string } | null | undefined,
   error: unknown,
 ): ContinueOutcome {
-  if (error !== undefined) {
-    return isBusyElsewhere(error)
-      ? { ok: false, busy: true }
-      : { ok: false, busy: false, error: String(error) };
-  }
-  return session
-    ? { ok: true, sessionId: session.session_id }
-    : { ok: false, busy: false, error: null };
+  if (error !== undefined) return { ok: false, error: String(error) };
+  return session ? { ok: true, sessionId: session.session_id } : { ok: false, error: null };
 }
 
 /**

@@ -29,6 +29,7 @@
     barred as isBarred,
     canContinue as canContinueCard,
     classifyContinueOutcome,
+    FORKED_NOTE,
     replyReachable,
     stopAvailable,
     searchSessions,
@@ -236,11 +237,11 @@
     }
   }
 
+  // Two words, and neither is an excuse: every chat takes text since v66, so
+  // the field never has a reason to say it cannot. tech.md 6.5.
   const replyHint = $derived.by(() => {
     if (island.prompt) return 'Reply to Claude';
     if (continuing) return 'Sending…';
-    if (waitingToHandOff) return 'Will send once the other app is done';
-    if (current?.status === 'Ended' && !canContinue) return 'This session has finished';
     return 'Message Claude';
   });
   // Starting a session is what makes one talkable-to, so the island needs a
@@ -264,24 +265,12 @@
     }
   }
 
-  // A reply that landed on "busy elsewhere" rather than a real error: exactly
-  // what to keep trying, and with what. Captured once at the first refusal
-  // rather than read live off the field, so editing the reply afterwards
-  // cannot make a background retry send words the field no longer shows.
+  // One attempt at getting the words into a chat the island does not hold the
+  // process of: into the inbox of the live process that holds it, into a
+  // resume of our own when nothing does, or into a copy when it is held and
+  // takes nothing. Which of the three is Rust's call at the instant of
+  // sending, and the id that comes back is where the words actually landed.
   // tech.md 6.5.
-  let handoff = $state<{ id: string; text: string; paths: string[] } | null>(null);
-  const waitingToHandOff = $derived(handoff !== null);
-  const HANDOFF_POLL_MS = 5000;
-
-  // One attempt at getting the words into this observed chat: into the
-  // inbox of the live process that holds it, or, when no process does, into
-  // a resume of our own. "Busy elsewhere" is not this call's failure to
-  // report -- continue_session refuses it only while a live process holds
-  // the chat and offers no way in, a fact about the world rather than about
-  // this one attempt -- so it comes back as data (classifyContinueOutcome),
-  // and the caller decides whether to wait it out. Shared by the first press
-  // and the background retry below, so "what happens once a reply lands" is
-  // written in exactly one place. tech.md 6.5.
   async function attemptContinue(sessionId: string, text: string, paths: string[]) {
     try {
       const session = await commands.continueSession(sessionId, text, paths);
@@ -289,44 +278,6 @@
     } catch (err) {
       return classifyContinueOutcome(undefined, err);
     }
-  }
-
-  /** Retries a handed-off reply every few seconds for as long as the chat
-   * stays busy elsewhere, and stops the moment it is not: delivered, refused
-   * for a different, real reason, or cancelled. Costs one file read on the
-   * Rust side per miss, never a spawned process, so polling this way is
-   * cheap. tech.md 6.5. */
-  $effect(() => {
-    if (!handoff) return;
-    const { id, text, paths } = handoff;
-
-    const attempt = async () => {
-      if (continuing) return;
-      continuing = true;
-      const outcome = await attemptContinue(id, text, paths);
-      continuing = false;
-
-      if (outcome.ok) {
-        handoff = null;
-        shots.clear(id);
-        if (current?.session.session_id === id) reply = '';
-        openSession(outcome.sessionId);
-      } else if (!outcome.busy && outcome.error) {
-        handoff = null;
-        startError = outcome.error;
-      }
-      // Still busy, or the silent no-backend case: leave `handoff` standing
-      // and let the next tick try again.
-    };
-
-    const timer = setInterval(attempt, HANDOFF_POLL_MS);
-    return () => clearInterval(timer);
-  });
-
-  /** Gives the field back without waiting any further. The field keeps
-   * whatever text it still shows, so nothing typed is lost. tech.md 6.5. */
-  function cancelHandoff() {
-    handoff = null;
   }
 
   // What answers in the session on screen, and which of the three controls is
@@ -391,19 +342,15 @@
     if (!current) return;
     const answering = island.prompt !== null;
 
-    // Typing into an observed chat is what continues it: the reply goes to
-    // the live process that holds the chat, or resumes it as our own when
-    // nothing does. Which one is Rust's call at the moment of sending, and
-    // invisible on purpose -- Desktop has no button for this either, a chat
-    // is just a chat. The text is only cleared once it has somewhere to go.
-    // tech.md 6.5.
+    // A chat we hold the process of takes the words down its own pty. Every
+    // other chat -- finished, started elsewhere, held by another app -- goes
+    // the continue route, and which of its three ways the words take is
+    // Rust's call at the moment of sending. Invisible on purpose: Desktop has
+    // no button for this either, a chat is just a chat. The text is only
+    // cleared once it has somewhere to go. tech.md 6.5.
     const id = current.session.session_id;
-    if (!answering && canContinue) {
+    if (!answering && !owned) {
       startError = null;
-      // A fresh press supersedes any wait already in progress -- it carries
-      // whatever the field shows right now, which is the truth the user just
-      // acted on. tech.md 6.5.
-      handoff = null;
       // The field goes busy for the one request that is an actual round
       // trip: PromptInput stops taking presses the instant this flips, which
       // is what a second Enter before the first fork lands used to race.
@@ -415,12 +362,11 @@
       if (outcome.ok) {
         shots.clear(id);
         reply = '';
+        // A different id means the chat was held elsewhere and this is a copy
+        // of it. Said out loud where the conversation now is: an id that
+        // changes silently reads as the island losing the chat. tech.md 6.5.
+        if (outcome.sessionId !== id) rowNote = FORKED_NOTE;
         openSession(outcome.sessionId);
-      } else if (outcome.busy) {
-        // Not an error: the chat is real and reachable, just spoken for right
-        // now. The reply stays exactly as typed, and the background retry
-        // above picks it up the moment that changes. tech.md 6.5.
-        handoff = { id, text, paths: attached };
       } else if (outcome.error) {
         startError = outcome.error;
       }
@@ -801,14 +747,6 @@
             {/if}
             {#if startError}
               <p class="empty">{startError}</p>
-            {:else if waitingToHandOff}
-              <!-- Not an error: the chat is real and reachable, just spoken
-                   for right now. Said as something in progress, with a way
-                   out, rather than a dead end. tech.md 6.5. -->
-              <p class="empty waiting">
-                <span>That chat is busy elsewhere — sending as soon as it frees up</span>
-                <Button label="Cancel" onclick={cancelHandoff} />
-              </p>
             {:else if rowNote}
               <NoteBlock fact={rowNote.fact} how={rowNote.how} />
             {/if}
@@ -819,7 +757,7 @@
               working={canStop && !stopping}
               onsubmit={send}
               onstop={stop}
-              onescape={() => (handoff ? cancelHandoff() : island.dismiss())}
+              onescape={() => island.dismiss()}
             >
               <!-- In the capsule, under the text: what will answer what is
                    being typed belongs to the typing. tech.md 6.15. -->
@@ -958,20 +896,6 @@
     padding: 10px 2px;
     color: var(--text-dim);
     font-size: 12px;
-  }
-
-  /* Something in progress, not a dead end: the reason sits beside a way out
-     rather than alone. tech.md 6.5. */
-  .empty.waiting {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .empty.waiting span {
-    flex: 1;
-    min-width: 0;
   }
 
   .head {
