@@ -459,10 +459,12 @@
 
   <section>
     <h2>NoteBlock</h2>
-    <!-- The answer a pressed reading gives: what is so, and the way out.
-         tech.md 6.15. -->
+    <!-- The answer a pressed reading gives: what is so, and the way out. It
+         arrives from above, stands ten seconds with the hairline leaking, and
+         the cross closes it early. tech.md 6.15 and 9. -->
     <NoteBlock fact={ELSEWHERE_NOTE.fact} how={ELSEWHERE_NOTE.how} />
-    <NoteBlock fact={FINISHED_NOTE.fact} />
+    <!-- Standing until it is closed: no term, so no hairline. -->
+    <NoteBlock fact={FINISHED_NOTE.fact} ttl={0} />
   </section>
 
   <section>

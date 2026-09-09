@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                       | Contract            |
 | ------- | ----------------------------------------------------------------------------- | ------------------- |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)    | 6.15, 6.20, 9       |
 | v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)             | 6.5, 6.11           |
 | v67     | [One transcript, one process](#v67--one-transcript-one-process)               | 6.5, 6.11           |
 | v66     | [The field never refuses](#v66--the-field-never-refuses)                      | 6.5, 9              |
@@ -26,6 +27,30 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
+
+## v68 — The answer stands where you look
+
+2026-09-09
+
+![The note panel](shots/note-panel.mp4)
+
+![Its term running out](shots/note-panel-frames.png)
+
+Pressing a control that only reads used to answer under the feed, by the
+input, and the answer went away on its own. So the press looked like nothing
+happened: the explanation appeared where the eye was not, and left before it
+got there.
+
+Now it is a panel above the feed. It comes down from the top edge on the curve
+Apple uses for an arriving sheet, stands ten seconds, and a hairline under the
+text runs its term down so the time is seen rather than guessed. The cross
+closes it early. Hovering holds both the hairline and the clock, because
+someone reading it is not spending it.
+
+The compact ring was the worst case: on a chat another app runs it was
+disabled outright, so pressing it gave neither a compact nor a reason. It
+takes the press now and answers with the same panel. No control in that row is
+silent any more.
 
 ## v67.1 — A peer message is its words
 

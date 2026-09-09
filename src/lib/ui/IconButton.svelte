@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Settings } from '@lucide/svelte';
+  import { ArrowLeft, Settings, X } from '@lucide/svelte';
 
   let {
     name,
@@ -10,7 +10,7 @@
     /** Which sign it wears. The signs come from the icon set, not from hand
      * drawn paths: a gear drawn by hand comes out a sun, which is what the
      * first cut of this did. tech.md 9. */
-    name: 'settings' | 'back';
+    name: 'settings' | 'back' | 'close';
     /** What it does, for the pointer and for a reader who sees no icon. */
     title: string;
     /** Held lit while what it opened is open. A control that opens something
@@ -19,7 +19,8 @@
     onclick?: () => void;
   } = $props();
 
-  const Sign = $derived(name === 'settings' ? Settings : ArrowLeft);
+  const SIGNS = { settings: Settings, back: ArrowLeft, close: X };
+  const Sign = $derived(SIGNS[name]);
 </script>
 
 <!-- A sign and no word. It stands where a word would not fit and says what it

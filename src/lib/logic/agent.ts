@@ -183,6 +183,19 @@ export function contextLabel(agent: AgentSetup | null, canCompact = true): strin
  * if the first is unwelcome. */
 export type SettingsNote = { fact: string; how?: string };
 
+/**
+ * How long an answer stands before it goes, in milliseconds.
+ *
+ * Ten seconds, and the block shows them leaking rather than vanishing at the
+ * end of an interval nobody was told about. Long enough to read two sentences
+ * twice, short enough that a stale answer is not still sitting there at the
+ * next press. Hovering holds it. tech.md 9.
+ */
+export const NOTE_TTL = 10_000;
+
+/** How long the way out plays, in milliseconds. tech.md 9. */
+export const NOTE_EXIT_MS = 180;
+
 export const ELSEWHERE_NOTE: SettingsNote = {
   fact: 'Another app is running this chat, so its model and effort are set there.',
   how: 'Close it there and your next message brings the chat here, controls and all.',
