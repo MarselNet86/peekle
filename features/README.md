@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                       | Contract            |
 | ------- | ----------------------------------------------------------------------------- | ------------------- |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)             | 6.5, 6.11           |
 | v67     | [One transcript, one process](#v67--one-transcript-one-process)               | 6.5, 6.11           |
 | v66     | [The field never refuses](#v66--the-field-never-refuses)                      | 6.5, 9              |
 | v65     | [Composer row, as the original](#v65--composer-row-as-the-original)           | 6.12, 6.15, 6.20, 9 |
@@ -25,6 +26,25 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
+
+## v67.1 — A peer message is its words
+
+2026-09-09 · `92b35e8`
+
+A reply delivered into a live session's inbox stood in the feed as five lines
+of instruction addressed to the agent: who the message came from, and that a
+peer cannot grant permission. Nobody typed that, and it is four times the
+length of most replies.
+
+The wrapper changed in 2.1.263 and lost its tag: the receiver now writes a
+preamble line above the words and the standing instruction below them. Both
+layers come off, the older tag included, so transcripts written before the
+change still read. Only a whole first line counts as the preamble, so a reply
+quoting the phrase keeps every word. The hook gets the bare words and never
+needed unwrapping.
+
+The doubled bubble goes with it: the island's own copy of the reply now
+matches the one in the file instead of standing beside it.
 
 ## v67 — One transcript, one process
 
