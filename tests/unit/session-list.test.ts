@@ -12,6 +12,7 @@ import {
   classifyContinueOutcome,
   replyReachable,
   searchSessions,
+  steadyOrder,
   stopAvailable,
 } from '$lib/logic/sessions';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
@@ -210,5 +211,62 @@ describe('reading what one attempt at continuing a chat came back with', () => {
    * quiet there too, rather than reporting on a backend nothing expected. */
   it('says nothing at all when there was no backend to ask', () => {
     expect(classifyContinueOutcome(null, undefined)).toEqual({ ok: false, error: null });
+  });
+});
+
+describe('the order the list is read in', () => {
+  const ids = (cards: SessionCard[]) => cards.map((each) => each.session.session_id);
+
+  /// Rust sorts by activity, which is right for one chat and wrong for
+  /// several: a turn in a chat nobody is watching lifted it to the top and
+  /// pushed every row under it down, so a press landed on whichever row had
+  /// taken the place of the one aimed at. tech.md 6.12.
+  it('keeps rows where they were while the list is open', () => {
+    const opened = ['a', 'b', 'c'];
+    // 'c' just answered, so the data now leads with it.
+    const now = [card('c'), card('a'), card('b')];
+
+    expect(ids(steadyOrder(now, opened))).toEqual(['a', 'b', 'c']);
+  });
+
+  /// A chat the list has never shown is new to the reader too, and the top is
+  /// where a new chat belongs.
+  it('puts a chat it has not seen at the top', () => {
+    const opened = ['a', 'b'];
+    const now = [card('fresh'), card('b'), card('a')];
+
+    expect(ids(steadyOrder(now, opened))).toEqual(['fresh', 'a', 'b']);
+  });
+
+  /// Nothing held yet, so nothing to hold to: the data's own order stands.
+  it('takes the data as it comes when nothing is held', () => {
+    const now = [card('c'), card('a')];
+
+    expect(ids(steadyOrder(now, []))).toEqual(['c', 'a']);
+  });
+
+  /// A chat that went away leaves no hole and takes nothing with it.
+  it('survives a chat that is gone', () => {
+    const opened = ['a', 'gone', 'b'];
+    const now = [card('b'), card('a')];
+
+    expect(ids(steadyOrder(now, opened))).toEqual(['a', 'b']);
+  });
+
+  it('never loses or duplicates a row, whatever it is given', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.string({ minLength: 1, maxLength: 4 }), { maxLength: 8 }),
+        fc.array(fc.string({ minLength: 1, maxLength: 4 }), { maxLength: 8 }),
+        (present, opened) => {
+          const unique = [...new Set(present)];
+          const held = steadyOrder(
+            unique.map((id) => card(id)),
+            opened,
+          );
+          expect(ids(held).sort()).toEqual([...unique].sort());
+        },
+      ),
+    );
   });
 });
