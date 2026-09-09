@@ -9,13 +9,34 @@ Add an entry when a feature merges. Keep it to what a person needs to recognise
 the thing on screen — the reasoning belongs in `tech.md`, the mechanics belong
 in the code.
 
-| Version | Feature                                                    | Contract           |
-| ------- | ---------------------------------------------------------- | ------------------ |
-| v60     | [Composer layout](#v60--composer-layout)                   | 6.12, 6.15, 9      |
-| v59     | [Permission panel](#v59--permission-panel)                 | 6.3, 6.7, 9        |
-| v58     | [Usage badge](#v58--usage-badge)                           | 6.8, 6.10, 6.18, 9 |
-| v57     | [Work line](#v57--work-line)                               | 6.12, 9            |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button) | 6.5, 6.15, 9       |
+| Version | Feature                                                            | Contract           |
+| ------- | ------------------------------------------------------------------ | ------------------ |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided) | 6.3, 6.12, 6.16, 9 |
+| v60     | [Composer layout](#v60--composer-layout)                           | 6.12, 6.15, 9      |
+| v59     | [Permission panel](#v59--permission-panel)                         | 6.3, 6.7, 9        |
+| v58     | [Usage badge](#v58--usage-badge)                                   | 6.8, 6.10, 6.18, 9 |
+| v57     | [Work line](#v57--work-line)                                       | 6.12, 9            |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)         | 6.5, 6.15, 9       |
+
+## v61 — Sign in says what it decided
+
+2026-09-09 · `933b7e8`
+
+![The account strip](sign-in-strip.png)
+
+Pressing `Sign in` under the session list changed nothing on screen. The press
+worked: the command asks the CLI first, `claude auth status --json` said the
+account was signed in, and it published the verdict that a login would not
+help. The strip had nowhere to put it — a title and a button, no line and no
+error — so the press moved zero pixels.
+
+The strip is the panel in one column now: title, line, error, the code field
+when the CLI asks for one, and the way out. A new stage, `Refused`, separates
+"signed in and the endpoint refused anyway" from "the login would not start":
+the first offers no button, the second keeps one.
+
+The action button spans its block in both forms, and the hairline above the
+field is gone — the capsule draws its own edge.
 
 ## v60 — Composer layout
 
