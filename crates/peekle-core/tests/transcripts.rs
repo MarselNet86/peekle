@@ -22,7 +22,7 @@ fn a_captured_transcript_becomes_a_card() {
         "c64242ae-b10a-4ca6-966c-7f2a56b395bd"
     );
     assert_eq!(card.session.project, "peekle");
-    assert_eq!(card.session.cwd, "/Users/marsel.shamsutdinov/peekle");
+    assert_eq!(card.session.cwd, "/Users/dev/peekle");
     // Nothing in a file says whether the session ended or was killed.
     assert_eq!(card.status, SessionStatus::Idle);
     assert!(card.updated_at > 0);

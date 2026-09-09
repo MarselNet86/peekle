@@ -9,7 +9,13 @@ all. It passes, it looks like coverage, and it is wrong in exactly the place
 the contract matters.
 
 Format is one JSON object per line, `<endpoint>.jsonl`, exactly as it arrived
-on the wire.
+on the wire, with one pass over it: `scripts/scrub-fixtures.py` takes out the
+machine the capture was taken on. The home path becomes `/Users/dev`, the
+project key Claude Code derives from it becomes `-Users-dev-`, the account
+name becomes `dev`, and an address becomes `dev@example.com`. Nothing else is
+touched — keys, order, escape sequences inside a terminal dump and the shape
+of the JSON all survive, and running it twice changes nothing. The capture
+script calls it; `--check` says whether anything is left.
 
 ## Captured
 

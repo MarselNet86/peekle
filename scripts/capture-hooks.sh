@@ -124,5 +124,11 @@ echo "capturing for ${DURATION}s into $OUT"
 echo "drive a Claude Code session now: send a prompt, let it run tools, finish a turn"
 sleep "$DURATION"
 
+# The capture came off a real machine and carries it: the home path, the
+# account name in an `ls` column, an address in a terminal dump. The
+# repository is public, so a capture is scrubbed before it is a fixture.
+# tech.md rule 6.
+"$ROOT/scripts/scrub-fixtures.py" "$OUT"/*.jsonl
+
 echo "captured files:"
 ls -la "$OUT"

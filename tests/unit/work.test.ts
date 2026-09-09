@@ -16,7 +16,7 @@ import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 const entry = (over: Partial<FeedEntry> = {}): FeedEntry => ({
   id: '01J0',
   kind: 'Tool',
-  text: "cd /Users/marsel; python3 - <<'PY'",
+  text: "cd /Users/dev; python3 - <<'PY'",
   tool: 'Bash',
   detail: null,
   state: 'Ok',
