@@ -3,4 +3,4 @@
 /**
  * How far the island's own sign-in has got. tech.md 6.16.
  */
-export type SignInStage = "Idle" | "Starting" | "Waiting" | "Finishing" | "Done" | "Failed";
+export type SignInStage = "Idle" | "Starting" | "Waiting" | "Finishing" | "Done" | "Failed" | "Refused";

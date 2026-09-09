@@ -554,6 +554,11 @@ pub enum SignInStage {
     Done,
     /// It exited non-zero, would not start, or was cancelled.
     Failed,
+    /// Nothing was started at all: Claude Code is signed in and the endpoint
+    /// refused anyway, so a login is not what fixes this. Kept apart from
+    /// `Failed` because a failure to start is worth pressing again and this
+    /// is not. tech.md 6.16.
+    Refused,
 }
 
 /// What the island knows about a sign-in in progress. tech.md 6.16.
@@ -586,6 +591,16 @@ impl SignInState {
     pub fn failed(error: impl Into<String>) -> Self {
         Self {
             stage: SignInStage::Failed,
+            url: None,
+            needs_code: false,
+            error: Some(error.into()),
+        }
+    }
+
+    /// Signed in, and the endpoint refused anyway. tech.md 6.16.
+    pub fn refused(error: impl Into<String>) -> Self {
+        Self {
+            stage: SignInStage::Refused,
             url: None,
             needs_code: false,
             error: Some(error.into()),

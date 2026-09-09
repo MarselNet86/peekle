@@ -53,8 +53,28 @@ export function accountCopy(reason: UsageUnavailable | null | undefined): Accoun
  * code, the code goes in the field: three facts, and the screen carries the
  * one that is true now. Null when nothing is running.
  */
+/**
+ * Whether the panel offers a button at all.
+ *
+ * A refusal is the one state that does not: Claude Code is signed in, the
+ * endpoint said no anyway, and every button this panel has would repeat
+ * something that has already been tried. The poll clears the panel itself the
+ * moment the endpoint answers. tech.md 6.16.
+ */
+export function canAct(state: SignInState): boolean {
+  return state.stage !== 'Refused';
+}
+
 export function runCopy(state: SignInState): { title: string; line: string } | null {
   switch (state.stage) {
+    // Not a login that failed: a login that was never the answer. Claude Code
+    // holds a credential and the endpoint refused it anyway, which is a
+    // network or a region, not an account. tech.md 6.16.
+    case 'Refused':
+      return {
+        title: 'Signed in, but the API refused',
+        line: state.error ?? 'Check your connection or VPN, then wait a moment.',
+      };
     case 'Starting':
       return { title: 'Opening your browser', line: '' };
     case 'Waiting':

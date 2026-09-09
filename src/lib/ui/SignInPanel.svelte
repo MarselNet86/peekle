@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accountCopy, runCopy } from '$lib/logic/signin';
+  import { accountCopy, canAct, runCopy } from '$lib/logic/signin';
   import Button from '$lib/ui/Button.svelte';
   import type { SignInState } from '$lib/types/generated/SignInState';
   import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
@@ -20,9 +20,11 @@
     /** Why the account is out of reach, which decides what the button does. */
     reason?: UsageUnavailable | null;
     busy?: boolean;
-    /** One row instead of a screen, for the strip under the session list.
-     * The list is still readable there, so the account gets a line, not the
-     * whole shape. tech.md 6.16. */
+    /** The same panel in one column, tighter and left aligned, for the strip
+     * under the session list. Not a shorter panel: a strip that can only say
+     * `Signed out` swallows the verdict of the press that produced it, and a
+     * press that changes nothing on screen is a press that was lost.
+     * tech.md 6.16. */
     compact?: boolean;
     onaction?: () => void;
     oncode?: (code: string) => void;
@@ -39,6 +41,9 @@
   const title = $derived(run?.title ?? rest?.title ?? 'Signed out');
   const line = $derived(run ? run.line : (signIn.error ?? rest?.line ?? ''));
   const action = $derived(rest?.action ?? 'Sign in');
+  // A refusal offers nothing to press: every button here would repeat what
+  // has already been tried. tech.md 6.16.
+  const acts = $derived(canAct(signIn));
 
   function submit() {
     // An empty code is not a submission. Sending one would put the CLI's own
@@ -49,16 +54,11 @@
   }
 </script>
 
-{#if compact}
-  <!-- Under a list the user can still read. One line and one verb. -->
-  <div class="strip">
-    <span class="said">{title}</span>
-    <Button label={action} variant="connect" {busy} onclick={() => onaction?.()} />
-  </div>
-{:else}
-  <!-- The screen a blocked chat becomes. Everything sits on one vertical
-       axis: the mark, the two lines, the action. tech.md 6.16. -->
-  <div class="account">
+<!-- One screen and one strip, same markup: the strip is the panel in a
+     single column, and everything the press can produce has somewhere to
+     land. tech.md 6.16. -->
+<div class="account" class:compact>
+  {#if !compact}
     <!-- Peekle's own sign, the one the resting mark wears, and grey rather
          than green because grey is exactly what it means here. Not an icon
          borrowed from a warning dialog: this is the island saying it is the
@@ -67,52 +67,57 @@
       <path d="M4 10.6L6.9 1.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
       <path d="M9.1 10.6L12 1.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
     </svg>
+  {/if}
 
-    <h2>{title}</h2>
-    {#if line}
-      <p>{line}</p>
-    {/if}
+  <h2>{title}</h2>
+  {#if line}
+    <p>{line}</p>
+  {/if}
 
-    {#if signIn.needs_code}
-      <input
-        type="text"
-        bind:value={code}
-        placeholder="Code from the page"
-        aria-label="Code from the page"
-        spellcheck="false"
-        autocomplete="off"
-        onkeydown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            submit();
-          }
-        }}
-      />
-    {/if}
+  {#if signIn.needs_code}
+    <input
+      type="text"
+      bind:value={code}
+      placeholder="Code from the page"
+      aria-label="Code from the page"
+      spellcheck="false"
+      autocomplete="off"
+      onkeydown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        }
+      }}
+    />
+  {/if}
 
+  {#if acts}
     <div class="row">
       {#if run}
-        <Button label="Cancel" onclick={() => oncancel?.()} />
+        <Button label="Cancel" wide onclick={() => oncancel?.()} />
         {#if signIn.needs_code}
           <Button
             label="Continue"
             variant="connect"
+            wide
             disabled={!code.trim()}
             {busy}
             onclick={submit}
           />
         {/if}
       {:else}
-        <Button label={action} variant="connect" {busy} onclick={() => onaction?.()} />
+        <!-- The one thing worth pressing in this block, so it takes the whole
+             width of it rather than being measured by its own word. 6.16. -->
+        <Button label={action} variant="connect" wide {busy} onclick={() => onaction?.()} />
       {/if}
     </div>
+  {/if}
 
-    <!-- The rarer way out, kept quiet so it never competes with the action. -->
-    {#if signIn.url && run}
-      <button class="quiet" type="button" onclick={() => onopen?.()}>Open the page</button>
-    {/if}
-  </div>
-{/if}
+  <!-- The rarer way out, kept quiet so it never competes with the action. -->
+  {#if signIn.url && run}
+    <button class="quiet" type="button" onclick={() => onopen?.()}>Open the page</button>
+  {/if}
+</div>
 
 <style>
   .account {
@@ -123,6 +128,46 @@
     /* Short lines, and the reason the text is capped rather than the block:
        the axis stays put while the wrapping changes. */
     max-width: 340px;
+  }
+
+  /* The strip under the session list: one column, left aligned, small. The
+     list is still the thing on screen, so the account takes the height it
+     needs to be understood and no more. tech.md 6.16. */
+  .account.compact {
+    align-items: stretch;
+    text-align: left;
+    max-width: none;
+    width: 100%;
+  }
+
+  .compact h2 {
+    font-size: 13px;
+  }
+
+  .compact p {
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .compact input {
+    margin-top: 8px;
+    text-align: left;
+    padding: 7px 10px;
+  }
+
+  .compact .row {
+    margin-top: 8px;
+  }
+
+  .compact .row :global(button) {
+    font-size: 12px;
+    padding: 8px 14px;
+  }
+
+  .compact .quiet {
+    margin-top: 8px;
+    align-self: center;
   }
 
   .sign {
@@ -179,6 +224,7 @@
     justify-content: center;
     gap: 8px;
     margin-top: 22px;
+    width: 100%;
   }
 
   /* The one thing on this screen worth pressing, so it is sized to be worth
@@ -208,21 +254,5 @@
   .quiet:focus,
   .quiet:focus-visible {
     outline: none;
-  }
-
-  .strip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .said {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    color: var(--text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 </style>

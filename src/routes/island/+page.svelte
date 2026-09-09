@@ -993,9 +993,11 @@
     color: var(--text);
   }
 
+  /* No rule above the field. The capsule draws its own edge now (6.15), and
+     a hairline over it is a second border for one boundary -- two lines where
+     the eye reads one thing. Space separates them instead. tech.md 6.12. */
   .reply {
     flex: none;
-    border-top: 1px solid var(--hairline);
     padding-top: 10px;
   }
 

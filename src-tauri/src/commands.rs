@@ -460,10 +460,7 @@ pub async fn start_sign_in(
         }
         return Ok(publish_sign_in(
             &app,
-            SignInState::failed(
-                "Claude Code is signed in, so signing in again will not help. \
-                 Check your connection or VPN.",
-            ),
+            SignInState::refused("Check your connection or VPN, then wait a moment."),
         ));
     }
 

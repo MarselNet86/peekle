@@ -362,6 +362,35 @@
       />
     </div>
 
+    <h2>SignInPanel · strip</h2>
+    <!-- The strip under the session list: the same panel in one column, with
+         everything a press can produce landing somewhere. tech.md 6.16. -->
+    <div class="frame">
+      <SignInPanel
+        compact
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        reason="NotLoggedIn"
+      />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        compact
+        signIn={{
+          stage: 'Refused',
+          url: null,
+          needs_code: false,
+          error: 'Check your connection or VPN, then wait a moment.',
+        }}
+        reason="NotLoggedIn"
+      />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        compact
+        signIn={{ stage: 'Waiting', url: 'https://claude.ai/x', needs_code: true, error: null }}
+      />
+    </div>
+
     <h2>UsageCorner</h2>
     <!-- The top right corner of a dialogue: both windows and the context, the
          last of them a button. tech.md 6.12 and 6.15. -->

@@ -17,7 +17,7 @@ import {
   needsSignIn,
   outOfReach,
 } from '$lib/features/usage/usage.svelte';
-import { accountCopy, runCopy } from '$lib/logic/signin';
+import { accountCopy, canAct, runCopy } from '$lib/logic/signin';
 import { barred } from '$lib/logic/sessions';
 import SignInPanel from '$lib/ui/SignInPanel.svelte';
 import type { SignInState } from '$lib/types/generated/SignInState';
@@ -333,5 +333,110 @@ describe('what the account screen says', () => {
     expect(runCopy(state({ stage: 'Idle' }))).toBeNull();
     expect(runCopy(state({ stage: 'Done' }))).toBeNull();
     expect(runCopy(state({ stage: 'Failed' }))).toBeNull();
+  });
+});
+
+/**
+ * v61 acceptance. The strip under the session list is where the press
+ * happens, so it is where the answer has to appear. It said `Signed out` and
+ * nothing else, and every verdict a press produced landed nowhere.
+ * tech.md 6.16.
+ */
+describe('the strip under the session list', () => {
+  it('says why the account is out of reach, not just that it is', () => {
+    render(SignInPanel, {
+      props: { signIn: state(), reason: 'NotLoggedIn' as UsageUnavailable, compact: true },
+    });
+
+    expect(screen.getByText('Signed out')).toBeInTheDocument();
+    expect(screen.getByText('Claude Code needs to sign in again.')).toBeInTheDocument();
+  });
+
+  /** The press produced a sentence; the strip used to throw it away, which is
+   * exactly what "I press Sign in and nothing happens" was. */
+  it('shows the verdict of a press that decided a login would not help', () => {
+    render(SignInPanel, {
+      props: {
+        signIn: state({ stage: 'Refused', error: 'Check your connection or VPN.' }),
+        reason: 'NotLoggedIn' as UsageUnavailable,
+        compact: true,
+      },
+    });
+
+    expect(screen.getByText('Signed in, but the API refused')).toBeInTheDocument();
+    expect(screen.getByText('Check your connection or VPN.')).toBeInTheDocument();
+  });
+
+  /** Nothing here would fix it, so nothing here is offered. tech.md 6.16. */
+  it('offers no button on a refusal, in either form', () => {
+    for (const compact of [true, false]) {
+      const { unmount } = render(SignInPanel, {
+        props: {
+          signIn: state({ stage: 'Refused', error: 'Check your connection or VPN.' }),
+          reason: 'NotLoggedIn' as UsageUnavailable,
+          compact,
+        },
+      });
+
+      expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  /** A login that would not start is worth pressing again. A refusal is not,
+   * and telling them apart is the whole reason `Refused` exists. */
+  it('keeps the button for a login that failed to start', () => {
+    render(SignInPanel, {
+      props: {
+        signIn: state({ stage: 'Failed', error: 'no claude command found on this Mac' }),
+        reason: 'NotLoggedIn' as UsageUnavailable,
+        compact: true,
+      },
+    });
+
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByText('no claude command found on this Mac')).toBeInTheDocument();
+  });
+
+  /** The code from the page has to go somewhere, and the strip is where the
+   * login was started from. */
+  it('takes the code and the way out while a login runs', async () => {
+    const oncode = vi.fn();
+    const oncancel = vi.fn();
+    render(SignInPanel, {
+      props: {
+        signIn: state({ stage: 'Waiting', needs_code: true, url: 'https://claude.ai/x' }),
+        compact: true,
+        oncode,
+        oncancel,
+      },
+    });
+
+    await userEvent.type(screen.getByLabelText('Code from the page'), 'abc123');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(oncode).toHaveBeenCalledExactlyOnceWith('abc123');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(oncancel).toHaveBeenCalledOnce();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open the page' }));
+  });
+
+  /** One action in the block, so it takes the width of the block. */
+  it('stretches the action across the strip', () => {
+    render(SignInPanel, {
+      props: { signIn: state(), reason: 'NotLoggedIn' as UsageUnavailable, compact: true },
+    });
+
+    expect(screen.getByRole('button', { name: 'Sign in' })).toHaveClass('wide');
+  });
+});
+
+describe('canAct', () => {
+  it('offers a press on everything but a refusal', () => {
+    expect(canAct(state())).toBe(true);
+    expect(canAct(state({ stage: 'Failed' }))).toBe(true);
+    expect(canAct(state({ stage: 'Waiting' }))).toBe(true);
+    expect(canAct(state({ stage: 'Refused' }))).toBe(false);
   });
 });
