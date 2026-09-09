@@ -427,6 +427,49 @@ fn publish_sign_in(app: &AppHandle, next: SignInState) -> SignInState {
 
 /// Starts the sign-in Claude Code performs for itself. tech.md 6.16.
 ///
+/// Why the endpoint said no, in the words that fit that reason. tech.md 6.16.
+///
+/// One sentence for every cause was the bug this fixes: a rate limit was
+/// reported as a network problem, so the panel told somebody with a working
+/// connection to check their connection. The causes are already told apart in
+/// 6.4; this is only the place that stopped using the distinction.
+fn refusal(snapshot: &UsageSnapshot) -> String {
+    use peekle_core::types::UsageUnavailable;
+
+    match snapshot.reason {
+        Some(UsageUnavailable::RateLimited) => match snapshot.retry_after_ms {
+            // The server named the wait, so the wait is named here: "a moment"
+            // for twenty four minutes is a sentence that gets pressed again in
+            // thirty seconds.
+            Some(ms) if ms > 0 => format!(
+                "Too many requests to the usage endpoint. It asked to wait {}.",
+                about_now(ms)
+            ),
+            _ => "Too many requests to the usage endpoint. Give it a few minutes.".to_string(),
+        },
+        Some(UsageUnavailable::Offline) => {
+            "Nothing answered at api.anthropic.com. Check your connection or VPN.".to_string()
+        }
+        Some(UsageUnavailable::Network) => {
+            "The usage endpoint did not answer in time. Check your connection or VPN.".to_string()
+        }
+        // Everything else is the endpoint refusing a credential that Claude
+        // Code says is good, which is not a thing the person can fix from
+        // here beyond waiting.
+        _ => "Claude Code is signed in and the endpoint refused anyway.".to_string(),
+    }
+}
+
+/// A wait a person can act on: minutes once it is minutes, seconds below that.
+fn about_now(ms: i64) -> String {
+    let secs = ms / 1000;
+    if secs < 90 {
+        return format!("{secs} seconds");
+    }
+    let mins = (secs + 30) / 60;
+    format!("about {mins} minutes")
+}
+
 /// Only ever from a press. Nothing here raises the Keychain dialog -- that is
 /// still `request_usage_access` alone (rule 12) -- and nothing here writes a
 /// credential: the token this ends with is Claude Code's, written by Claude
@@ -458,10 +501,7 @@ pub async fn start_sign_in(
         if fresh.reason.is_none() {
             return Ok(publish_sign_in(&app, SignInState::idle()));
         }
-        return Ok(publish_sign_in(
-            &app,
-            SignInState::refused("Check your connection or VPN, then wait a moment."),
-        ));
+        return Ok(publish_sign_in(&app, SignInState::refused(refusal(&fresh))));
     }
 
     let Some(binary) = peekle_core::claude_path() else {
@@ -1862,6 +1902,47 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The bug this fixes, in one line: a rate limit told the user to check
+    /// a connection that was working. Every cause says its own thing now, and
+    /// a named wait is named rather than called "a moment". tech.md 6.16.
+    #[test]
+    fn a_refusal_says_which_refusal_it_is() {
+        use peekle_core::types::{UsageSource, UsageUnavailable};
+
+        let refused = |reason, retry_after_ms| {
+            refusal(&UsageSnapshot {
+                windows: Vec::new(),
+                source: UsageSource::Unavailable,
+                reason: Some(reason),
+                fetched_at: 0,
+                keychain_granted: true,
+                retry_after_ms,
+            })
+        };
+
+        // Captured live: `retry-after: 1456`, which is what the panel has to
+        // say instead of sending somebody to their router.
+        let limited = refused(UsageUnavailable::RateLimited, Some(1_456_000));
+        assert!(limited.contains("Too many requests"), "{limited}");
+        assert!(limited.contains("about 24 minutes"), "{limited}");
+        assert!(!limited.contains("connection"), "{limited}");
+
+        let no_header = refused(UsageUnavailable::RateLimited, None);
+        assert!(no_header.contains("few minutes"), "{no_header}");
+
+        for reason in [UsageUnavailable::Offline, UsageUnavailable::Network] {
+            let network = refused(reason, None);
+            assert!(network.contains("connection or VPN"), "{network}");
+        }
+    }
+
+    #[test]
+    fn a_wait_reads_as_minutes_once_it_is_minutes() {
+        assert_eq!(about_now(30_000), "30 seconds");
+        assert_eq!(about_now(89_000), "89 seconds");
+        assert_eq!(about_now(1_456_000), "about 24 minutes");
     }
 
     #[test]

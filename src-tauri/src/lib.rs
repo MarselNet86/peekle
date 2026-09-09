@@ -412,11 +412,23 @@ fn poll_usage(app: &tauri::AppHandle, state: Arc<state::AppState>) {
                         misses = misses.saturating_add(1);
                         peekle_usage::retry_after(misses)
                     }
-                    // Asked to wait, so wait: coming back sooner is what got
-                    // us rate limited. tech.md 6.4.
+                    // Asked to wait, so wait exactly that long: coming back
+                    // sooner is what got us rate limited, and the server said
+                    // how long in its own header. Never shorter than the
+                    // ordinary interval. tech.md 6.4.
                     Some(peekle_core::types::UsageUnavailable::RateLimited) => {
                         misses = 0;
-                        EVERY
+                        match snapshot.retry_after_ms {
+                            Some(ms) if ms > 0 => {
+                                let asked = std::time::Duration::from_millis(ms as u64);
+                                tracing::info!(
+                                    seconds = asked.as_secs(),
+                                    "the usage endpoint asked to be left alone"
+                                );
+                                asked.max(EVERY)
+                            }
+                            _ => EVERY,
+                        }
                     }
                     _ => {
                         misses = 0;

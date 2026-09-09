@@ -539,6 +539,12 @@ pub struct UsageSnapshot {
     /// hide history that was already reachable once. Losing that would be
     /// the same fragility the gate exists to end.
     pub keychain_granted: bool,
+    /// How long the endpoint asked to be left alone, from its `retry-after`
+    /// header. Only ever set with `UsageUnavailable::RateLimited`, and only
+    /// when the server said so: a limit is the server's to time, and knocking
+    /// inside it is what extends it. tech.md 6.4.
+    #[ts(type = "number | null")]
+    pub retry_after_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

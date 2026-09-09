@@ -63,6 +63,7 @@ pub fn snapshot_from(body: &Value, fetched_at: i64) -> UsageSnapshot {
             // Stamped centrally where snapshots are handed to the island, not
             // known here. tech.md 6.4.
             keychain_granted: false,
+            retry_after_ms: None,
         },
         _ => unavailable(UsageUnavailable::Unsupported, fetched_at),
     }
@@ -90,7 +91,26 @@ pub fn unavailable(reason: UsageUnavailable, fetched_at: i64) -> UsageSnapshot {
         reason: Some(reason),
         fetched_at,
         keychain_granted: false,
+        retry_after_ms: None,
     }
+}
+
+/// The same, carrying how long the endpoint asked to be left alone.
+pub fn rate_limited(fetched_at: i64, retry_after_ms: Option<i64>) -> UsageSnapshot {
+    UsageSnapshot {
+        retry_after_ms,
+        ..unavailable(UsageUnavailable::RateLimited, fetched_at)
+    }
+}
+
+/// `retry-after` as a duration. Seconds is the form this endpoint sends, seen
+/// live as `retry-after: 1456`; the HTTP-date form is not read, because a
+/// clock this side disagreeing with the server's would be a wait invented
+/// here. A header that is not a plain count of seconds is no header at all,
+/// and the poll falls back to its own interval. tech.md 6.4.
+pub fn retry_after_ms(header: Option<&str>) -> Option<i64> {
+    let secs: i64 = header?.trim().parse().ok()?;
+    (secs > 0).then(|| secs.saturating_mul(1000))
 }
 
 fn now_ms() -> i64 {
@@ -109,8 +129,9 @@ pub struct AccountUsage {
 /// Why one request did not come back with a body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AskError {
-    /// The server answered, with this code.
-    Status(u16),
+    /// The server answered, with this code, and with what it said about
+    /// coming back: `retry-after` in milliseconds, when it sent one.
+    Status(u16, Option<i64>),
     /// Nothing to connect to and no name to resolve: the machine is off the
     /// network. tech.md 6.4.
     Offline,
@@ -161,6 +182,10 @@ impl AccountUsage {
         let response = ureq::get(ENDPOINT)
             .config()
             .timeout_global(Some(budget))
+            // A refusal is an answer and it carries what the server wants
+            // known: `429` says how long to stay away, and turning it into a
+            // bare error throws that away. tech.md 6.4.
+            .http_status_as_error(false)
             .build()
             .header("user-agent", &self.agent)
             // The only place the token is used, and it goes nowhere else.
@@ -170,6 +195,15 @@ impl AccountUsage {
             .call();
 
         match response {
+            Ok(response) if response.status() != 200 => {
+                let after = retry_after_ms(
+                    response
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|value| value.to_str().ok()),
+                );
+                Err(AskError::Status(response.status().as_u16(), after))
+            }
             Ok(mut response) => {
                 let raw = response.body_mut().read_to_string().map_err(|err| {
                     tracing::warn!(error = %err, "could not read the usage body");
@@ -181,7 +215,9 @@ impl AccountUsage {
                 })?;
                 Ok(snapshot_from(&body, now_ms()))
             }
-            Err(ureq::Error::StatusCode(code)) => Err(AskError::Status(code)),
+            // Kept for a build that leaves `http_status_as_error` on: the
+            // code still travels, the header does not.
+            Err(ureq::Error::StatusCode(code)) => Err(AskError::Status(code, None)),
             // Nothing answered in time. The machine may well be online: a
             // captive portal and a silent endpoint look the same from here,
             // and both cost the whole budget. tech.md 6.4.
@@ -228,7 +264,7 @@ impl UsageProvider for AccountUsage {
             // the result, so Peekle's refresh is a second read of it. A token
             // that came back unchanged has already been refused, and asking
             // twice with it would only spend the budget. tech.md 6.4.
-            Err(AskError::Status(401 | 403)) => match self.token() {
+            Err(AskError::Status(401 | 403, _)) => match self.token() {
                 Ok(fresh) if fresh != token => match self.ask(&fresh, budget) {
                     Ok(snapshot) => snapshot,
                     _ => unavailable(UsageUnavailable::NotLoggedIn, now_ms()),
@@ -237,9 +273,49 @@ impl UsageProvider for AccountUsage {
             },
             // Reached and answered: asked to wait, not unreachable. Calling it
             // a network failure would offer a Reconnect that makes it worse.
-            Err(AskError::Status(429)) => unavailable(UsageUnavailable::RateLimited, now_ms()),
+            // Reached and answered: asked to wait, not unreachable, and the
+            // server said for how long. tech.md 6.4.
+            Err(AskError::Status(429, after)) => rate_limited(now_ms(), after),
             Err(AskError::Offline) => unavailable(UsageUnavailable::Offline, now_ms()),
             Err(_) => unavailable(UsageUnavailable::Network, now_ms()),
         }
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::{rate_limited, retry_after_ms};
+    use peekle_core::types::UsageUnavailable;
+
+    /// The header as the endpoint sent it on 2026-09-09, when it refused a
+    /// plain request from this machine: `retry-after: 1456`. tech.md 6.4.
+    #[test]
+    fn the_captured_header_becomes_a_wait() {
+        assert_eq!(retry_after_ms(Some("1456")), Some(1_456_000));
+        assert_eq!(retry_after_ms(Some(" 30 ")), Some(30_000));
+    }
+
+    /// No header, a date, a zero or nonsense: the poll keeps its own interval
+    /// rather than inventing one. A date would need this clock to agree with
+    /// the server's, and it does not have to.
+    #[test]
+    fn anything_that_is_not_a_count_of_seconds_is_no_wait_at_all() {
+        for header in [
+            None,
+            Some("0"),
+            Some("-5"),
+            Some("Wed, 09 Sep 2026 15:00:00 GMT"),
+        ] {
+            assert_eq!(retry_after_ms(header), None, "{header:?}");
+        }
+    }
+
+    #[test]
+    fn a_rate_limited_snapshot_carries_the_wait_and_nothing_else() {
+        let snapshot = rate_limited(1_000, Some(1_456_000));
+
+        assert_eq!(snapshot.reason, Some(UsageUnavailable::RateLimited));
+        assert_eq!(snapshot.retry_after_ms, Some(1_456_000));
+        assert!(snapshot.windows.is_empty());
     }
 }
