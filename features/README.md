@@ -11,6 +11,7 @@ in the code.
 
 | Version | Feature                                                                       | Contract           |
 | ------- | ----------------------------------------------------------------------------- | ------------------ |
+| v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9            |
 | v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9  |
 | v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it) | 6.4                |
 | v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)            | 6.3, 6.12, 6.16, 9 |
@@ -19,6 +20,23 @@ in the code.
 | v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9 |
 | v57     | [Work line](#v57--work-line)                                                  | 6.12, 9            |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9       |
+
+## v64 — Live mode switching
+
+2026-09-09 · `1025df4`
+
+![The mode menu](permission-mode-menu.png)
+
+The cycle `Shift+Tab` walks was measured on a live TUI rather than assumed:
+manual → accept edits → plan → auto → manual. Four states, and neither
+`bypassPermissions` nor `dontAsk` is on it — no number of presses reaches
+them, which is what makes stepping it on someone's behalf safe. So a running
+session switches from the chip: one CSI Z per step, 250ms apart, confirmed by
+the next hook.
+
+Chevrons are gone. A sign carries what they carried — hand, `</>`, scroll,
+bolt — and a value that only reads is dimmed instead. The menu takes a minimum
+width, because one sized by its longest word wrapped every hint.
 
 ## v63 — Permission mode
 
