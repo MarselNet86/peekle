@@ -462,7 +462,16 @@ impl SessionRegistry {
             return;
         }
         let entry = now_entry(EntryKind::Assistant, trimmed, None, EntryState::Ok, at);
+        let id = entry.id.clone();
+        let session_id = card.session.session_id.clone();
         push_entry(card, entry);
+        // The same protection a typed reply gets, and for the same reason
+        // turned around: `Stop` is a blocking hook, so Claude Code writes its
+        // answer to the transcript only after this hook has returned. A read
+        // triggered by `Stop` therefore sees the turn without its answer, and
+        // replacing the feed with that erases the answer a moment after it
+        // arrived. Held until the file names it. tech.md 6.11.
+        self.local_pending.entry(session_id).or_default().insert(id);
     }
 
     /// What the user just sent, as a feed entry.
@@ -593,10 +602,17 @@ impl SessionRegistry {
             // (Running -> Ok) is exactly as unwritten to disk as one that
             // has not been confirmed yet; the file lags either way.
             // tech.md 6.11.
-            .filter(|entry| entry.kind == EntryKind::User && still_local.contains(&entry.id))
+            .filter(|entry| {
+                matches!(entry.kind, EntryKind::User | EntryKind::Assistant)
+                    && still_local.contains(&entry.id)
+            })
             // Already in the file under its own id, so the local copy has done
             // its job and would only stand there twice.
-            .filter(|entry| !adopted.iter().any(|each| each.text == entry.text))
+            .filter(|entry| {
+                !adopted
+                    .iter()
+                    .any(|each| same_saying(&each.text, &entry.text))
+            })
             .cloned()
             .collect();
 
@@ -928,6 +944,23 @@ impl SessionRegistry {
 /// file's own order is never disturbed: a carried row goes before the first
 /// row younger than it, and a tie leaves the file first, because a row the
 /// file already knows about is the older event of the two. tech.md 6.11.
+/// Whether two rows are the same thing said once.
+///
+/// Not equality: the same answer reaches the feed twice by two roads, and the
+/// two roads cut it differently. `Stop` carries it capped at
+/// `LAST_MESSAGE_LIMIT` with a mark on the cut, the transcript carries it
+/// capped at its own limit without one. Comparing the openings answers the
+/// only question being asked -- is this row already in the file -- without
+/// either cap deciding it. tech.md 6.11.
+fn same_saying(a: &str, b: &str) -> bool {
+    /// Long enough that two different sayings cannot share it, short enough
+    /// to sit well inside every cap either road applies.
+    const HEAD: usize = 120;
+
+    let head = |text: &str| -> String { text.trim().chars().take(HEAD).collect() };
+    head(a) == head(b)
+}
+
 fn weave(adopted: Vec<FeedEntry>, mut pending: Vec<FeedEntry>) -> Vec<FeedEntry> {
     if pending.is_empty() {
         return adopted;

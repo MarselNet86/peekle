@@ -1326,6 +1326,74 @@ mod adopting_a_transcript {
 
         assert_eq!(registry.cards()[0].entries.len(), ENTRY_CAP);
     }
+
+    /// The bug this closes, measured on 2026-09-09: `Stop` is a blocking
+    /// hook, so Claude Code writes its answer to the transcript only after
+    /// the hook returns. The read that `Stop` triggers therefore sees a turn
+    /// with no answer in it, and replacing the feed with that erased the
+    /// answer a moment after it arrived: the user saw their own green bubble
+    /// and nothing under it. tech.md 6.11.
+    #[test]
+    fn an_answer_from_the_hook_survives_a_file_that_has_not_caught_up() {
+        let mut registry = SessionRegistry::default();
+        registry.user_turn(session(), "скажи одно слово", EntryState::Running, 1);
+        registry.assistant_turn(session(), "готово", 2);
+
+        // The file as it stands at the moment `Stop` fires: the question, and
+        // nothing else yet.
+        let adopted = registry.adopt_entries(
+            "s",
+            vec![row("u1", EntryKind::User, "скажи одно слово")],
+            None,
+        );
+        assert!(adopted);
+
+        let cards = registry.cards();
+        let said: Vec<&str> = cards[0]
+            .entries
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert_eq!(said, vec!["скажи одно слово", "готово"], "the answer stays");
+    }
+
+    /// And leaves as soon as the file names it, so the answer is not shown
+    /// twice by the two roads it reached the island on.
+    #[test]
+    fn the_answer_stops_being_held_once_the_file_has_it() {
+        let mut registry = SessionRegistry::default();
+        registry.assistant_turn(session(), "готово", 2);
+
+        registry.adopt_entries(
+            "s",
+            vec![
+                row("u1", EntryKind::User, "скажи одно слово"),
+                row("a1", EntryKind::Assistant, "готово"),
+            ],
+            None,
+        );
+
+        let feed = &registry.cards()[0].entries;
+        assert_eq!(feed.len(), 2, "one answer, not two");
+        assert_eq!(feed[1].id, "a1", "the file's row wins once it exists");
+    }
+
+    /// The two roads cut a long answer differently -- the hook caps it with a
+    /// mark, the transcript with its own limit -- so equality would call one
+    /// saying two and stack it. tech.md 6.11.
+    #[test]
+    fn a_long_answer_cut_two_ways_is_still_one_answer() {
+        let long = "и".repeat(3000);
+        let from_hook = peekle_core::truncate(&long, peekle_core::LAST_MESSAGE_LIMIT);
+        let from_file: String = long.chars().take(2000).collect();
+        assert_ne!(from_hook, from_file, "the two roads really do differ");
+
+        let mut registry = SessionRegistry::default();
+        registry.assistant_turn(session(), &from_hook, 2);
+        registry.adopt_entries("s", vec![row("a1", EntryKind::Assistant, &from_file)], None);
+
+        assert_eq!(registry.cards()[0].entries.len(), 1, "one answer, not two");
+    }
 }
 
 /// Captured 2026-09-08 off a headless 2.1.261 session that took a message
