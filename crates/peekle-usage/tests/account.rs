@@ -151,3 +151,54 @@ fn a_timestamp_that_is_not_one_yields_nothing() {
         assert_eq!(iso_seconds(raw), None, "{raw}");
     }
 }
+
+/// v62 acceptance. Claude Code checks the clock before every authenticated
+/// call and refreshes rather than waiting to be refused; Peekle cannot
+/// refresh, so it copies the half it can -- it declines to spend a request on
+/// a credential the CLI itself would have replaced first. tech.md 6.4.
+mod the_credential_clock {
+    use peekle_core::types::UsageUnavailable;
+    use peekle_usage::credentials::{access_token, expires_at, FakeCredentialStore};
+    use peekle_usage::{AccountUsage, UsageProvider};
+
+    fn entry(expires_at: i64) -> String {
+        format!(
+            r#"{{"claudeAiOauth":{{"accessToken":"tok","refreshToken":"ref","expiresAt":{expires_at}}}}}"#
+        )
+    }
+
+    fn now_ms() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn reads_the_expiry_the_cli_writes() {
+        assert_eq!(expires_at(&entry(1_770_000_000_000)), Some(1_770_000_000_000));
+        assert_eq!(access_token(&entry(1)).as_deref(), Some("tok"));
+    }
+
+    /// An older entry has no expiry at all. That is not a reason to refuse
+    /// it: it only means the clock cannot be consulted.
+    #[test]
+    fn an_entry_without_an_expiry_is_still_used() {
+        assert_eq!(expires_at(r#"{"claudeAiOauth":{"accessToken":"tok"}}"#), None);
+        assert_eq!(expires_at("not json"), None);
+        assert_eq!(expires_at("{}"), None);
+    }
+
+    #[test]
+    fn a_spent_credential_costs_no_request() {
+        let dir = std::env::temp_dir().join(format!("peekle-cred-{}", now_ms()));
+        let store =
+            FakeCredentialStore::with_contents(&dir, &entry(now_ms() - 60_000)).unwrap();
+        let usage = AccountUsage::new(Box::new(store), "0.1.0");
+
+        // No network is reachable from a unit test, and none is needed: the
+        // clock answers before the request would be made.
+        let snapshot = usage.snapshot_within(std::time::Duration::from_millis(1));
+        assert_eq!(snapshot.reason, Some(UsageUnavailable::NotLoggedIn));
+    }
+}
