@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                       | Contract            |
 | ------- | ----------------------------------------------------------------------------- | ------------------- |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)               | 6.5, 6.11           |
 | v66     | [The field never refuses](#v66--the-field-never-refuses)                      | 6.5, 9              |
 | v65     | [Composer row, as the original](#v65--composer-row-as-the-original)           | 6.12, 6.15, 6.20, 9 |
 | v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9             |
@@ -24,6 +25,28 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
+
+## v67 — One transcript, one process
+
+2026-09-09 · `9c723e7`
+
+![The compact notice](shots/compacted.png)
+
+A message from the island into a chat VS Code held started a second `claude
+--resume` on the same id, and two processes wrote into one file. The registry
+record keeps `procStart` in UTC and `ps` prints the local clock, so the live
+process read as dead. The start is now checked in both clocks; a chat somebody
+holds goes into that process's inbox, never into a second process.
+
+Three things the file taught while it was being read twice:
+
+- `No response requested.` — the CLI's synthetic close of a turn the model
+  never took. It was a red-rimmed failed answer. It is not a row.
+- The compact summary the CLI writes to itself stood as a green bubble of two
+  thousand characters. It is now the one-word notice `Compacted`, as in the
+  terminal.
+- After a compact the CLI writes the kept history into the same file again
+  under the same ids. Each id is read once.
 
 ## v66 — The field never refuses
 
