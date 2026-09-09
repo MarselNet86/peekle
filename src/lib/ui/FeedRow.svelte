@@ -358,10 +358,13 @@
     max-width: 100%;
   }
 
+  /* Small enough to be a reference to the shot rather than the shot itself:
+     at full width it took half the feed, and the whole picture is one press
+     away. tech.md 6.13. */
   .shot img {
     display: block;
-    max-width: 100%;
-    max-height: 160px;
+    max-width: min(220px, 100%);
+    max-height: 110px;
     border-radius: 8px;
     object-fit: contain;
   }

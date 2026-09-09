@@ -8,6 +8,7 @@
    */
   import { CodeXml, Hand, ScrollText, Zap } from '@lucide/svelte';
 
+  import { opensRight } from '$lib/logic/agent';
   import type { PickIcon, PickOption } from '$lib/logic/agent';
 
   /** The signs the rows wear. Names are the icon set's own: a hand drawn by
@@ -39,6 +40,10 @@
 
   let open = $state(false);
   let host = $state<HTMLElement | null>(null);
+  // Which edge the menu holds. Decided from where the button is when it is
+  // pressed, before anything is drawn: a menu that appears on one side and
+  // jumps to the other is worse than one that is cut off. tech.md 9.
+  let flip = $state(false);
 
   const usable = $derived(!disabled && options.length > 0);
 
@@ -49,6 +54,9 @@
 
   function toggle() {
     if (!usable) return;
+    if (!open && host) {
+      flip = opensRight(host.getBoundingClientRect().left, window.innerWidth);
+    }
     open = !open;
   }
 
@@ -100,7 +108,7 @@
   </button>
 
   {#if open}
-    <span class="menu" role="menu">
+    <span class="menu" class:flip role="menu">
       {#each options as option, index (option.id)}
         <button
           class="option"
@@ -174,6 +182,15 @@
     left: 0;
     z-index: 3;
     transform-origin: bottom left;
+  }
+
+  /* Held by its right edge, for a button close enough to the right of the
+     island that a menu opening the other way would be drawn off the shape and
+     cut by the window. tech.md 9. */
+  .menu.flip {
+    left: auto;
+    right: 0;
+    transform-origin: bottom right;
     animation: grow 160ms cubic-bezier(0.22, 1, 0.36, 1);
     display: flex;
     flex-direction: column;

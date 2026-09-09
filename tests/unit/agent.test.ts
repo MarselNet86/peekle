@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   contextLabel,
+  opensRight,
   modeLabel,
   MODE_NOTE,
   currentModel,
@@ -523,5 +524,23 @@ describe('the permission mode', () => {
     render(AgentBar, { props: { agent: opus, models, live: true } });
 
     expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument();
+  });
+});
+
+describe('which way a menu opens', () => {
+  /// The mode menu sits at the far right of the row, and opening rightward
+  /// from there drew it off the island, where the window cut it. tech.md 9.
+  it('holds its right edge when there is no room to the right', () => {
+    // The island is 720 wide; the mode button stands near its right edge.
+    expect(opensRight(560, 720)).toBe(true);
+    // The model block is on the left and has all the room it needs.
+    expect(opensRight(40, 720)).toBe(false);
+  });
+
+  /// Exactly at the edge of fitting, the menu still fits: the margin is what
+  /// decides, not luck.
+  it('counts the margin it has to leave', () => {
+    expect(opensRight(412, 720, 300)).toBe(false);
+    expect(opensRight(413, 720, 300)).toBe(true);
   });
 });
