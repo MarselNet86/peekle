@@ -25,10 +25,15 @@
   } = $props();
 </script>
 
+<!-- Never disabled while there is a number to show. A ring that cannot be
+     pressed answers a press with nothing at all, and "nothing happened" is
+     the one answer a control must not give: on a chat we do not run, the
+     press is answered by the block above the feed. tech.md 6.15 and 9. -->
 <button
   class="ring"
   class:pending
-  disabled={!live || pct === null}
+  class:reading={!live}
+  disabled={pct === null}
   {title}
   aria-label={title}
   onclick={() => onclick?.()}
@@ -58,6 +63,12 @@
 
   .ring:disabled {
     cursor: default;
+  }
+
+  /* Dimmed the way every other value in the row is dimmed when it only
+     reads, so the row says the same thing in one voice. tech.md 6.15. */
+  .ring.reading {
+    opacity: 0.55;
   }
 
   /* A compact takes minutes and confirms itself by the number falling, so the

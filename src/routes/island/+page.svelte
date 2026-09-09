@@ -695,6 +695,14 @@
                tech.md 6.12 and 6.15. -->
           <UsageCorner hour={usage.bars[0]?.pct ?? null} week={usage.bars[1]?.pct ?? null} />
         </div>
+        <!-- The answer to a press stands here, above the feed, where the eye
+             lands when something does not happen. Under the input it sat
+             below what the reader was looking at. tech.md 6.15 and 9. -->
+        {#if rowNote}
+          <div class="note">
+            <NoteBlock fact={rowNote.fact} how={rowNote.how} onclose={() => (rowNote = null)} />
+          </div>
+        {/if}
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each rows as row (row.id)}
             {#if row.kind === 'said'}
@@ -747,8 +755,6 @@
             {/if}
             {#if startError}
               <p class="empty">{startError}</p>
-            {:else if rowNote}
-              <NoteBlock fact={rowNote.fact} how={rowNote.how} />
             {/if}
             <PromptInput
               bind:value={reply}
@@ -815,6 +821,15 @@
     height: 100%;
     padding: 6px 14px 8px;
     box-sizing: border-box;
+  }
+
+  /* Above the feed and flush with it: the container already insets, and a
+     second inset would set the answer apart from what it explains. It never
+     takes height from the rows, so a long answer does not push the
+     conversation off screen. tech.md 9. */
+  .note {
+    flex: none;
+    padding-top: 2px;
   }
 
   /* The feed scrolls natively. Every row is in the markup: a window of six
