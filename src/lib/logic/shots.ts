@@ -47,6 +47,41 @@ export function looksLikeImagePaste(types: readonly string[]): boolean {
 }
 
 /**
+ * A line of a reply that is an attached screenshot, and not prose that
+ * happens to mention one. tech.md 6.13.
+ *
+ * By shape and never by reading the disk: the whole line, the shots
+ * directory, a ulid, `.png`. A path Peekle wrote is the only thing that
+ * matches, so a person quoting a filename keeps their words.
+ */
+const SHOT_LINE = /^\/.*\/peekle\/shots\/[0-9A-HJKMNP-TV-Z]{26}\.png$/;
+
+/** A reply split into the shots it carries and the words that go with them. */
+export interface SaidWithShots {
+  shots: string[];
+  said: string;
+}
+
+/**
+ * What a reply says and what it carries. `compose` puts each path on its own
+ * line before the text, so the split is the same one in reverse. tech.md 6.13.
+ */
+export function shotLines(text: string): SaidWithShots {
+  const shots: string[] = [];
+  const words: string[] = [];
+
+  for (const line of text.split('\n')) {
+    if (SHOT_LINE.test(line.trim())) {
+      shots.push(line.trim());
+      continue;
+    }
+    words.push(line);
+  }
+
+  return { shots, said: words.join('\n').trim() };
+}
+
+/**
  * What the chip above the field calls the attachment. The full path is what
  * the agent gets, and it is far too long to sit over a reply box.
  */
