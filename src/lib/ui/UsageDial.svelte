@@ -1,7 +1,21 @@
 <script lang="ts">
   import { clampPct, usageTone } from '$lib/logic/usage';
 
-  let { pct, label, size = 15 }: { pct: number | null; label?: string; size?: number } = $props();
+  let {
+    pct,
+    label,
+    size = 15,
+    track = true,
+  }: {
+    pct: number | null;
+    label?: string;
+    size?: number;
+    /** The grey circle under the arc. It says how much of the window is still
+     * whole, which is worth drawing where the window is the subject. Where
+     * the ring is a button (6.15) it is not: a bright circle at the edge of
+     * the row pulls the eye and reports nothing. */
+    track?: boolean;
+  } = $props();
 
   const known = $derived(pct !== null);
   const value = $derived(known ? clampPct(pct as number) : 0);
@@ -21,7 +35,12 @@
     style:width="{size}px"
     style:height="{size}px"
   >
-    <span class="track"></span>
+    <!-- Held while there is no number, whatever the caller asked for: with
+         no arc and no track there is nothing on screen at all, and a button
+         that is not there cannot be pressed. -->
+    {#if track || !known}
+      <span class="track"></span>
+    {/if}
     {#if known}
       <span class="fill"></span>
     {/if}
