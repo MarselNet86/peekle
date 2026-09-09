@@ -25,6 +25,8 @@ const TASK_CAP: usize = 50;
 pub enum HeldKind {
     Model,
     Effort,
+    /// Whether the session starts with thinking on. tech.md 6.20.
+    Thinking,
     /// The permission mode. Held only: there is no line for it, and the flag
     /// on the spawn is the only exact way to set it. tech.md 6.19.
     Mode,
@@ -42,6 +44,9 @@ pub struct HeldSettings {
     /// slash command for the mode, only `Shift+Tab` and this flag.
     /// tech.md 6.19.
     pub mode: Option<String>,
+    /// Whether to start with thinking on. Environment, not a flag and not a
+    /// line: `MAX_THINKING_TOKENS=0`. tech.md 6.20.
+    pub thinking: Option<bool>,
 }
 
 impl HeldSettings {
@@ -434,6 +439,14 @@ impl AppState {
             .then(|| registry.cards().to_vec())
     }
 
+    /// Records what a session Peekle started runs with, so the block over the
+    /// field says the truth rather than the last thing pressed. tech.md 6.20.
+    pub fn note_thinking(&self, session_id: &str, thinking: bool) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.set_thinking(session_id, thinking);
+        registry.cards().to_vec()
+    }
+
     /// Which mode a session's own hooks last reported. tech.md 6.19.
     pub fn session_mode(&self, session_id: &str) -> Option<PermissionMode> {
         self.lock(&self.sessions)
@@ -572,6 +585,7 @@ impl AppState {
             HeldKind::Model => entry.model = Some(value),
             HeldKind::Effort => entry.effort = Some(value),
             HeldKind::Mode => entry.mode = Some(value),
+            HeldKind::Thinking => entry.thinking = Some(value == "on"),
         }
     }
 

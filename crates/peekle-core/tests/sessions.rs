@@ -1001,6 +1001,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         origin: peekle_core::types::SessionOrigin::Observed,
         entries: Vec::new(),
         mode: None,
+        thinking: None,
         agent: None,
         updated_at: 2,
     }]);

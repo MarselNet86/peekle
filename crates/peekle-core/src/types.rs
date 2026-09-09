@@ -347,6 +347,11 @@ pub struct SessionCard {
     /// Which permission mode it runs in, as its own hooks report it. `None`
     /// until one arrives. tech.md 6.19.
     pub mode: Option<PermissionMode>,
+    /// Whether the session runs with thinking on. Known only for sessions
+    /// Peekle started, because it is set on the spawn and reported by nothing:
+    /// `MAX_THINKING_TOKENS=0` is the CLI's own way to turn it off, and no
+    /// hook and no transcript field says which way it stands. tech.md 6.20.
+    pub thinking: Option<bool>,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,

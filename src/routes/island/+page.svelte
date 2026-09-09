@@ -743,18 +743,7 @@
           <!-- Everything that says how much is left, in one corner: the two
                windows and the context. The ring is the button that compacts.
                tech.md 6.12 and 6.15. -->
-          <UsageCorner
-            hour={usage.bars[0]?.pct ?? null}
-            week={usage.bars[1]?.pct ?? null}
-            context={setup ? setup.context_pct : null}
-            contextTitle={contextLabel(setup, owned) || 'Nothing in the context yet'}
-            live={owned}
-            pending={waiting.compact}
-            oncompact={() =>
-              owned
-                ? current && agent.compact(current.session.session_id, setup)
-                : (rowNote = settingsNote(current))}
-          />
+          <UsageCorner hour={usage.bars[0]?.pct ?? null} week={usage.bars[1]?.pct ?? null} />
         </div>
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each rows as row (row.id)}
@@ -838,19 +827,28 @@
                   models={agent.models}
                   live={owned}
                   note={noteTitle(settingsNote(current))}
+                  contextTitle={contextLabel(setup, owned) || 'Nothing in the context yet'}
                   askedModel={asked.model}
                   askedEffort={asked.effort}
                   askedMode={asked.mode}
                   mode={current.mode}
                   canPickMode={owned}
+                  thinking={current.thinking}
+                  canSetThinking={owned && setup === null}
+                  ultra={agent.ultra(current.session.session_id)}
+                  canUltra={owned && setup !== null}
                   pendingModel={waiting.model}
                   pendingEffort={waiting.effort}
                   pendingMode={agent.modePending(current.session.session_id, current.mode)}
+                  pendingCompact={waiting.compact}
                   onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
                   oneffort={(level) =>
                     current && agent.setEffort(current.session.session_id, level)}
+                  onultra={() => current && agent.setUltracode(current.session.session_id)}
+                  oncompact={() => current && agent.compact(current.session.session_id, setup)}
                   onmode={(next) => current && agent.setMode(current.session.session_id, next)}
                   onmodenote={() => (rowNote = MODE_NOTE)}
+                  onthinking={(on) => current && agent.setThinking(current.session.session_id, on)}
                   onnote={() => (rowNote = settingsNote(current))}
                 />
               {/snippet}

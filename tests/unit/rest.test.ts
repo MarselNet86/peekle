@@ -26,6 +26,7 @@ const card = (status: SessionStatus, id = 's1'): SessionCard => ({
   entries: [],
   agent: null,
   mode: null,
+  thinking: null,
   updated_at: 0,
 });
 

@@ -278,6 +278,7 @@ impl SessionRegistry {
                 // the model. tech.md 6.15.
                 agent: None,
                 mode: None,
+                thinking: None,
                 updated_at: at,
             },
         );
@@ -730,6 +731,24 @@ impl SessionRegistry {
         true
     }
 
+    /// Records what a session Peekle started was given for thinking. Nothing
+    /// else sets it: for a session started elsewhere the answer is unknown,
+    /// and unknown is not `false`. tech.md 6.20.
+    pub fn set_thinking(&mut self, session_id: &str, thinking: bool) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        if card.thinking == Some(thinking) {
+            return false;
+        }
+        card.thinking = Some(thinking);
+        true
+    }
+
     pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {
         let Some(card) = self
             .cards
@@ -813,6 +832,7 @@ impl SessionRegistry {
                     entries: Vec::new(),
                     agent: None,
                     mode: None,
+                    thinking: None,
                     updated_at: at,
                 },
             );

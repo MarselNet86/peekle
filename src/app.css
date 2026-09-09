@@ -17,6 +17,9 @@
   /* The sign in the resting mark. Apple's system green, brighter than the
      accent on purpose: it is the one mark that has to read as ours. */
   --brand: #30d158;
+  /* Ultracode, in the original's own colour: it paints the effort block when
+     the session runs at xhigh plus dynamic workflows. tech.md 6.15. */
+  --ultra: #d0b4ff;
   /* The same green with the volume down, for a primary action that is not
      available yet. Dimming the filled button instead gave a muddy green over
      black that read as a rendering fault, and flattening it to the neutral

@@ -241,6 +241,7 @@
     entries: [],
     agent: null,
     mode: null,
+    thinking: null,
     updated_at: 0,
   }));
 
@@ -396,33 +397,63 @@
     <!-- The top right corner of a dialogue: both windows and the context, the
          last of them a button. tech.md 6.12 and 6.15. -->
     <div class="frame">
-      <UsageCorner
-        hour={42}
-        week={68}
-        context={61.2}
-        contextTitle="61% of context used. Click to compact."
-        live
-        oncompact={() => {}}
-      />
+      <UsageCorner hour={42} week={68} />
     </div>
 
     <h2>AgentBar</h2>
-    <!-- Live, waiting on a pick it has sent, a model that takes no effort, and
-         a session nobody can type into. tech.md 6.15. -->
-    <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
-    <AgentBar agent={opus} models={modelRows} live pendingModel />
-    <!-- Aiming a session that has not started: the mode is a menu. Under way
-         it reads instead. tech.md 6.19. -->
-    <AgentBar agent={opus} models={modelRows} live canPickMode mode="Auto" onmode={() => {}} />
-    <AgentBar agent={opus} models={modelRows} live mode="Auto" />
-    <AgentBar agent={haiku} models={modelRows} live />
+    <!-- The row as the composer carries it: ring, model with its weight,
+         thinking, and the mode beside the send button. tech.md 6.15. -->
+    <div class="frame">
+      <AgentBar
+        agent={opus}
+        models={modelRows}
+        live
+        canPickMode
+        canUltra
+        mode="Auto"
+        thinking={true}
+        contextTitle="56% of context used. Click to compact."
+        onmodel={() => {}}
+        oneffort={() => {}}
+        onmode={() => {}}
+      />
+    </div>
+    <!-- On ultracode, in the original's own colour. -->
+    <div class="frame">
+      <AgentBar
+        agent={opus}
+        models={modelRows}
+        live
+        canPickMode
+        canUltra
+        ultra
+        mode="Plan"
+        thinking={false}
+        contextTitle="56% of context used. Click to compact."
+      />
+    </div>
+    <!-- A model that takes no effort at all, and a session that has not
+         answered yet: thinking can still be set, ultracode cannot. -->
+    <div class="frame">
+      <AgentBar agent={haiku} models={modelRows} live canPickMode mode="Manual" />
+    </div>
+    <div class="frame">
+      <AgentBar
+        agent={null}
+        defaults={fresh}
+        models={modelRows}
+        live
+        canPickMode
+        canSetThinking
+        thinking={false}
+        mode="Plan"
+      />
+    </div>
     <!-- A chat another app runs: reading, with the note saying where the
-         setting lives. Stopping still works there, over the inbox. 6.15. -->
-    <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} />
-    <!-- A pick on its way: the row stands on what was asked for, dimmed. -->
-    <AgentBar agent={opus} models={modelRows} live askedModel="sonnet" pendingModel />
-    <!-- Not answered yet: standing on the defaults, ring empty. 6.15. -->
-    <AgentBar agent={null} defaults={fresh} models={modelRows} live />
+         setting lives. -->
+    <div class="frame">
+      <AgentBar agent={opus} models={modelRows} note={noteTitle(ELSEWHERE_NOTE)} />
+    </div>
   </section>
 
   <section>
