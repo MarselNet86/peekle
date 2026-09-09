@@ -176,7 +176,10 @@ mod the_credential_clock {
 
     #[test]
     fn reads_the_expiry_the_cli_writes() {
-        assert_eq!(expires_at(&entry(1_770_000_000_000)), Some(1_770_000_000_000));
+        assert_eq!(
+            expires_at(&entry(1_770_000_000_000)),
+            Some(1_770_000_000_000)
+        );
         assert_eq!(access_token(&entry(1)).as_deref(), Some("tok"));
     }
 
@@ -184,7 +187,10 @@ mod the_credential_clock {
     /// it: it only means the clock cannot be consulted.
     #[test]
     fn an_entry_without_an_expiry_is_still_used() {
-        assert_eq!(expires_at(r#"{"claudeAiOauth":{"accessToken":"tok"}}"#), None);
+        assert_eq!(
+            expires_at(r#"{"claudeAiOauth":{"accessToken":"tok"}}"#),
+            None
+        );
         assert_eq!(expires_at("not json"), None);
         assert_eq!(expires_at("{}"), None);
     }
@@ -192,8 +198,7 @@ mod the_credential_clock {
     #[test]
     fn a_spent_credential_costs_no_request() {
         let dir = std::env::temp_dir().join(format!("peekle-cred-{}", now_ms()));
-        let store =
-            FakeCredentialStore::with_contents(&dir, &entry(now_ms() - 60_000)).unwrap();
+        let store = FakeCredentialStore::with_contents(&dir, &entry(now_ms() - 60_000)).unwrap();
         let usage = AccountUsage::new(Box::new(store), "0.1.0");
 
         // No network is reachable from a unit test, and none is needed: the

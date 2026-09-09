@@ -25,6 +25,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   origin: 'Observed',
   entries: [],
   agent: null,
+  mode: null,
   updated_at: 0,
 });
 
@@ -129,6 +130,7 @@ describe('continuing a chat', () => {
     origin,
     entries: [],
     agent: null,
+    mode: null,
     updated_at: 0,
   });
 

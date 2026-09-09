@@ -11,6 +11,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type { IslandView } from '$lib/types/generated/IslandView';
+import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 import type { PeekleState } from '$lib/types/generated/PeekleState';
 import type { PromptAnswer } from '$lib/types/generated/PromptAnswer';
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
@@ -116,6 +117,10 @@ export const commands = {
   // ask for the permission at all. tech.md 6.17.
   notifyEnabled: () => call<boolean>('notify_enabled'),
   setNotifyEnabled: (on: boolean) => call<void>('set_notify_enabled', { on }),
+
+  // The permission mode, and only before the session has answered: it is a
+  // spawn flag, not a line. tech.md 6.19.
+  setMode: (sessionId: string, mode: PermissionMode) => call<void>('set_mode', { sessionId, mode }),
 
   // Whether a resting island shows the percent when the window steps into a
   // new ten. Nothing to ask the system for, so nothing to fail. tech.md 6.18.

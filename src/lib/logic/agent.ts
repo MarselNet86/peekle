@@ -6,12 +6,16 @@
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
 import type { Effort } from '$lib/types/generated/Effort';
 import type { ModelChoice } from '$lib/types/generated/ModelChoice';
+import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 
 /** One row of a menu. */
 export type PickOption = {
   /** What goes back to the caller when the row is picked. */
   id: string;
   label: string;
+  /** One line under the label, for a menu whose rows need explaining.
+   * tech.md 6.19. */
+  hint?: string;
 };
 
 /** What `/effort <level>` is called on screen. */
@@ -46,6 +50,42 @@ export function modelOptions(models: ModelChoice[]): PickOption[] {
 
 export function effortOptions(agent: AgentSetup | null): PickOption[] {
   return (agent?.levels ?? []).map((level) => ({ id: level, label: EFFORT_LABELS[level] }));
+}
+
+/**
+ * The permission modes, by Claude Code's own names and in its own order.
+ *
+ * Four of the six the CLI accepts. `bypassPermissions` and `dontAsk` are not
+ * offered: a mode that asks for nothing is not something to hand over in a
+ * menu, and a session already in one still reads as it. tech.md 6.19.
+ */
+const MODE_ROWS: ReadonlyArray<{ id: PermissionMode; label: string; hint: string }> = [
+  { id: 'Manual', label: 'Manual', hint: 'Asks before every edit' },
+  {
+    id: 'AcceptEdits',
+    label: 'Edit automatically',
+    hint: 'Edits go through, everything else asks',
+  },
+  { id: 'Plan', label: 'Plan', hint: 'Reads and plans, changes nothing' },
+  { id: 'Auto', label: 'Auto', hint: 'Approves what passes its safety check' },
+];
+
+/** What each mode is called on screen, including the two never offered. */
+const MODE_LABELS: Record<PermissionMode, string> = {
+  Manual: 'Manual',
+  AcceptEdits: 'Edit automatically',
+  Plan: 'Plan',
+  Auto: 'Auto',
+  Bypass: 'No permissions',
+  DontAsk: 'Never asks',
+};
+
+export function modeOptions(): PickOption[] {
+  return MODE_ROWS.map((row) => ({ id: row.id, label: row.label, hint: row.hint }));
+}
+
+export function modeLabel(mode: PermissionMode | null): string {
+  return mode ? MODE_LABELS[mode] : '';
 }
 
 /**
@@ -100,6 +140,20 @@ export const ELSEWHERE_NOTE: SettingsNote = {
   how: 'Close it there and your next message brings the chat here, controls and all.',
 };
 export const FINISHED_NOTE: SettingsNote = { fact: 'This session has finished.' };
+
+/**
+ * Why the mode reads rather than picks once a session is under way.
+ *
+ * `--permission-mode` is a spawn flag and Claude Code has no slash command
+ * for the mode: `Shift+Tab` cycles it in its own window. Stepping a
+ * permission setting blind, on someone's behalf, through a cycle that
+ * contains `bypassPermissions` is not a thing to do quietly, so the island
+ * says where the switch is instead of pretending to be it. tech.md 6.19.
+ */
+export const MODE_NOTE: SettingsNote = {
+  fact: 'The mode is chosen when a session starts.',
+  how: 'Claude Code switches it with Shift+Tab in its own window.',
+};
 
 export function settingsNote(
   card: { origin: 'Owned' | 'Observed'; status: 'Working' | 'Idle' | 'Ended' } | null | undefined,

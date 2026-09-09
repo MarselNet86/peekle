@@ -433,6 +433,9 @@ where
         origin: SessionOrigin::Observed,
         entries,
         agent: agent.finish(),
+        // The file records a conversation; the mode is a fact about a live
+        // process, and its hooks are what carry it. tech.md 6.19.
+        mode: None,
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }

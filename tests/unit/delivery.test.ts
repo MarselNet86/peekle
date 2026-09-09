@@ -21,6 +21,7 @@ const card = (
   origin,
   entries: [],
   agent: null,
+  mode: null,
   updated_at: 0,
 });
 

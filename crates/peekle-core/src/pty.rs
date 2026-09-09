@@ -47,6 +47,9 @@ pub struct SpawnSpec {
     /// tech.md 6.15.
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// Which permission mode to start in, as `--permission-mode` takes it.
+    /// tech.md 6.19.
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -79,6 +82,7 @@ pub fn spawn_args(
     prompt: Option<&str>,
     model: Option<&str>,
     effort: Option<&str>,
+    mode: Option<&str>,
 ) -> Vec<String> {
     // Two ways to end up with a session of a known id: assign one to a fresh
     // run, or resume the chat that already has it. Never both -- the CLI
@@ -93,7 +97,14 @@ pub fn spawn_args(
     // What was picked before the first turn rides as flags, ahead of the
     // prompt: `--model` and `--effort` are the CLI's own, and they take effect
     // before the first request goes out. tech.md 6.15.
-    for (flag, value) in [("--model", model), ("--effort", effort)] {
+    for (flag, value) in [
+        ("--model", model),
+        ("--effort", effort),
+        // The only exact way to set the permission mode: the CLI has no slash
+        // command for it, and cycling `Shift+Tab` blind through a permission
+        // setting is not a thing to do on someone's behalf. tech.md 6.19.
+        ("--permission-mode", mode),
+    ] {
         if let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) {
             args.push(flag.to_string());
             args.push(value.to_string());
@@ -293,6 +304,7 @@ impl PtyHost {
             spec.prompt.as_deref(),
             spec.model.as_deref(),
             spec.effort.as_deref(),
+            spec.mode.as_deref(),
         ) {
             command.arg(arg);
         }
@@ -451,7 +463,7 @@ mod tests {
     #[test]
     fn passes_the_session_id_it_assigned() {
         assert_eq!(
-            spawn_args("abc", false, None, None, None),
+            spawn_args("abc", false, None, None, None, None),
             vec!["--session-id".to_string(), "abc".to_string()]
         );
     }
@@ -461,7 +473,7 @@ mod tests {
     /// transcript that no other client is watching. tech.md 6.5.
     #[test]
     fn continuing_a_chat_keeps_its_own_id_and_never_forks() {
-        let args = spawn_args("chat-id", true, None, None, None);
+        let args = spawn_args("chat-id", true, None, None, None, None);
         assert_eq!(args, vec!["--resume".to_string(), "chat-id".to_string()]);
         assert!(!args.iter().any(|a| a == "--fork-session"));
         // Never both: the CLI refuses the pair unless it forks.
@@ -472,14 +484,14 @@ mod tests {
     /// still starting swallows anything written into it. tech.md 6.5.
     #[test]
     fn the_first_message_is_handed_over_rather_than_typed() {
-        let args = spawn_args("chat-id", true, Some("what did I say?"), None, None);
+        let args = spawn_args("chat-id", true, Some("what did I say?"), None, None, None);
         assert_eq!(args.last().map(String::as_str), Some("what did I say?"));
         // Positional: it carries no flag of its own and cannot be read as one.
         assert!(!args.iter().any(|a| a == "--prompt" || a == "-p"));
 
         // Nothing to say means nothing appended, not an empty argument.
         for empty in [Some(""), Some("   "), None] {
-            let args = spawn_args("new-id", false, empty, None, None);
+            let args = spawn_args("new-id", false, empty, None, None, None);
             assert_eq!(args, vec!["--session-id".to_string(), "new-id".to_string()]);
         }
     }
@@ -489,7 +501,14 @@ mod tests {
     /// line typed behind it would only reach the second. tech.md 6.15.
     #[test]
     fn settings_picked_before_the_first_turn_ride_as_flags_ahead_of_it() {
-        let args = spawn_args("new-id", false, Some("hi"), Some("opus"), Some("high"));
+        let args = spawn_args(
+            "new-id",
+            false,
+            Some("hi"),
+            Some("opus"),
+            Some("high"),
+            Some("plan"),
+        );
         let expected: Vec<String> = [
             "--session-id",
             "new-id",
@@ -497,6 +516,10 @@ mod tests {
             "opus",
             "--effort",
             "high",
+            // The permission mode has no line to be typed as, so the flag is
+            // the whole of it. tech.md 6.19.
+            "--permission-mode",
+            "plan",
             "hi",
         ]
         .into_iter()
@@ -505,7 +528,7 @@ mod tests {
         assert_eq!(args, expected);
 
         // Nothing picked means no flag, not an empty one.
-        let args = spawn_args("new-id", false, Some("hi"), Some(" "), None);
+        let args = spawn_args("new-id", false, Some("hi"), Some(" "), None, None);
         assert_eq!(args, vec!["--session-id", "new-id", "hi"]);
     }
 
@@ -629,6 +652,7 @@ mod tests {
             prompt: None,
             model: None,
             effort: None,
+            mode: None,
         };
         let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
@@ -648,6 +672,7 @@ mod tests {
             prompt: None,
             model: None,
             effort: None,
+            mode: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(Path::new("/bin/echo"), &spec, move |id| {

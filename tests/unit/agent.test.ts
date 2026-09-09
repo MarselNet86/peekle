@@ -10,6 +10,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   contextLabel,
+  modeLabel,
+  MODE_NOTE,
   currentModel,
   effortOptions,
   modelLabel,
@@ -268,9 +270,9 @@ describe('the row of a session the island cannot command', () => {
     for (const name of ['Opus 5', 'High'] as const) {
       expect(screen.getByText(name)).toBeTruthy();
     }
-    // Both values carry the note: whichever one the reader looks at, it says
-    // where the setting lives.
-    expect(screen.getAllByTitle(noteTitle(ELSEWHERE_NOTE))).toHaveLength(2);
+    // Every value carries the note -- model, effort and mode -- so whichever
+    // one the reader looks at says where the setting lives.
+    expect(screen.getAllByTitle(noteTitle(ELSEWHERE_NOTE))).toHaveLength(3);
 
     // Pressed, they change nothing, whatever else they do.
     await userEvent.click(screen.getByText('Opus 5'));
@@ -411,5 +413,67 @@ describe('what the row says', () => {
   it('offers no levels for a model that takes none', () => {
     expect(effortOptions(haiku)).toEqual([]);
     expect(effortOptions(opus).map((option) => option.id)).toEqual(opus.levels);
+  });
+});
+
+/**
+ * v63 acceptance. The mode is Claude Code's own, by its own names, read from
+ * the hooks that carry it and written only where the CLI takes it: the flag
+ * on a session Peekle starts. tech.md 6.19.
+ */
+describe('the permission mode', () => {
+  it('offers the four modes to a session that has not started', async () => {
+    const onmode = vi.fn();
+    render(AgentBar, {
+      props: { agent: null, defaults: opus, models, live: true, canPickMode: true, onmode },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Manual' }));
+    for (const label of ['Manual', 'Edit automatically', 'Plan', 'Auto']) {
+      expect(screen.getByRole('menuitemradio', { name: new RegExp(label) })).toBeInTheDocument();
+    }
+
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Plan/ }));
+    expect(onmode).toHaveBeenCalledExactlyOnceWith('Plan');
+  });
+
+  /** Never offered: a mode that asks for nothing is not handed over in a
+   * menu. A session already in one still reads as it. */
+  it('offers neither of the two that ask for nothing', async () => {
+    render(AgentBar, {
+      props: { agent: null, defaults: opus, models, live: true, canPickMode: true },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Manual' }));
+    expect(screen.queryByRole('menuitemradio', { name: /No permissions/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio', { name: /Never asks/ })).not.toBeInTheDocument();
+    expect(modeLabel('Bypass')).toBe('No permissions');
+  });
+
+  it('stands on what the session reported, not on a guess', () => {
+    render(AgentBar, { props: { agent: opus, models, live: true, mode: 'Auto' } });
+
+    expect(screen.getByRole('button', { name: 'Auto' })).toBeInTheDocument();
+  });
+
+  /** The flag is a spawn flag and the CLI has no line for the mode, so a
+   * session under way reads and says where the switch is. */
+  it('reads once the session has answered, and answers a press with the note', async () => {
+    const onmodenote = vi.fn();
+    render(AgentBar, {
+      props: { agent: opus, models, live: true, mode: 'Plan', canPickMode: false, onmodenote },
+    });
+
+    const chip = screen.getByRole('button', { name: 'Plan' });
+    expect(chip).toHaveAttribute('title', noteTitle(MODE_NOTE));
+    await userEvent.click(chip);
+    expect(onmodenote).toHaveBeenCalledOnce();
+  });
+
+  /** A session that has never reported one is in the CLI's own default. */
+  it('shows Manual when nothing has said otherwise', () => {
+    render(AgentBar, { props: { agent: opus, models, live: true } });
+
+    expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument();
   });
 });

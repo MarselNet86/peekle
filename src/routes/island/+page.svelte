@@ -16,7 +16,13 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { createSignIn } from '$lib/features/signin/signin.svelte';
-  import { contextLabel, noteTitle, settingsNote, type SettingsNote } from '$lib/logic/agent';
+  import {
+    contextLabel,
+    noteTitle,
+    settingsNote,
+    MODE_NOTE,
+    type SettingsNote,
+  } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
   import { feedRows } from '$lib/logic/work';
   import {
@@ -834,11 +840,16 @@
                   note={noteTitle(settingsNote(current))}
                   askedModel={asked.model}
                   askedEffort={asked.effort}
+                  askedMode={asked.mode}
+                  mode={current.mode}
+                  canPickMode={owned && setup === null}
                   pendingModel={waiting.model}
                   pendingEffort={waiting.effort}
                   onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
                   oneffort={(level) =>
                     current && agent.setEffort(current.session.session_id, level)}
+                  onmode={(next) => current && agent.setMode(current.session.session_id, next)}
+                  onmodenote={() => (rowNote = MODE_NOTE)}
                   onnote={() => (rowNote = settingsNote(current))}
                 />
               {/snippet}

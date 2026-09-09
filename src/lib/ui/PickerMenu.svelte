@@ -95,7 +95,14 @@
           onclick={() => pick(option.id)}
         >
           <span class="tick" aria-hidden="true">{option.id === value ? '✓' : ''}</span>
-          <span class="text">{option.label}</span>
+          <!-- A row that needs explaining says so under itself, the way the
+               original's own mode menu does. tech.md 6.19. -->
+          <span class="text">
+            {option.label}
+            {#if option.hint}
+              <span class="hint">{option.hint}</span>
+            {/if}
+          </span>
           <span class="index">{index + 1}</span>
         </button>
       {/each}
@@ -211,6 +218,31 @@
   .text {
     flex: 1;
     white-space: nowrap;
+  }
+
+  .hint {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1.35;
+    color: var(--text-dim);
+    white-space: normal;
+  }
+
+  /* A row with a line under it is two lines tall, so the tick and the number
+     stand at its top rather than floating in the middle of it. */
+  .option:has(.hint) {
+    align-items: flex-start;
+  }
+
+  .option:has(.hint) .tick,
+  .option:has(.hint) .index {
+    margin-top: 1px;
+  }
+
+  /* Descriptions need room the value menus never did. */
+  .menu:has(.hint) {
+    max-width: 280px;
   }
 
   .index {

@@ -14,17 +14,20 @@ import { currentModel } from '$lib/logic/agent';
 import type { AgentSetup } from '$lib/types/generated/AgentSetup';
 import type { Effort } from '$lib/types/generated/Effort';
 import type { ModelChoice } from '$lib/types/generated/ModelChoice';
+import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 
 /** What was asked for in one session and has not come back yet. */
 type Picked = {
   model: string | null;
   effort: Effort | null;
+  /** The mode asked for before the session started. tech.md 6.19. */
+  mode: PermissionMode | null;
   /** What the context stood at when the compact was asked for. It is done
    * when the number falls below it, which is the only signal there is. */
   compactFrom: number | null;
 };
 
-const NOTHING: Picked = { model: null, effort: null, compactFrom: null };
+const NOTHING: Picked = { model: null, effort: null, mode: null, compactFrom: null };
 
 export function createAgent() {
   let models = $state<ModelChoice[]>([]);
@@ -46,7 +49,7 @@ export function createAgent() {
     try {
       await run();
     } catch (err) {
-      mark(sessionId, { model: null, effort: null, compactFrom: null });
+      mark(sessionId, { model: null, effort: null, mode: null, compactFrom: null });
       error = String(err);
     }
   }
@@ -76,7 +79,7 @@ export function createAgent() {
      */
     asked(sessionId: string) {
       const waiting = picked[sessionId] ?? NOTHING;
-      return { model: waiting.model, effort: waiting.effort };
+      return { model: waiting.model, effort: waiting.effort, mode: waiting.mode };
     },
 
     pendingFor(sessionId: string, agent: AgentSetup | null) {
@@ -91,6 +94,13 @@ export function createAgent() {
 
     setModel(sessionId: string, alias: string) {
       return send(sessionId, { model: alias }, () => commands.setModel(sessionId, alias));
+    },
+
+    /** Aims a session that has not answered yet at a permission mode. The
+     * command refuses one that has, and the row says where the switch lives.
+     * tech.md 6.19. */
+    setMode(sessionId: string, mode: PermissionMode) {
+      return send(sessionId, { mode }, () => commands.setMode(sessionId, mode));
     },
 
     setEffort(sessionId: string, effort: Effort) {

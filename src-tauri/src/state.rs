@@ -25,6 +25,9 @@ const TASK_CAP: usize = 50;
 pub enum HeldKind {
     Model,
     Effort,
+    /// The permission mode. Held only: there is no line for it, and the flag
+    /// on the spawn is the only exact way to set it. tech.md 6.19.
+    Mode,
 }
 
 /// What one session has picked and not yet sent. One of each: the user chose
@@ -35,6 +38,10 @@ pub enum HeldKind {
 pub struct HeldSettings {
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// What `--permission-mode` will take. Never a line: Claude Code has no
+    /// slash command for the mode, only `Shift+Tab` and this flag.
+    /// tech.md 6.19.
+    pub mode: Option<String>,
 }
 
 impl HeldSettings {
@@ -412,6 +419,21 @@ impl AppState {
         self.lock(&self.sessions).cards().to_vec()
     }
 
+    /// Records the permission mode a hook reported.
+    ///
+    /// Every hook of a live session carries it, so this runs on all of them
+    /// and hands back cards only when the mode actually changed: a card per
+    /// tool call would be a broadcast per tool call. tech.md 6.19.
+    pub fn note_mode(&self, payload: &serde_json::Value) -> Option<Vec<SessionCard>> {
+        let mode = peekle_core::sessions::mode_of(payload)?;
+        let session_id = payload.get("session_id").and_then(|v| v.as_str())?;
+
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .set_mode(session_id, mode)
+            .then(|| registry.cards().to_vec())
+    }
+
     /// Records one feed event and hands back the cards to broadcast.
     pub fn apply_feed(&self, event: FeedEvent, at: i64) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);
@@ -540,6 +562,7 @@ impl AppState {
         match kind {
             HeldKind::Model => entry.model = Some(value),
             HeldKind::Effort => entry.effort = Some(value),
+            HeldKind::Mode => entry.mode = Some(value),
         }
     }
 
