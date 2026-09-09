@@ -25,14 +25,20 @@
   } = $props();
 </script>
 
+<!-- The class is not `ring`, whatever the element is: Tailwind owns that name
+     and paints `box-shadow: 0 0 0 1px currentColor` over anything wearing it,
+     which is where the white outline around this button came from. Svelte
+     scoping does not help -- the element still carries the bare class and the
+     global utility lands on top. tech.md 9. -->
 <!-- Never disabled while there is a number to show. A ring that cannot be
      pressed answers a press with nothing at all, and "nothing happened" is
      the one answer a control must not give: on a chat we do not run, the
      press is answered by the block above the feed. tech.md 6.15 and 9. -->
 <button
-  class="ring"
+  class="press"
   class:pending
   class:reading={!live}
+  aria-busy={pending}
   disabled={pct === null}
   {title}
   aria-label={title}
@@ -42,7 +48,7 @@
 </button>
 
 <style>
-  .ring {
+  .press {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -57,28 +63,28 @@
     transition: background 140ms ease-out;
   }
 
-  .ring:hover:not(:disabled) {
+  .press:hover:not(:disabled) {
     background: var(--bubble);
   }
 
-  .ring:disabled {
+  .press:disabled {
     cursor: default;
   }
 
   /* Dimmed the way every other value in the row is dimmed when it only
      reads, so the row says the same thing in one voice. tech.md 6.15. */
-  .ring.reading {
+  .press.reading {
     opacity: 0.55;
   }
 
   /* A compact takes minutes and confirms itself by the number falling, so the
      ring waits visibly rather than sitting as if nothing was asked. 6.15. */
-  .ring.pending {
+  .press.pending {
     opacity: 0.5;
   }
 
-  .ring:focus,
-  .ring:focus-visible {
+  .press:focus,
+  .press:focus-visible {
     outline: none;
   }
 </style>
