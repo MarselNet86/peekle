@@ -842,9 +842,10 @@
                   askedEffort={asked.effort}
                   askedMode={asked.mode}
                   mode={current.mode}
-                  canPickMode={owned && setup === null}
+                  canPickMode={owned}
                   pendingModel={waiting.model}
                   pendingEffort={waiting.effort}
+                  pendingMode={agent.modePending(current.session.session_id, current.mode)}
                   onmodel={(alias) => current && agent.setModel(current.session.session_id, alias)}
                   oneffort={(level) =>
                     current && agent.setEffort(current.session.session_id, level)}

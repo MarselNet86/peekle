@@ -994,14 +994,16 @@ pub fn set_model(
     )
 }
 
-/// Aims a session at a permission mode before it starts. tech.md 6.19.
+/// Sets the permission mode of a session Peekle owns. tech.md 6.19.
 ///
-/// Only before: `--permission-mode` is the one exact way to set it, and it is
-/// a spawn flag. Claude Code has no slash command for the mode -- `Shift+Tab`
-/// cycles it in its own TUI -- and stepping a permission setting blind, on
-/// someone's behalf, through a cycle that contains `bypassPermissions` is not
-/// something to do quietly. So a session that has already answered is told
-/// where the switch lives instead. tech.md 6.19.
+/// Two ways in, because the CLI offers exactly two. Before the session has
+/// run, `--permission-mode` carries it on the spawn. After that the only
+/// switch is the one a person uses: `Shift+Tab`, stepped along a cycle that
+/// was measured on a live TUI rather than guessed -- manual, accept edits,
+/// plan, auto, and back. `bypassPermissions` is not on that cycle, so no
+/// number of presses can land a session in it. Where the session stands comes
+/// from its own hooks; without that reading there is nothing to count from,
+/// and the press is refused rather than guessed. tech.md 6.19.
 #[tauri::command]
 pub fn set_mode(
     state: State<'_, Arc<AppState>>,
@@ -1010,14 +1012,27 @@ pub fn set_mode(
 ) -> Result<(), String> {
     let state = state.inner();
     if !state.owns_session(&session_id) {
-        return Err("Peekle can only aim sessions it started".to_string());
-    }
-    if state.session_has_answered(&session_id) {
-        return Err("Claude Code changes the mode with Shift+Tab in its own window".to_string());
+        return Err("Peekle can only set the mode of sessions it started".to_string());
     }
 
-    state.hold_setting(&session_id, HeldKind::Mode, mode.flag().to_string());
-    Ok(())
+    // Nothing has run yet: the flag is exact, so it is used.
+    if !state.session_has_answered(&session_id) {
+        state.hold_setting(&session_id, HeldKind::Mode, mode.flag().to_string());
+        return Ok(());
+    }
+
+    let Some(current) = state.session_mode(&session_id) else {
+        return Err("Peekle has not seen which mode this session is in yet".to_string());
+    };
+    let Some(steps) = current.steps_to(mode) else {
+        return Err("That mode is not on the cycle Shift+Tab walks".to_string());
+    };
+
+    tracing::debug!(session_id, ?current, ?mode, steps, "cycling the mode");
+    state
+        .pty()
+        .cycle_mode(&session_id, steps)
+        .map_err(|err| err.to_string())
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.

@@ -10,8 +10,8 @@ use peekle_core::config::Config;
 use peekle_core::sessions::SessionOverrides;
 use peekle_core::shots::{OfferSlot, Pasteboard};
 use peekle_core::types::{
-    IslandView, PeekleState, PromptRequest, SessionCard, SessionRef, SessionStatus, TaskItem,
-    UsageSnapshot, UsageUnavailable,
+    IslandView, PeekleState, PermissionMode, PromptRequest, SessionCard, SessionRef, SessionStatus,
+    TaskItem, UsageSnapshot, UsageUnavailable,
 };
 use peekle_core::{FeedEvent, PendingRegistry, SessionRegistry};
 use peekle_usage::{fake::unknown, UsageProvider};
@@ -432,6 +432,15 @@ impl AppState {
         registry
             .set_mode(session_id, mode)
             .then(|| registry.cards().to_vec())
+    }
+
+    /// Which mode a session's own hooks last reported. tech.md 6.19.
+    pub fn session_mode(&self, session_id: &str) -> Option<PermissionMode> {
+        self.lock(&self.sessions)
+            .cards()
+            .iter()
+            .find(|card| card.session.session_id == session_id)
+            .and_then(|card| card.mode)
     }
 
     /// Records one feed event and hands back the cards to broadcast.

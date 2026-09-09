@@ -9,6 +9,10 @@ import type { ModelChoice } from '$lib/types/generated/ModelChoice';
 import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 
 /** One row of a menu. */
+/** Which sign a row wears, when it wears one. The names are the icon set's,
+ * not ours: a hand drawn by hand comes out a blob. tech.md 9. */
+export type PickIcon = 'hand' | 'code' | 'plan' | 'bolt';
+
 export type PickOption = {
   /** What goes back to the caller when the row is picked. */
   id: string;
@@ -16,6 +20,7 @@ export type PickOption = {
   /** One line under the label, for a menu whose rows need explaining.
    * tech.md 6.19. */
   hint?: string;
+  icon?: PickIcon;
 };
 
 /** What `/effort <level>` is called on screen. */
@@ -59,15 +64,21 @@ export function effortOptions(agent: AgentSetup | null): PickOption[] {
  * offered: a mode that asks for nothing is not something to hand over in a
  * menu, and a session already in one still reads as it. tech.md 6.19.
  */
-const MODE_ROWS: ReadonlyArray<{ id: PermissionMode; label: string; hint: string }> = [
-  { id: 'Manual', label: 'Manual', hint: 'Asks before every edit' },
+const MODE_ROWS: ReadonlyArray<{
+  id: PermissionMode;
+  label: string;
+  hint: string;
+  icon: PickIcon;
+}> = [
+  { id: 'Manual', label: 'Manual', hint: 'Asks before every edit', icon: 'hand' },
   {
     id: 'AcceptEdits',
     label: 'Edit automatically',
     hint: 'Edits go through, everything else asks',
+    icon: 'code',
   },
-  { id: 'Plan', label: 'Plan', hint: 'Reads and plans, changes nothing' },
-  { id: 'Auto', label: 'Auto', hint: 'Approves what passes its safety check' },
+  { id: 'Plan', label: 'Plan', hint: 'Reads and plans, changes nothing', icon: 'plan' },
+  { id: 'Auto', label: 'Auto', hint: 'Approves what passes its safety check', icon: 'bolt' },
 ];
 
 /** What each mode is called on screen, including the two never offered. */
@@ -81,7 +92,18 @@ const MODE_LABELS: Record<PermissionMode, string> = {
 };
 
 export function modeOptions(): PickOption[] {
-  return MODE_ROWS.map((row) => ({ id: row.id, label: row.label, hint: row.hint }));
+  return MODE_ROWS.map((row) => ({
+    id: row.id,
+    label: row.label,
+    hint: row.hint,
+    icon: row.icon,
+  }));
+}
+
+/** The sign a mode wears, wherever it is drawn. The two that are never
+ * offered wear the hand: they are still permissions. tech.md 6.19. */
+export function modeIcon(mode: PermissionMode | null): PickIcon {
+  return MODE_ROWS.find((row) => row.id === mode)?.icon ?? 'hand';
 }
 
 export function modeLabel(mode: PermissionMode | null): string {
