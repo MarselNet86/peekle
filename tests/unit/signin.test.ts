@@ -53,6 +53,7 @@ const snapshot = (reason: UsageUnavailable | null, granted = false): UsageSnapsh
   reason,
   fetched_at: 0,
   keychain_granted: granted,
+  retry_after_ms: null,
 });
 
 beforeEach(() => {

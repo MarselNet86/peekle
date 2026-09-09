@@ -19,4 +19,11 @@ fetched_at: number,
  * hide history that was already reachable once. Losing that would be
  * the same fragility the gate exists to end.
  */
-keychain_granted: boolean, };
+keychain_granted: boolean, 
+/**
+ * How long the endpoint asked to be left alone, from its `retry-after`
+ * header. Only ever set with `UsageUnavailable::RateLimited`, and only
+ * when the server said so: a limit is the server's to time, and knocking
+ * inside it is what extends it. tech.md 6.4.
+ */
+retry_after_ms: number | null, };

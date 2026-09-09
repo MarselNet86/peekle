@@ -85,6 +85,7 @@ impl UsageProvider for FakeUsage {
                 fetched_at: now_ms(),
                 // Stamped centrally, same as the real provider. tech.md 6.4.
                 keychain_granted: false,
+                retry_after_ms: None,
             },
             FakeMode::Unavailable(reason) => UsageSnapshot {
                 windows: Vec::new(),
@@ -92,6 +93,7 @@ impl UsageProvider for FakeUsage {
                 reason: Some(reason),
                 fetched_at: now_ms(),
                 keychain_granted: false,
+                retry_after_ms: None,
             },
         }
     }
@@ -106,6 +108,7 @@ pub fn unknown(reason: UsageUnavailable) -> UsageSnapshot {
         reason: Some(reason),
         fetched_at: now_ms(),
         keychain_granted: false,
+        retry_after_ms: None,
     }
 }
 

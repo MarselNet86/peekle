@@ -28,6 +28,7 @@ const live: UsageSnapshot = {
   reason: null,
   fetched_at: 0,
   keychain_granted: true,
+  retry_after_ms: null,
 };
 
 const REASONS: UsageUnavailable[] = [
@@ -120,6 +121,7 @@ describe('the grant control', () => {
     reason,
     fetched_at: 0,
     keychain_granted: granted,
+    retry_after_ms: null,
   });
 
   /// A first run and a dropped session are one press apart from working, and
@@ -157,6 +159,7 @@ describe('a rate limited account', () => {
     reason: 'RateLimited',
     fetched_at: 0,
     keychain_granted: true,
+    retry_after_ms: null,
   });
 
   it('offers no button and says why', () => {
@@ -179,6 +182,7 @@ describe('gating the session list', () => {
     reason,
     fetched_at: 0,
     keychain_granted: granted,
+    retry_after_ms: null,
   });
 
   it('gates on a first run, where there is a button to press', () => {
