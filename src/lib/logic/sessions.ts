@@ -20,6 +20,33 @@ export function searchSessions(cards: SessionCard[], query: string): SessionCard
 }
 
 /**
+ * The list in the order it was already being read, not the order the data is
+ * in. tech.md 6.12.
+ *
+ * Cards arrive sorted by activity, which is right while there is one chat and
+ * wrong the moment there are several: a turn in a chat nobody is looking at
+ * lifts it to the top and pushes every row under it down, so a press lands on
+ * the row that took the place of the one aimed at. `order` is the sequence of
+ * ids the list opened with; anything in it keeps its place, and a chat the
+ * list has not seen before goes to the top, where a new chat belongs.
+ */
+export function steadyOrder(cards: SessionCard[], order: string[]): SessionCard[] {
+  if (order.length === 0) return cards;
+
+  const place = new Map(order.map((id, at) => [id, at]));
+  const known: SessionCard[] = [];
+  const fresh: SessionCard[] = [];
+
+  for (const card of cards) {
+    (place.has(card.session.session_id) ? known : fresh).push(card);
+  }
+
+  known.sort((a, b) => place.get(a.session.session_id)! - place.get(b.session.session_id)!);
+  // New chats first, in the order the data gave them, which is newest first.
+  return [...fresh, ...known];
+}
+
+/**
  * Whether this chat takes words through the continue path.
  *
  * Every chat the island knows, which since v66 is every chat: one that

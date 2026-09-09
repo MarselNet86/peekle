@@ -33,6 +33,7 @@
     replyReachable,
     stopAvailable,
     searchSessions,
+    steadyOrder,
   } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
@@ -89,7 +90,20 @@
     island.view === 'Sessions' || (sessionOf(island.view) !== undefined && current === undefined),
   );
   let query = $state('');
-  const cards = $derived(searchSessions(feed.sessions, query));
+  // The order the list opened with. Rows keep their places while it is on
+  // screen, so a turn in a chat nobody is watching cannot move the row under
+  // the cursor. Taken again on the next opening. tech.md 6.12.
+  let held = $state<string[]>([]);
+  $effect(() => {
+    if (!listing) {
+      held = [];
+      return;
+    }
+    if (held.length === 0) {
+      held = feed.sessions.map((card) => card.session.session_id);
+    }
+  });
+  const cards = $derived(searchSessions(steadyOrder(feed.sessions, held), query));
 
   // The feed scrolls for real, so where it stands is a fact about the DOM
   // rather than about the number of rows. tech.md 6.12.
