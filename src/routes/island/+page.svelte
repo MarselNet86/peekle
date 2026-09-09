@@ -218,6 +218,9 @@
   // asked, and it deserves an answer where the eye already is. It goes on the
   // next look elsewhere: it is an answer, not a state. tech.md 6.15.
   let rowNote = $state<SettingsNote | null>(null);
+  // What the head measures, so the panel over the feed starts under it rather
+  // than over the way back to the list. tech.md 9.
+  let headHigh = $state(0);
   $effect(() => {
     // Reading `current` subscribes this to the session on screen.
     void current?.session.session_id;
@@ -656,7 +659,7 @@
            what is wrong; a header repeating it would be the second title on a
            screen that has room for one. tech.md 6.16. -->
       <div class="feed">
-        <div class="head">
+        <div class="head" bind:clientHeight={headHigh}>
           <button class="back" onclick={() => openList()} aria-label="Back to the session list">
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
               <path
@@ -699,7 +702,7 @@
              lands when something does not happen. Under the input it sat
              below what the reader was looking at. tech.md 6.15 and 9. -->
         {#if rowNote}
-          <div class="note">
+          <div class="note" style:top="{headHigh + 4}px">
             <NoteBlock fact={rowNote.fact} how={rowNote.how} onclose={() => (rowNote = null)} />
           </div>
         {/if}
@@ -823,13 +826,16 @@
     box-sizing: border-box;
   }
 
-  /* Above the feed and flush with it: the container already insets, and a
-     second inset would set the answer apart from what it explains. It never
-     takes height from the rows, so a long answer does not push the
-     conversation off screen. tech.md 9. */
+  /* A layer over the conversation, not a row in it. Standing in the flow, it
+     pushed every message down on arrival and pulled them back up on leaving,
+     so reading jumped twice for something that is not part of the reading.
+     It sits under the head, inset with the rows, and the feed below is
+     untouched. tech.md 9. */
   .note {
-    flex: none;
-    padding-top: 2px;
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    z-index: 3;
   }
 
   /* The feed scrolls natively. Every row is in the markup: a window of six

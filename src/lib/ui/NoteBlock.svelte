@@ -101,8 +101,16 @@
     margin: 0 0 8px;
     padding: 9px 7px 9px 11px;
     overflow: hidden;
-    border-radius: 10px;
-    background: var(--bubble);
+    border-radius: 12px;
+    /* Its own ground, not the feed's translucent bubble: it stands over the
+       conversation, and text showing through a floating panel is unreadable.
+       The blur is the island's own, so it reads as a layer of this surface
+       rather than a card from somewhere else. tech.md 9. */
+    background: rgba(28, 28, 32, 0.94);
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.45),
+      inset 0 0 0 0.5px var(--hairline);
     font-size: 12px;
     line-height: 1.4;
     /* The panel comes down from the edge it belongs to and settles without a
