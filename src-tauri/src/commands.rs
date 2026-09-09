@@ -617,9 +617,39 @@ pub fn start_session(
     Ok(session)
 }
 
-/// The one refusal that means "wait, then ask again" rather than "no". The
-/// webview matches these words. tech.md 6.5.
-pub const BUSY_ELSEWHERE: &str = "That chat is open somewhere else right now";
+/// Copies a chat somebody else is holding into one of our own, and answers
+/// with the id it became.
+///
+/// The last route, and the only one that changes which chat the words land
+/// in. Two processes resuming one id interleave into a single transcript --
+/// the CLI documents exactly that -- so a chat that takes no messages is
+/// copied instead. The original is untouched and its owner never learns of
+/// the copy; the island opens the copy and says so. tech.md 6.5.
+fn fork_session(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    card: &peekle_core::types::SessionCard,
+    message: &str,
+) -> Result<peekle_core::types::SessionRef, String> {
+    let mut session = card.session.clone();
+    let from = session.session_id.clone();
+    session.session_id = peekle_core::pty::new_session_id();
+    session.pid = None;
+    session.tty = None;
+
+    tracing::info!(from = %from, into = %session.session_id, "forking a chat that is held elsewhere");
+    let held = state.take_settings(&from);
+    spawn_owned(
+        app,
+        state,
+        session.clone(),
+        false,
+        Some(from),
+        message,
+        held,
+    )?;
+    Ok(session)
+}
 
 /// Delivers a reply into an observed chat. tech.md 6.5.
 ///
@@ -662,22 +692,29 @@ pub fn continue_session(
         .and_then(|root| peekle_core::registry::find_live(root, &session_id));
 
     let session = match peekle_core::registry::route(live) {
-        peekle_core::registry::Route::Busy => return Err(BUSY_ELSEWHERE.to_string()),
+        // Somebody holds the chat and takes nothing: copy it rather than
+        // refuse. Resuming in place would put two processes with two
+        // histories into one transcript -- the interleaving the CLI documents
+        // -- and refusing leaves a field that takes words and delivers none.
+        // The original stays exactly where its owner left it. tech.md 6.5.
+        peekle_core::registry::Route::Busy => {
+            return fork_session(&app, state.inner(), &card, &message)
+        }
         peekle_core::registry::Route::Inbox(live) => {
             let Some(root) = sessions_root.as_deref() else {
-                return Err(BUSY_ELSEWHERE.to_string());
+                return fork_session(&app, state.inner(), &card, &message);
             };
-            // A process that is alive and refuses is still a process that
-            // is alive: never a reason to start a second one. The webview
-            // asks again. tech.md 6.5.
             if let Err(err) = peekle_core::inbox::send(root, &live, &message) {
+                // The socket is there and would not take it. That is not a
+                // reason to make the person type it again: copy the chat and
+                // carry on in the copy. tech.md 6.5.
                 tracing::warn!(
                     session = %session_id,
                     pid = live.pid,
                     error = %err,
-                    "the live chat's inbox did not take the message"
+                    "the live chat's inbox did not take the message, forking instead"
                 );
-                return Err(BUSY_ELSEWHERE.to_string());
+                return fork_session(&app, state.inner(), &card, &message);
             }
             tracing::info!(
                 session = %session_id,
@@ -697,6 +734,7 @@ pub fn continue_session(
                 state.inner(),
                 card.session.clone(),
                 true,
+                None,
                 &message,
                 held,
             )?;
@@ -783,6 +821,8 @@ fn spawn_owned(
     // transcript, and every other client watching that id sees what Peekle
     // adds. tech.md 6.5.
     resume: bool,
+    // The chat this one copies, when it is a fork. tech.md 6.5.
+    fork_from: Option<String>,
     prompt: &str,
     held: HeldSettings,
 ) -> Result<(), String> {
@@ -800,6 +840,7 @@ fn spawn_owned(
         cols,
         rows,
         resume,
+        fork_from,
         prompt: Some(prompt.to_string()),
         model: held.model,
         effort: held.effort,
@@ -919,7 +960,15 @@ pub async fn send_message(
     // argument with the picks as flags: a TUI that is still coming up swallows
     // what is typed into it. tech.md 6.5.
     if !state.pty_running(&session_id) {
-        return match spawn_owned(&app, state.inner(), card.session.clone(), false, text, held) {
+        return match spawn_owned(
+            &app,
+            state.inner(),
+            card.session.clone(),
+            false,
+            None,
+            text,
+            held,
+        ) {
             Ok(()) => Ok(()),
             Err(err) => {
                 fail_replies(&app, state.inner(), &session_id);
@@ -1670,14 +1719,6 @@ mod tests {
         let handed = state.sessions();
         assert_eq!(handed.len(), 1);
         assert_eq!(handed[0].session.session_id, "s-1");
-    }
-
-    /// The one refusal the island waits out rather than reports. The webview
-    /// matches it by text (`BUSY_ELSEWHERE` in `logic/sessions.ts`), so the
-    /// words are a contract. tech.md 6.5.
-    #[test]
-    fn the_busy_refusal_reads_as_the_webview_expects() {
-        assert_eq!(BUSY_ELSEWHERE, "That chat is open somewhere else right now");
     }
 
     /// A deny releases the hook like an allow does: the agent reads the

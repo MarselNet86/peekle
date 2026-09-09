@@ -8,10 +8,8 @@ import { describe, expect, it } from 'vitest';
 
 import { ageLabel } from '$lib/logic/age';
 import {
-  BUSY_ELSEWHERE,
   canContinue,
   classifyContinueOutcome,
-  isBusyElsewhere,
   replyReachable,
   searchSessions,
   stopAvailable,
@@ -136,12 +134,16 @@ describe('continuing a chat', () => {
     updated_at: 0,
   });
 
-  /** An observed chat has no field, but it can be forked into one we own the
-   * way Desktop opens an existing chat. An owned one already has a field, and
-   * nothing to continue means nothing to offer. tech.md 6.5. */
-  it('offers the fork only for an observed chat', () => {
+  /** Every chat the island knows takes words since v66, whoever started it
+   * and whether or not its process is still up: one nobody holds is resumed,
+   * one a live process holds goes through that process, one that is held and
+   * takes nothing is copied. Which of the three is Rust's call at the instant
+   * of sending. Only a chat that does not exist has nothing to offer.
+   * tech.md 6.5. */
+  it('takes words for every chat it knows, whoever started it', () => {
     expect(canContinue(card('Observed'))).toBe(true);
-    expect(canContinue(card('Owned'))).toBe(false);
+    expect(canContinue(card('Owned'))).toBe(true);
+    expect(canContinue({ ...card('Owned'), status: 'Ended' })).toBe(true);
     expect(canContinue(undefined)).toBe(false);
   });
 });
@@ -174,10 +176,10 @@ describe('the field while a fork is in flight', () => {
 });
 
 /**
- * Whether the chat is busy elsewhere is not this attempt's failure to
- * report: continue_session refuses it for as long as another client is
- * actually driving the chat, a fact about the world rather than about one
- * attempt, so it has to be told apart from every other refusal. tech.md 6.5.
+ * v66 acceptance. Two outcomes, not three: the words reached a chat or they
+ * did not. Nothing refuses any more -- a chat held by another app that takes
+ * no messages is copied rather than declined -- so "busy elsewhere" has no
+ * caller left. tech.md 6.5.
  */
 describe('reading what one attempt at continuing a chat came back with', () => {
   it('is a real session to open', () => {
@@ -187,28 +189,26 @@ describe('reading what one attempt at continuing a chat came back with', () => {
     });
   });
 
-  it('is busy elsewhere, worth trying again, not an error', () => {
-    expect(classifyContinueOutcome(undefined, BUSY_ELSEWHERE)).toEqual({ ok: false, busy: true });
-    expect(isBusyElsewhere(BUSY_ELSEWHERE)).toBe(true);
+  /** The id that comes back is where the words actually landed. A different
+   * one means the chat was held and this is the copy of it. */
+  it('names the chat the words landed in, copy or not', () => {
+    expect(classifyContinueOutcome({ session_id: 'copy-of-s1' }, undefined)).toEqual({
+      ok: true,
+      sessionId: 'copy-of-s1',
+    });
   });
 
   it('is a real error otherwise', () => {
     expect(classifyContinueOutcome(undefined, 'That session is gone')).toEqual({
       ok: false,
-      busy: false,
       error: 'That session is gone',
     });
-    expect(isBusyElsewhere('That session is gone')).toBe(false);
   });
 
   /** No Tauri to answer (dev, Playwright) is not a real session and not a
    * real error either -- every other command in the island route stays
    * quiet there too, rather than reporting on a backend nothing expected. */
   it('says nothing at all when there was no backend to ask', () => {
-    expect(classifyContinueOutcome(null, undefined)).toEqual({
-      ok: false,
-      busy: false,
-      error: null,
-    });
+    expect(classifyContinueOutcome(null, undefined)).toEqual({ ok: false, error: null });
   });
 });
