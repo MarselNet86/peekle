@@ -1,8 +1,19 @@
 <script lang="ts">
   import { blocks } from '$lib/logic/markdown';
+  import { shotLines, shotName } from '$lib/logic/shots';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 
-  let { entry }: { entry: FeedEntry } = $props();
+  let {
+    entry,
+    shotSrc,
+    onopenshot,
+  }: {
+    entry: FeedEntry;
+    /** How a saved shot becomes something the webview can draw. Absent in the
+     * showcase and wherever no shot can appear. tech.md 6.13. */
+    shotSrc?: (path: string) => string;
+    onopenshot?: (path: string) => void;
+  } = $props();
 
   const spoken = $derived(entry.kind === 'User' || entry.kind === 'Assistant');
   // Not a message and not an object with a body: a line the conversation
@@ -10,9 +21,25 @@
   const notice = $derived(entry.kind === 'Notice');
   // Collapsed like the terminal shows it, opened by a click. tech.md 6.12.
   let open = $state(false);
+  // What the reply carries and what it says. A shot travels to the agent as a
+  // path on its own line, which is right for the agent and useless to the
+  // person who sent it: a ulid says neither which shot it is nor what is on
+  // it. So the line becomes the picture again here. tech.md 6.13.
+  const carried = $derived(spoken ? shotLines(entry.text) : { shots: [], said: entry.text });
+  // Paths whose picture would not load. The line comes back for those: a
+  // reply has to show what actually went to the agent.
+  let broken = $state<string[]>([]);
+  const shown = $derived(shotSrc ? carried.shots.filter((path) => !broken.includes(path)) : []);
+  // Whatever could not be drawn stays a line of the message, so nothing the
+  // agent received disappears from the reply that sent it.
+  const said = $derived(
+    [...carried.shots.filter((path) => !shown.includes(path)), carried.said]
+      .filter((line) => line !== '')
+      .join('\n'),
+  );
   // Parsed into segments and rendered as elements. Never `{@html}`: this text
   // comes out of an agent turn into a window over the whole screen.
-  const parts = $derived(spoken ? blocks(entry.text) : []);
+  const parts = $derived(spoken ? blocks(said) : []);
 </script>
 
 <!-- What a person said and what the agent answered are messages: they wrap,
@@ -26,6 +53,25 @@
 {:else if spoken}
   <div class="line" data-kind={entry.kind} data-state={entry.state}>
     <div class="bubble">
+      {#if shown.length > 0}
+        <div class="shots">
+          {#each shown as path (path)}
+            <button
+              type="button"
+              class="shot"
+              aria-label="Open {shotName(path)}"
+              onclick={() => onopenshot?.(path)}
+            >
+              <img
+                src={shotSrc?.(path)}
+                alt={shotName(path)}
+                title={shotName(path)}
+                onerror={() => (broken = [...broken, path])}
+              />
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#each parts as block, index (index)}
         {#if block.kind === 'code'}
           <pre class="code"><code>{block.value}</code></pre>
@@ -290,6 +336,41 @@
     background: transparent;
     border: 1px solid var(--text-dim);
   }
+  /* The picture the reply carried, at the top of its own bubble: it is what
+     the message is about, and the words under it are the ask. Pressing it
+     opens the same full view the chip above the field opens. tech.md 6.13. */
+  .shots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .shot {
+    display: block;
+    border: none;
+    border-radius: 8px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+    line-height: 0;
+    overflow: hidden;
+    max-width: 100%;
+  }
+
+  .shot img {
+    display: block;
+    max-width: 100%;
+    max-height: 160px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  .shot:focus,
+  .shot:focus-visible {
+    outline: none;
+  }
+
   .dot[data-state='Failed'] {
     background: var(--danger);
   }

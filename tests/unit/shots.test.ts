@@ -12,7 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, events } from '$lib/bridge';
 import { createIsland } from '$lib/features/island/island.svelte';
 import { createShots } from '$lib/features/shots/shots.svelte';
-import { looksLikeImagePaste, secondsLeft, shotName, timeLeft } from '$lib/logic/shots';
+import { looksLikeImagePaste, secondsLeft, shotLines, shotName, timeLeft } from '$lib/logic/shots';
+import FeedRow from '$lib/ui/FeedRow.svelte';
 import PromptInput from '$lib/ui/PromptInput.svelte';
 import ShotChip from '$lib/ui/ShotChip.svelte';
 import ShotPreview from '$lib/ui/ShotPreview.svelte';
@@ -387,5 +388,75 @@ describe('pasting a picture into the field', () => {
     await expect(shots.paste('s1')).resolves.toBeUndefined();
     expect(shots.of('s1')).toEqual([]);
     stop();
+  });
+});
+
+describe('a reply that carried a screenshot', () => {
+  const SHOT = '/Users/dev/Library/Caches/peekle/shots/01M238H5HQEQB3GY5V1SMPPFYF.png';
+
+  const said = (text: string) => ({
+    id: 'e1',
+    kind: 'User' as const,
+    text,
+    tool: null,
+    detail: null,
+    state: 'Ok' as const,
+    at: 0,
+  });
+
+  /// The agent gets a path on its own line, which is right for the agent and
+  /// useless to the person: a ulid says neither which shot it is nor what is
+  /// on it. tech.md 6.13.
+  it('is split into what it carried and what it said', () => {
+    expect(shotLines(`${SHOT}\nlook at this`)).toEqual({ shots: [SHOT], said: 'look at this' });
+    expect(shotLines('just words')).toEqual({ shots: [], said: 'just words' });
+    // Prose that mentions a path is prose.
+    expect(shotLines(`why is ${SHOT} empty?`).shots).toEqual([]);
+    // Somebody else's png in somebody else's folder is not ours.
+    expect(shotLines('/Users/dev/Pictures/01M238H5HQEQB3GY5V1SMPPFYF.png').shots).toEqual([]);
+  });
+
+  it('shows the picture and opens it when pressed', async () => {
+    const onopenshot = vi.fn();
+    render(FeedRow, {
+      props: {
+        entry: said(`${SHOT}\nlook at this`),
+        shotSrc: (path: string) => `asset://${path}`,
+        onopenshot,
+      },
+    });
+
+    const picture = screen.getByRole('img');
+    expect(picture).toHaveAttribute('src', `asset://${SHOT}`);
+    // The words stay, and the path does not stand in them twice.
+    expect(screen.getByText('look at this')).toBeInTheDocument();
+    expect(screen.queryByText(SHOT)).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /Open/ }));
+    expect(onopenshot).toHaveBeenCalledWith(SHOT);
+  });
+
+  /// The cache is a cache and the user may empty it. A reply must still show
+  /// what actually went to the agent, so the line comes back. tech.md 6.13.
+  it('falls back to the line when the picture will not load', async () => {
+    const { container } = render(FeedRow, {
+      props: {
+        entry: said(`${SHOT}\nlook at this`),
+        shotSrc: (path: string) => `asset://${path}`,
+      },
+    });
+
+    const picture = container.querySelector('img') as HTMLImageElement;
+    picture.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(container.querySelector('img')).toBeNull());
+    expect(screen.getByText(SHOT, { exact: false })).toBeInTheDocument();
+  });
+
+  /// Nowhere to read pictures from, so nothing pretends there are any.
+  it('stays a line where no picture can be drawn', () => {
+    render(FeedRow, { props: { entry: said(`${SHOT}\nlook at this`) } });
+
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByText(SHOT, { exact: false })).toBeInTheDocument();
   });
 });

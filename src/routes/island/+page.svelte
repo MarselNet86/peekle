@@ -709,7 +709,7 @@
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
           {#each rows as row (row.id)}
             {#if row.kind === 'said'}
-              <FeedRow entry={row.entry} />
+              <FeedRow entry={row.entry} shotSrc={fileSrc} onopenshot={(path) => (opened = path)} />
             {:else}
               <!-- A whole run of calls, as the one thing asked of it: whether
                    the agent is out, and for how long. tech.md 6.12. -->
