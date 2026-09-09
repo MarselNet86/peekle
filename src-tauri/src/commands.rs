@@ -763,6 +763,58 @@ pub fn continue_session(
     Ok(session)
 }
 
+/// The screenshot the user pasted, saved as a file. tech.md 6.13.
+///
+/// The pill's own path, entered from the other end. Pressing the attach key
+/// and pressing `⌘V` are the same act -- a person saying "take this image" --
+/// so the same thing happens to the image, and the agent cannot tell the two
+/// apart: a path on a line before the text.
+///
+/// `None` when the pasteboard holds no image, which is not a failure: the
+/// webview asked because the clipboard's types looked like one, and the types
+/// are a description, not a promise.
+fn save_paste(state: &Arc<AppState>, dir: &std::path::Path) -> Option<String> {
+    // The only read of the pasteboard's contents besides the pill's, and like
+    // that one it happens after the person acted. From macOS 15 this is what
+    // raises the system paste prompt, and a prompt on `⌘V` is the prompt that
+    // action asks for. tech.md 6.13 and R-13.
+    let png = state.pasteboard.read_png()?;
+    let keep = state.lock_config().shots.keep;
+    let id = peekle_core::shots::new_id();
+
+    match peekle_core::shots::write_shot(dir, &id, &png, keep) {
+        Ok(path) => Some(path.to_string_lossy().to_string()),
+        Err(err) => {
+            tracing::warn!(error = %err, "could not save a pasted screenshot");
+            None
+        }
+    }
+}
+
+/// `⌘V` in the field, when what is on the pasteboard is a picture. tech.md 6.13.
+#[tauri::command]
+pub fn paste_shot(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    let Some(dir) = peekle_core::shots::shots_dir() else {
+        return Err("Nowhere to save the screenshot".to_string());
+    };
+    let Some(path) = save_paste(state.inner(), &dir) else {
+        return Ok(None);
+    };
+
+    tracing::info!(session = %session_id, "pasted a screenshot into the field");
+    // The same event the attach key raises, so the attachment arrives in the
+    // field by one route however it got here.
+    let payload = serde_json::json!({ "session_id": session_id, "path": path });
+    if let Err(err) = app.emit_to(crate::panel::ISLAND, events::SHOT_ATTACHED, payload) {
+        tracing::warn!(error = %err, "failed to emit shot-attached");
+    }
+    Ok(Some(path))
+}
+
 /// Gives a sent reply `delivery_confirm_secs` to be named by
 /// `UserPromptSubmit`, then calls it undelivered. tech.md 6.3.
 ///
@@ -1783,6 +1835,33 @@ mod tests {
             state.pty().interrupt("nobody"),
             Err(peekle_core::pty::PtyError::NotOwned)
         ));
+    }
+
+    /// A pasted image becomes a file the same way an offered one does, and an
+    /// empty pasteboard is silence rather than an error: the webview asked
+    /// because the clipboard's types looked like a picture. tech.md 6.13.
+    #[test]
+    fn a_pasted_image_becomes_a_file_and_an_empty_pasteboard_becomes_nothing() {
+        let board = Arc::new(peekle_core::shots::FakePasteboard::new());
+        let state = Arc::new(AppState::new(
+            Config::default(),
+            Arc::new(FakeUsage::default()),
+            board.clone(),
+        ));
+        let dir =
+            std::env::temp_dir().join(format!("peekle-paste-{}", peekle_core::shots::new_id()));
+
+        assert_eq!(save_paste(&state, &dir), None, "nothing on the pasteboard");
+
+        board.write_screenshot(b"\x89PNG\r\n\x1a\nfake");
+        let path = save_paste(&state, &dir).expect("a file for the pasted image");
+        assert!(path.ends_with(".png"));
+        assert_eq!(
+            std::fs::read(&path).expect("the file is on disk"),
+            b"\x89PNG\r\n\x1a\nfake"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

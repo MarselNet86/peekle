@@ -86,6 +86,21 @@ export function createShots() {
         [sessionId]: (attached[sessionId] ?? []).filter((each) => each !== path),
       };
     },
+    /**
+     * ⌘V with a picture on the clipboard. Rust reads it, writes the file and
+     * raises `shot-attached`, so the attachment arrives here by the same
+     * route the attach key's does and nothing is added twice. A pasteboard
+     * with no picture on it answers null and nothing happens. tech.md 6.13.
+     */
+    async paste(sessionId: string) {
+      try {
+        await commands.pasteShot(sessionId);
+      } catch (err) {
+        // Nowhere to save it is worth a line in the console and no more: the
+        // reply being typed is not disturbed by a paste that did not land.
+        console.warn('could not paste the screenshot', err);
+      }
+    },
     /** The message went, so the field is empty again. */
     clear(sessionId: string) {
       attached = { ...attached, [sessionId]: [] };

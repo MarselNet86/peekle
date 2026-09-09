@@ -12,7 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, events } from '$lib/bridge';
 import { createIsland } from '$lib/features/island/island.svelte';
 import { createShots } from '$lib/features/shots/shots.svelte';
-import { secondsLeft, shotName, timeLeft } from '$lib/logic/shots';
+import { looksLikeImagePaste, secondsLeft, shotName, timeLeft } from '$lib/logic/shots';
+import PromptInput from '$lib/ui/PromptInput.svelte';
 import ShotChip from '$lib/ui/ShotChip.svelte';
 import ShotPreview from '$lib/ui/ShotPreview.svelte';
 import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
@@ -22,7 +23,12 @@ vi.mock('$lib/bridge', async (original) => {
   const real = await original<typeof import('$lib/bridge')>();
   return {
     ...real,
-    commands: { ...real.commands, sendMessage: vi.fn(), getState: vi.fn() },
+    commands: {
+      ...real.commands,
+      sendMessage: vi.fn(),
+      getState: vi.fn(),
+      pasteShot: vi.fn(),
+    },
     events: { ...real.events, onShot: vi.fn(), onShotAttached: vi.fn() },
   };
 });
@@ -43,6 +49,7 @@ beforeEach(() => {
   vi.mocked(events.onShotAttached)
     .mockClear()
     .mockResolvedValue(() => {});
+  vi.mocked(commands.pasteShot).mockClear().mockResolvedValue(null);
 });
 
 const offer = (created: number, expires: number): ShotOffer => ({
@@ -314,5 +321,71 @@ describe('sending an attached screenshot', () => {
     island.answer('carry on', 's1');
 
     expect(commands.sendMessage).toHaveBeenCalledExactlyOnceWith('s1', 'carry on', []);
+  });
+});
+
+describe('pasting a picture into the field', () => {
+  /** A paste event carrying the given clipboard types. */
+  function pasteOf(types: string[]): ClipboardEvent {
+    const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, 'clipboardData', { value: { types } });
+    return event;
+  }
+
+  /// Text pastes the way it does everywhere: the webview does it and the
+  /// field does not interfere. Only a picture is taken over, because it is
+  /// the one thing a text box cannot hold. tech.md 6.13.
+  it('tells a picture from text before anything reads the clipboard', () => {
+    expect(looksLikeImagePaste(['image/png'])).toBe(true);
+    expect(looksLikeImagePaste(['Files'])).toBe(true);
+    expect(looksLikeImagePaste(['text/plain'])).toBe(false);
+    // A screenshot copied out of a browser carries both, and the words are
+    // what the person meant to paste.
+    expect(looksLikeImagePaste(['text/html', 'image/png'])).toBe(false);
+    expect(looksLikeImagePaste([])).toBe(false);
+  });
+
+  it('takes over a picture and leaves text alone', async () => {
+    const onpasteimage = vi.fn();
+    const { container } = render(PromptInput, { value: '', onpasteimage });
+    const field = container.querySelector('textarea') as HTMLTextAreaElement;
+
+    const words = pasteOf(['text/plain']);
+    field.dispatchEvent(words);
+    expect(onpasteimage).not.toHaveBeenCalled();
+    expect(words.defaultPrevented).toBe(false);
+
+    const picture = pasteOf(['image/png']);
+    field.dispatchEvent(picture);
+    expect(onpasteimage).toHaveBeenCalledOnce();
+    // Taken over, so the webview does not also paste a file name into the box.
+    expect(picture.defaultPrevented).toBe(true);
+  });
+
+  /// The file arrives back the way the attach key's does, by the event, so
+  /// one attachment is never added twice. tech.md 6.13.
+  it('asks Rust for the file and takes the attachment from the event', async () => {
+    const shots = createShots();
+    const stop = await shots.start();
+    vi.mocked(commands.pasteShot).mockResolvedValue('/cache/shots/01J.png');
+
+    await shots.paste('s1');
+    expect(commands.pasteShot).toHaveBeenCalledWith('s1');
+    expect(shots.of('s1')).toEqual([]);
+
+    attachHandler()({ session_id: 's1', path: '/cache/shots/01J.png' });
+    expect(shots.of('s1')).toEqual(['/cache/shots/01J.png']);
+    stop();
+  });
+
+  /// Nowhere to save it disturbs nothing: the reply being typed stays as it is.
+  it('survives a refusal without touching the field', async () => {
+    const shots = createShots();
+    const stop = await shots.start();
+    vi.mocked(commands.pasteShot).mockRejectedValue('Nowhere to save the screenshot');
+
+    await expect(shots.paste('s1')).resolves.toBeUndefined();
+    expect(shots.of('s1')).toEqual([]);
+    stop();
   });
 });

@@ -32,6 +32,21 @@ export function secondsLeft(offer: ShotOffer, now: number): number {
 }
 
 /**
+ * Whether a paste is a picture rather than text, judged before anything reads
+ * the clipboard's contents. tech.md 6.13.
+ *
+ * The webview pastes text itself and must be left to it: intercepting every
+ * paste to ask Rust would put a system paste prompt in front of somebody
+ * pasting a word. So text wins whenever it is there, and Rust is asked only
+ * when the types say picture and nothing says text. Reading the types raises
+ * nothing; reading the contents is what does.
+ */
+export function looksLikeImagePaste(types: readonly string[]): boolean {
+  if (types.some((type) => type === 'text/plain' || type === 'text/html')) return false;
+  return types.some((type) => type.startsWith('image/') || type === 'Files');
+}
+
+/**
  * What the chip above the field calls the attachment. The full path is what
  * the agent gets, and it is far too long to sit over a reply box.
  */

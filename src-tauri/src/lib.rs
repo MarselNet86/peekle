@@ -201,6 +201,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::set_thinking,
             commands::set_ultracode,
             commands::compact_session,
+            commands::paste_shot,
             commands::dev_emit_prompt,
         ]
     }
@@ -242,6 +243,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::set_thinking,
             commands::set_ultracode,
             commands::compact_session,
+            commands::paste_shot,
         ]
     }
 }
