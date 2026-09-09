@@ -113,3 +113,27 @@ describe('the compact ring on a chat the island does not run', () => {
     expect(screen.getByRole('button', { name: 'ring' })).toBeDisabled();
   });
 });
+
+describe('the compact ring itself', () => {
+  /// The grey circle under the arc reports nothing where the ring is a
+  /// button, and at the edge of the row it read brighter than the arc.
+  /// tech.md 9.
+  it('draws no track under the arc', () => {
+    const { container } = render(ContextRing, {
+      props: { pct: 56, title: 'ring', live: true },
+    });
+
+    expect(container.querySelector('.fill')).not.toBeNull();
+    expect(container.querySelector('.track')).toBeNull();
+  });
+
+  /// With no arc and no track there is nothing on screen, and a button nobody
+  /// can see is a button nobody presses.
+  it('keeps the track while there is no number', () => {
+    const { container } = render(ContextRing, {
+      props: { pct: null, title: 'ring', live: true },
+    });
+
+    expect(container.querySelector('.track')).not.toBeNull();
+  });
+});

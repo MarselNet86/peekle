@@ -38,7 +38,7 @@
   aria-label={title}
   onclick={() => onclick?.()}
 >
-  <UsageDial {pct} size={15} />
+  <UsageDial {pct} size={15} track={false} />
 </button>
 
 <style>
