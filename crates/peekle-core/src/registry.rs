@@ -142,6 +142,11 @@ pub fn find_live(root: &Path, session_id: &str) -> Option<LiveSession> {
 /// one way: when `ps` cannot be asked, the process is alive. The cost of
 /// being wrong in that direction is a wait; in the other, two agents on one
 /// transcript. tech.md 6.5.
+///
+/// The record keeps its clock in UTC and `ps` prints the local one, so the
+/// start is read in both and either match is the same process. Seen live
+/// 2026-09-09: a process VS Code held read as dead for five hours' worth of
+/// difference, and the island resumed its chat a second time. tech.md 6.5.
 pub fn process_alive(live: &LiveSession) -> bool {
     if !pid_exists(live.pid) {
         return false;
@@ -149,10 +154,11 @@ pub fn process_alive(live: &LiveSession) -> bool {
     let Some(expected) = live.proc_start.as_deref() else {
         return true;
     };
-    match proc_start_of(live.pid) {
-        Some(actual) if !actual.is_empty() => same_start(&actual, expected),
-        _ => true,
+    let starts = proc_starts_of(live.pid);
+    if starts.is_empty() {
+        return true;
     }
+    starts.iter().any(|actual| same_start(actual, expected))
 }
 
 fn pid_exists(pid: u32) -> bool {
@@ -169,12 +175,34 @@ fn pid_exists(pid: u32) -> bool {
     rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
-fn proc_start_of(pid: u32) -> Option<String> {
+/// The start of `pid` as `ps` prints it, once under `TZ=UTC` and once in the
+/// local clock. Empty when `ps` could not be asked at all.
+fn proc_starts_of(pid: u32) -> Vec<String> {
+    [Some("UTC"), None]
+        .into_iter()
+        .filter_map(|zone| {
+            let mut command = std::process::Command::new("ps");
+            command.args(["-o", "lstart=", "-p", &pid.to_string()]);
+            if let Some(zone) = zone {
+                command.env("TZ", zone);
+            }
+            let output = command.output().ok()?;
+            let start = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            (!start.is_empty()).then_some(start)
+        })
+        .collect()
+}
+
+/// `ps` under `TZ=UTC`, which is the clock the registry record keeps. Public
+/// so a test can name the process it runs in the way Claude Code would.
+pub fn utc_start_of(pid: u32) -> Option<String> {
     let output = std::process::Command::new("ps")
         .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .env("TZ", "UTC")
         .output()
         .ok()?;
-    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let start = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!start.is_empty()).then_some(start)
 }
 
 /// `ps` pads the day of the month with a space; so does Claude Code, but the
@@ -299,5 +327,26 @@ mod tests {
             ..me
         };
         assert!(!process_alive(&gone));
+    }
+
+    /// The record's clock is UTC and `ps` answers in the local one. A start
+    /// written the way Claude Code writes it has to read as this process,
+    /// whatever zone the machine is in. Seen live 2026-09-09.
+    #[test]
+    fn a_start_written_in_utc_names_this_process() {
+        let Some(start) = utc_start_of(std::process::id()) else {
+            return;
+        };
+        let me = LiveSession {
+            pid: std::process::id(),
+            session_id: "s".into(),
+            cwd: String::new(),
+            proc_start: Some(start),
+            version: String::new(),
+            entrypoint: Some("claude-vscode".into()),
+            peer_protocol: Some(1),
+            inbox: None,
+        };
+        assert!(process_alive(&me));
     }
 }
