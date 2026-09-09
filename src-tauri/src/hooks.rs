@@ -65,6 +65,33 @@ impl AppSink {
         );
     }
 
+    /// The same read, once the transcript has had time to be written.
+    ///
+    /// Nothing waits on it and nothing depends on it landing: the feed is
+    /// already right without it, because the answer the hook carried is held
+    /// in place until the file names it. This is what fills in the model and
+    /// the context, which only the file knows. tech.md 6.11.
+    fn refresh_when_settled(&self, payload: &Value) {
+        /// Measured: the answer appears in the file within a few tens of
+        /// milliseconds of the hook returning. This is that with room to
+        /// spare, and short enough that a person does not watch the row fill.
+        const SETTLE_MS: u64 = 900;
+
+        let (Some(session_id), Some(path)) = (
+            payload.get("session_id").and_then(Value::as_str),
+            payload.get("transcript_path").and_then(Value::as_str),
+        ) else {
+            return;
+        };
+        let (app, state) = (self.app.clone(), Arc::clone(&self.state));
+        let (session_id, path) = (session_id.to_string(), path.to_string());
+
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(SETTLE_MS)).await;
+            refresh_session(app, state, session_id, path);
+        });
+    }
+
     /// One line in the notch: an observed turn ended, and this is what it
     /// said. tech.md 6.2.
     ///
@@ -185,6 +212,12 @@ impl HookSink for AppSink {
         }
         self.emit_sessions(self.state.sessions());
         self.refresh_from_transcript(payload);
+        // And again once the file has caught up. `Stop` blocks the agent, so
+        // Claude Code writes the answer, its model and what the turn cost
+        // only after this hook returns: the read above sees a turn with no
+        // answer in it, and the settings row would sit empty until the next
+        // event, whenever that came. tech.md 6.11 and 6.15.
+        self.refresh_when_settled(payload);
 
         // Two origins, two notices. The island owns this one, so the notch
         // opens on the dialogue: the user wrote their reply here and waits for
@@ -324,11 +357,34 @@ pub(crate) fn refresh_session(
         let Some(card) =
             peekle_core::transcripts::card_from_lines(text.lines(), &session_id, now_ms())
         else {
+            // A file with no dialogue in it yet, which is ordinary in the
+            // first seconds of a session and a bug at any other time.
+            tracing::debug!(session = %session_id, path, "the transcript carries no dialogue");
             return;
         };
+        let entries = card.entries.len();
+        let model = card
+            .agent
+            .as_ref()
+            .and_then(|setup| setup.model.clone())
+            .unwrap_or_default();
         let Some(cards) = state.adopt_entries(&session_id, card.entries, card.agent) else {
+            // The one way the words are read and then dropped: no card by
+            // that id. Worth a line, because from the outside it looks like
+            // an agent that answered into nothing.
+            tracing::warn!(
+                session = %session_id,
+                entries,
+                "read a transcript for a session no card knows"
+            );
             return;
         };
+        tracing::debug!(
+            session = %session_id,
+            entries,
+            model,
+            "replaced the feed from the transcript"
+        );
         if let Err(err) = app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
