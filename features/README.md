@@ -9,8 +9,11 @@ Add an entry when a feature merges. Keep it to what a person needs to recognise
 the thing on screen — the reasoning belongs in `tech.md`, the mechanics belong
 in the code.
 
+Screenshots and clips live in [`shots/`](shots).
+
 | Version | Feature                                                                       | Contract            |
 | ------- | ----------------------------------------------------------------------------- | ------------------- |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                      | 6.5, 9              |
 | v65     | [Composer row, as the original](#v65--composer-row-as-the-original)           | 6.12, 6.15, 6.20, 9 |
 | v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9             |
 | v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9   |
@@ -22,11 +25,37 @@ in the code.
 | v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
 
+## v66 — The field never refuses
+
+2026-09-09 · `e28bd62`
+
+![The composer](shots/composer.png)
+
+No "This session has finished", no "That chat is busy elsewhere", no dark
+field. Every chat the island knows takes text; where the text goes is decided
+at the moment of sending, along four routes, all four documented mechanisms of
+the CLI:
+
+| Chat                                                       | Route                                              |
+| ---------------------------------------------------------- | -------------------------------------------------- |
+| We hold its process                                        | its own pty                                        |
+| Nobody holds it — ours that exited, theirs with no process | `--resume <id>`, same id, same transcript          |
+| A live process holds it                                    | that process's inbox socket                        |
+| Held, and takes nothing                                    | `--resume <old> --fork-session --session-id <new>` |
+
+The three flags together were measured live on 2.1.263: the fork answers
+questions about the old conversation, writes only to the new transcript, and
+leaves the original untouched. Without `--session-id` the CLI picks the new id
+and the chat is lost.
+
+A copy is said out loud once, where the conversation now is — an id that
+changes silently reads as the island having lost the chat.
+
 ## v65 — Composer row, as the original
 
 2026-09-09 · `61f88e7`
 
-![The composer row and its menu](composer-row.png)
+![The composer row and its menu](shots/composer-row.png)
 
 Left to right: the context ring, the model with its weight, thinking, then a
 gap, then the mode beside the send button. The ring is furthest from send
@@ -45,7 +74,7 @@ before a session runs and read after.
 
 2026-09-09 · `1025df4`
 
-![The mode menu](permission-mode-menu.png)
+![The mode menu](shots/permission-mode-menu.png)
 
 The cycle `Shift+Tab` walks was measured on a live TUI rather than assumed:
 manual → accept edits → plan → auto → manual. Four states, and neither
@@ -62,7 +91,7 @@ width, because one sized by its longest word wrapped every hint.
 
 2026-09-09 · `451c2e0`
 
-![The composer with the mode chip](permission-mode.png)
+![The composer with the mode chip](shots/permission-mode.png)
 
 The mode sits in the composer closest to the send button, because it decides
 what pressing send will be allowed to do: `Manual`, `Edit automatically`,
@@ -94,7 +123,7 @@ its retry is a second read of the entry.
 
 2026-09-09 · `933b7e8`
 
-![The account strip](sign-in-strip.png)
+![The account strip](shots/sign-in-strip.png)
 
 Pressing `Sign in` under the session list changed nothing on screen. The press
 worked: the command asks the CLI first, `claude auth status --json` said the
@@ -114,7 +143,7 @@ field is gone — the capsule draws its own edge.
 
 2026-09-09 · `de43a62`
 
-![The composer](composer.png)
+![The composer](shots/composer-v60.png)
 
 The field, its settings and the send button are one capsule: the text on top,
 the model and the effort under it on the left, the send circle on the right —
@@ -133,7 +162,7 @@ Picker menus grow from the button that opened them rather than appearing whole.
 
 2026-09-09 · `ea284d8`
 
-![The permission panel](ask-panel.png)
+![The permission panel](shots/ask-panel.png)
 
 A permission opens the island a little instead of opening the whole dialogue:
 the tool name, the input it was handed, `Deny` dark and `Allow` white. A
@@ -149,9 +178,9 @@ reading the thing the request is about.
 
 2026-09-08 · `428527f`
 
-[`usage-badge.mp4`](usage-badge.mp4) — twelve seconds, two crossings.
+[`usage-badge.mp4`](shots/usage-badge.mp4) — twelve seconds, two crossings.
 
-![The badge, frame by frame](usage-badge-frames.png)
+![The badge, frame by frame](shots/usage-badge-frames.png)
 
 Every time the five hour window crosses a ten, the resting island springs wider
 and the percent steps out to the left of the ring, stands three and a half
@@ -165,7 +194,7 @@ on holds a preview until the island rests.
 
 2026-09-08 · `0688104`
 
-![The work line](work-line.png)
+![The work line](shots/work-line.png)
 
 The feed prints no tool calls. A run of them folds into one line with a clock:
 the mark, the elapsed time and a word while the agent is out, `Worked for 42s`
@@ -176,7 +205,7 @@ where the person started counting.
 
 2026-09-08 · `4e41965`
 
-![The stop button](stop-button.png)
+![The stop button](shots/stop-button.png)
 
 One button beside the field: an arrow while there is something to send, a white
 square on green while a turn runs, and pressing it ends the turn. The separate
