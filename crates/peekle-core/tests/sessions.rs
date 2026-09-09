@@ -1000,6 +1000,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         status: peekle_core::types::SessionStatus::Idle,
         origin: peekle_core::types::SessionOrigin::Observed,
         entries: Vec::new(),
+        mode: None,
         agent: None,
         updated_at: 2,
     }]);
@@ -1350,4 +1351,66 @@ fn a_prompt_delivered_through_an_inbox_is_the_words_typed_and_confirms_the_reply
     assert_eq!(card.entries.len(), 1);
     assert_eq!(card.entries[0].state, EntryState::Ok);
     assert_eq!(card.entries[0].text, *text);
+}
+
+/// v63 acceptance. The permission mode is not guessed and not remembered from
+/// a press: every hook of a live session names it, and those names come from
+/// captured payloads rather than from this file. tech.md 6.19.
+mod the_permission_mode {
+    use peekle_core::sessions::mode_of;
+    use peekle_core::types::PermissionMode;
+
+    fn first(name: &str) -> serde_json::Value {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/hooks")
+            .join(name);
+        let text = std::fs::read_to_string(path).expect("the captured payload");
+        serde_json::from_str(text.lines().next().expect("a line")).expect("json")
+    }
+
+    #[test]
+    fn is_read_off_the_hooks_that_carry_it() {
+        assert_eq!(
+            mode_of(&first("permission.jsonl")),
+            Some(PermissionMode::Manual)
+        );
+        assert_eq!(
+            mode_of(&first("pre_tool_use.jsonl")),
+            Some(PermissionMode::Auto)
+        );
+        assert_eq!(
+            mode_of(&first("post_tool_use.jsonl")),
+            Some(PermissionMode::Auto)
+        );
+        assert_eq!(
+            mode_of(&first("user_prompt_submit.jsonl")),
+            Some(PermissionMode::Auto)
+        );
+        assert_eq!(mode_of(&first("stop.jsonl")), Some(PermissionMode::Manual));
+    }
+
+    /// A hook that carries no mode says nothing about it, which is not the
+    /// same as saying `manual`.
+    #[test]
+    fn a_hook_without_one_reports_nothing() {
+        assert_eq!(mode_of(&first("notification.jsonl")), None);
+        assert_eq!(mode_of(&first("session.jsonl")), None);
+        assert_eq!(
+            mode_of(&serde_json::json!({"permission_mode": "unheard of"})),
+            None
+        );
+    }
+
+    /// The names the CLI takes on `--permission-mode`, exactly as its own
+    /// `--help` lists them. Getting one wrong would start a session in a mode
+    /// nobody chose.
+    #[test]
+    fn writes_the_names_the_cli_takes() {
+        assert_eq!(PermissionMode::Manual.flag(), "manual");
+        assert_eq!(PermissionMode::AcceptEdits.flag(), "acceptEdits");
+        assert_eq!(PermissionMode::Plan.flag(), "plan");
+        assert_eq!(PermissionMode::Auto.flag(), "auto");
+        assert_eq!(PermissionMode::Bypass.flag(), "bypassPermissions");
+        assert_eq!(PermissionMode::DontAsk.flag(), "dontAsk");
+    }
 }

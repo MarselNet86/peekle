@@ -12,7 +12,8 @@ use serde_json::Value;
 use ulid::Ulid;
 
 use crate::types::{
-    EntryKind, EntryState, FeedEntry, SessionCard, SessionOrigin, SessionRef, SessionStatus,
+    EntryKind, EntryState, FeedEntry, PermissionMode, SessionCard, SessionOrigin, SessionRef,
+    SessionStatus,
 };
 
 /// Freshest activity first, capped. tech.md 6.3.
@@ -125,6 +126,16 @@ pub fn session_ref_of(payload: &Value) -> SessionRef {
         pid: payload.get("pid").and_then(Value::as_u64).map(|p| p as u32),
         tty: str_at(payload, "tty").map(str::to_string),
     }
+}
+
+/// Which permission mode the payload says the session is in.
+///
+/// Every hook of a live session carries `permission_mode`; the ones captured
+/// in `fixtures/hooks/` show `default` and `auto` on `UserPromptSubmit`,
+/// `PreToolUse`, `PostToolUse`, `Stop` and `PermissionRequest`. A name this
+/// version does not know reads as nothing at all. tech.md 6.19.
+pub fn mode_of(payload: &Value) -> Option<PermissionMode> {
+    PermissionMode::from_hook(str_at(payload, "permission_mode")?)
 }
 
 /// The last path segment. A full path does not fit a session row and the
@@ -266,6 +277,7 @@ impl SessionRegistry {
                 // Nothing has answered yet, so there is nothing to say about
                 // the model. tech.md 6.15.
                 agent: None,
+                mode: None,
                 updated_at: at,
             },
         );
@@ -701,6 +713,23 @@ impl SessionRegistry {
 
     /// Moves a status. Returns false when the session is unknown,
     /// which happens when Peekle started mid session.
+    /// Records the permission mode a hook reported. `true` when it changed,
+    /// so a card only travels to the island when there is news. tech.md 6.19.
+    pub fn set_mode(&mut self, session_id: &str, mode: PermissionMode) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        if card.mode == Some(mode) {
+            return false;
+        }
+        card.mode = Some(mode);
+        true
+    }
+
     pub fn set_status(&mut self, session_id: &str, status: SessionStatus, at: i64) -> bool {
         let Some(card) = self
             .cards
@@ -783,6 +812,7 @@ impl SessionRegistry {
                     },
                     entries: Vec::new(),
                     agent: None,
+                    mode: None,
                     updated_at: at,
                 },
             );

@@ -126,6 +126,17 @@ impl AppSink {
     }
 }
 
+impl AppSink {
+    /// What mode the session was in when this hook fired. Every hook of a
+    /// live session says so, and the card carries the freshest answer.
+    /// tech.md 6.19.
+    fn note_mode(&self, payload: &Value) {
+        if let Some(cards) = self.state.note_mode(payload) {
+            self.emit_sessions(cards);
+        }
+    }
+}
+
 impl HookSink for AppSink {
     fn is_enabled(&self) -> bool {
         self.state.enabled()
@@ -151,6 +162,7 @@ impl HookSink for AppSink {
     /// Nothing is held and nothing is carried: text reaches an owned session
     /// through its pty the moment it is typed.
     fn on_stop(&self, payload: &Value) {
+        self.note_mode(payload);
         let session = peekle_core::sessions::session_ref_of(payload);
         let at = now_ms();
 
@@ -211,6 +223,7 @@ impl HookSink for AppSink {
     /// One endpoint, three events. UserPromptSubmit, PreToolUse and PostToolUse
     /// all land here. tech.md 6.1.
     fn on_feed(&self, payload: &Value) {
+        self.note_mode(payload);
         if let Some(event) = FeedEvent::from_payload(payload) {
             let cards = self.state.apply_feed(event, now_ms());
             self.emit_sessions(cards);

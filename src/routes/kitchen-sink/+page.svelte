@@ -240,6 +240,7 @@
     origin: i === 0 ? 'Owned' : 'Observed',
     entries: [],
     agent: null,
+    mode: null,
     updated_at: 0,
   }));
 
@@ -410,6 +411,10 @@
          a session nobody can type into. tech.md 6.15. -->
     <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
     <AgentBar agent={opus} models={modelRows} live pendingModel />
+    <!-- Aiming a session that has not started: the mode is a menu. Under way
+         it reads instead. tech.md 6.19. -->
+    <AgentBar agent={null} defaults={opus} models={modelRows} live canPickMode onmode={() => {}} />
+    <AgentBar agent={opus} models={modelRows} live mode="Auto" />
     <AgentBar agent={haiku} models={modelRows} live />
     <!-- A chat another app runs: reading, with the note saying where the
          setting lives. Stopping still works there, over the inbox. 6.15. -->
@@ -533,7 +538,14 @@
     <div class="frame">
       <PromptInput bind:value={text} placeholder="Reply to Claude">
         {#snippet tools()}
-          <AgentBar agent={opus} models={modelRows} live onmodel={() => {}} oneffort={() => {}} />
+          <AgentBar
+            agent={opus}
+            models={modelRows}
+            live
+            mode="Auto"
+            onmodel={() => {}}
+            oneffort={() => {}}
+          />
         {/snippet}
       </PromptInput>
     </div>

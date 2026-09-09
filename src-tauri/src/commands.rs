@@ -803,6 +803,7 @@ fn spawn_owned(
         prompt: Some(prompt.to_string()),
         model: held.model,
         effort: held.effort,
+        mode: held.mode,
     };
 
     state.claim_session(&spec.session_id);
@@ -991,6 +992,32 @@ pub fn set_model(
         Some((HeldKind::Model, model.trim().to_string())),
         &line,
     )
+}
+
+/// Aims a session at a permission mode before it starts. tech.md 6.19.
+///
+/// Only before: `--permission-mode` is the one exact way to set it, and it is
+/// a spawn flag. Claude Code has no slash command for the mode -- `Shift+Tab`
+/// cycles it in its own TUI -- and stepping a permission setting blind, on
+/// someone's behalf, through a cycle that contains `bypassPermissions` is not
+/// something to do quietly. So a session that has already answered is told
+/// where the switch lives instead. tech.md 6.19.
+#[tauri::command]
+pub fn set_mode(
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    mode: peekle_core::types::PermissionMode,
+) -> Result<(), String> {
+    let state = state.inner();
+    if !state.owns_session(&session_id) {
+        return Err("Peekle can only aim sessions it started".to_string());
+    }
+    if state.session_has_answered(&session_id) {
+        return Err("Claude Code changes the mode with Shift+Tab in its own window".to_string());
+    }
+
+    state.hold_setting(&session_id, HeldKind::Mode, mode.flag().to_string());
+    Ok(())
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.

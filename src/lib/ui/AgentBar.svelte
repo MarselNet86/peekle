@@ -8,6 +8,10 @@
   import {
     askedLabel,
     effortLabel,
+    modeLabel,
+    modeOptions,
+    noteTitle,
+    MODE_NOTE,
     effortOptions,
     modelLabel,
     modelOptions,
@@ -18,6 +22,7 @@
   import type { AgentSetup } from '$lib/types/generated/AgentSetup';
   import type { Effort } from '$lib/types/generated/Effort';
   import type { ModelChoice } from '$lib/types/generated/ModelChoice';
+  import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 
   let {
     agent,
@@ -27,10 +32,15 @@
     note = '',
     askedModel = null,
     askedEffort = null,
+    askedMode = null,
+    mode = null,
+    canPickMode = false,
     pendingModel = false,
     pendingEffort = false,
     onmodel,
     oneffort,
+    onmode,
+    onmodenote,
     onnote,
   }: {
     agent: AgentSetup | null;
@@ -50,10 +60,22 @@
      * while it travels, so a choice shows as made. tech.md 6.15. */
     askedModel?: string | null;
     askedEffort?: Effort | null;
+    askedMode?: PermissionMode | null;
+    /** What the session's own hooks report it is running in. tech.md 6.19. */
+    mode?: PermissionMode | null;
+    /** Whether the mode can still be chosen: a session Peekle is about to
+     * start. After the first answer it reads, because the flag is a spawn
+     * flag and the CLI has no line for it. tech.md 6.19. */
+    canPickMode?: boolean;
     pendingModel?: boolean;
     pendingEffort?: boolean;
     onmodel?: (alias: string) => void;
     oneffort?: (effort: Effort) => void;
+    onmode?: (mode: PermissionMode) => void;
+    /** The mode chip was pressed on a session that is already under way.
+     * A press deserves an answer, and the answer is where the switch is.
+     * tech.md 6.19. */
+    onmodenote?: () => void;
     /** A value that only reads was pressed anyway. A press deserves an
      * answer, and the answer is `note`. tech.md 6.15. */
     onnote?: () => void;
@@ -69,6 +91,10 @@
   const picked = $derived(askedModel ?? currentModel(shown, models));
   const modelText = $derived(askedLabel(askedModel, models) || modelLabel(shown) || 'Model');
   const effortShown = $derived(askedEffort ?? shown?.effort ?? null);
+  // The mode as the session reports it, or as it was just asked for. Nothing
+  // is assumed: with neither, the chip stands on the CLI's own default, which
+  // is what a session with no `--permission-mode` starts in. tech.md 6.19.
+  const modeShown = $derived<PermissionMode>(askedMode ?? mode ?? 'Manual');
 </script>
 
 {#if shown}
@@ -92,6 +118,21 @@
           onpick={(level) => oneffort?.(level as Effort)}
         />
       {/if}
+
+      <!-- Nearest the send button, because it decides what pressing it will
+           be allowed to do. tech.md 6.19. -->
+      {#if canPickMode}
+        <PickerMenu
+          label={modeLabel(modeShown)}
+          options={modeOptions()}
+          value={modeShown}
+          onpick={(next) => onmode?.(next as PermissionMode)}
+        />
+      {:else}
+        <button class="reading" title={noteTitle(MODE_NOTE)} onclick={() => onmodenote?.()}>
+          {modeLabel(modeShown)}
+        </button>
+      {/if}
     {:else}
       <!-- Reading, not a control that does nothing. A dimmed menu that never
            opens is read as a broken button; plain text is read as what it is,
@@ -104,6 +145,9 @@
           {effortLabel(shown.effort)}
         </button>
       {/if}
+      <button class="reading" title={note} onclick={() => onnote?.()}>
+        {modeLabel(modeShown)}
+      </button>
     {/if}
   </div>
 {/if}

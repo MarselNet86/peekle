@@ -254,6 +254,58 @@ pub enum SessionStatus {
     Ended,
 }
 
+/// How a session answers a permission question before it is even asked.
+///
+/// Claude Code's own modes, by its own names. Read from `permission_mode`,
+/// which every hook of a session carries, and written only where the CLI
+/// takes it as a value: `--permission-mode` on a session Peekle starts.
+/// tech.md 6.19.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum PermissionMode {
+    /// `default` on the wire, `manual` on the flag: it asks every time.
+    Manual,
+    /// Edits go through, everything else asks.
+    AcceptEdits,
+    /// It reads and plans and changes nothing.
+    Plan,
+    /// It approves what passes its own safety check and asks for the rest.
+    Auto,
+    /// Asks for nothing at all. Peekle never sets this, only reports it.
+    Bypass,
+    /// Same, under the CLI's other name for it.
+    DontAsk,
+}
+
+impl PermissionMode {
+    /// What a hook payload calls it. Unknown names are `None` rather than a
+    /// guess: reporting the wrong permission mode is worse than reporting
+    /// none. tech.md 6.19.
+    pub fn from_hook(raw: &str) -> Option<Self> {
+        match raw {
+            "default" | "manual" => Some(Self::Manual),
+            "acceptEdits" => Some(Self::AcceptEdits),
+            "plan" => Some(Self::Plan),
+            "auto" => Some(Self::Auto),
+            "bypassPermissions" => Some(Self::Bypass),
+            "dontAsk" => Some(Self::DontAsk),
+            _ => None,
+        }
+    }
+
+    /// What `--permission-mode` takes, exactly as `claude --help` lists it.
+    pub fn flag(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::AcceptEdits => "acceptEdits",
+            Self::Plan => "plan",
+            Self::Auto => "auto",
+            Self::Bypass => "bypassPermissions",
+            Self::DontAsk => "dontAsk",
+        }
+    }
+}
+
 // No `Eq`: the card now carries a percentage, and a float has no total
 // equality. Nothing compares cards for identity anyway. tech.md 6.15.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -270,6 +322,9 @@ pub struct SessionCard {
     /// a model, which is every session that has not had a turn yet.
     /// tech.md 6.15.
     pub agent: Option<AgentSetup>,
+    /// Which permission mode it runs in, as its own hooks report it. `None`
+    /// until one arrives. tech.md 6.19.
+    pub mode: Option<PermissionMode>,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,
