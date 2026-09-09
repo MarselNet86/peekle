@@ -64,18 +64,24 @@ pub fn is_synthetic(text: &str) -> bool {
         .any(|marker| trimmed.starts_with(marker))
 }
 
-/// The tag a message delivered through a process's inbox arrives in. The
-/// receiver wraps it, both in `UserPromptSubmit` and in the file; in the
-/// file it also puts a preamble before and an instruction after. tech.md 6.5.
+/// The tag a message delivered through a process's inbox used to arrive in.
+/// Kept because transcripts written before 2.1.263 still carry it; what the
+/// receiver writes now is prose. tech.md 6.5.
 pub const PEER_TAG_OPEN: &str = "<cross-session-message";
 pub const PEER_TAG_CLOSE: &str = "</cross-session-message>";
 
-/// What the receiver writes before the tag in the transcript. The one form
-/// seen live; the second is the variant its code has for a busy session.
+/// What the receiver writes above the words. The first form is what 2.1.263
+/// writes; the second is the variant its code has for a busy session.
 const PEER_PREAMBLES: &[&str] = &[
     "Another Claude session sent a message",
     "A peer session sent a message",
 ];
+
+/// The standing instruction the receiver writes below the words: who the
+/// message came from and what a peer may not ask for. It is addressed to the
+/// agent, nobody typed it, and it is four times the length of most replies.
+/// Captured live 2026-09-09. tech.md 6.5.
+const PEER_TAIL_LEAD: &str = "This came from another Claude session";
 
 /// What a person said in a turn, or `None` for a turn nobody said.
 ///
@@ -93,6 +99,32 @@ pub fn spoken(text: &str) -> Option<String> {
 }
 
 fn unwrap_peer(text: &str) -> Option<&str> {
+    // Both layers, because a transcript written before 2.1.263 carries the
+    // preamble around the tag and the newer one carries the preamble alone.
+    let stripped = unwrap_peer_prose(text);
+    unwrap_peer_tag(stripped.unwrap_or(text)).or(stripped)
+}
+
+/// The shape 2.1.263 writes: the preamble on its own line, the words, a blank
+/// line, the standing instruction. Both wrappers have to be there, and the
+/// preamble has to be the whole first line, so a reply that merely quotes one
+/// of them keeps every word it was given. tech.md 6.5.
+fn unwrap_peer_prose(text: &str) -> Option<&str> {
+    let (first, rest) = text.split_once('\n')?;
+    let lead = first.trim().trim_end_matches(':');
+    if !PEER_PREAMBLES.contains(&lead) {
+        return None;
+    }
+    // The last one, because the instruction stands after the words and the
+    // words are free to mention it.
+    let body = match rest.rfind(PEER_TAIL_LEAD) {
+        Some(at) => &rest[..at],
+        None => rest,
+    };
+    Some(body.trim())
+}
+
+fn unwrap_peer_tag(text: &str) -> Option<&str> {
     let start = text.find(PEER_TAG_OPEN)?;
     let lead = text[..start].trim();
     let expected_lead = lead.is_empty()
