@@ -212,12 +212,16 @@ describe('ContextRing', () => {
     expect(onclick).not.toHaveBeenCalled();
   });
 
+  /// A compact takes minutes and confirms itself by the number falling, so
+  /// the ring says it is waiting rather than sitting as if nothing was asked.
+  /// Read off the element, not off a class name: what the contract promises
+  /// is the state, not the stylesheet. tech.md 6.15.
   it('waits visibly while a compact travels', () => {
-    const { container } = render(ContextRing, {
+    render(ContextRing, {
       props: { pct: 56, title: 'ring', live: true, pending: true },
     });
 
-    expect(container.querySelector('.ring')).toHaveClass('pending');
+    expect(screen.getByRole('button', { name: 'ring' })).toHaveAttribute('aria-busy', 'true');
   });
 });
 
