@@ -539,3 +539,72 @@ fn a_record_without_a_uuid_is_named_by_its_line() {
     assert_eq!(card.entries[0].id, "line-0-1");
     assert_eq!(card.entries[1].id, "line-1-1");
 }
+
+/// The record the CLI writes to close a turn the model never took, captured
+/// 2026-09-09 right before a reply arrived by `--resume`: `<synthetic>` with
+/// no error flag and the words `No response requested.`. Not an answer, not
+/// an error, not a row. tech.md 6.11.
+#[test]
+fn a_turn_nobody_answered_is_not_a_row() {
+    use peekle_core::transcripts::{is_api_error, is_unanswered};
+
+    let lines = [
+        r#"{"type":"user","uuid":"u1","sessionId":"s","cwd":"/tmp/p","timestamp":"2026-09-09T10:18:00.000Z","message":{"role":"user","content":"hi"}}"#,
+        r#"{"parentUuid":"u1","isSidechain":false,"type":"assistant","uuid":"c903bf95-9240-419b-bff3-3a73de26d1df","timestamp":"2026-09-09T10:18:06.280Z","message":{"diagnostics":null,"id":"fa7fd5e2-b589-4f71-8133-1fc68bfa0182","model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"content":[{"type":"text","text":"No response requested."}]}}"#,
+        r#"{"type":"user","uuid":"u2","sessionId":"s","timestamp":"2026-09-09T10:18:06.558Z","message":{"role":"user","content":"test message"}}"#,
+    ];
+    let record: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+    assert!(is_unanswered(&record));
+    assert!(
+        is_api_error(&record),
+        "still not a model for the settings row"
+    );
+
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+    let kinds: Vec<EntryKind> = card.entries.iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, vec![EntryKind::User, EntryKind::User]);
+    assert!(card.entries.iter().all(|e| e.state == EntryState::Ok));
+    assert!(card.agent.is_none());
+}
+
+/// The summary the CLI writes itself after `/compact`, flagged
+/// `isCompactSummary` and `isVisibleInTranscriptOnly`; captured 2026-09-09
+/// with the text cut down. It stood in the feed as a two-thousand-character
+/// green bubble. It is a notice, the way the terminal shows it, and never the
+/// title. tech.md 6.11.
+#[test]
+fn a_compact_summary_is_a_notice_not_a_turn() {
+    use peekle_core::transcripts::COMPACTED;
+
+    let lines = [
+        r#"{"parentUuid":null,"isSidechain":false,"type":"system","subtype":"compact_boundary","uuid":"b1","sessionId":"s","cwd":"/tmp/p","timestamp":"2026-09-09T10:21:00.041Z","compactMetadata":{"trigger":"manual","preTokens":614069,"postTokens":6460}}"#,
+        r#"{"parentUuid":"b1","isSidechain":false,"type":"user","uuid":"s1","sessionId":"s","timestamp":"2026-09-09T10:21:00.036Z","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"message":{"role":"user","content":"This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation."}}"#,
+        r#"{"type":"user","uuid":"u1","sessionId":"s","timestamp":"2026-09-09T10:21:32.695Z","message":{"role":"user","content":"test 3"}}"#,
+    ];
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+
+    let notice = &card.entries[0];
+    assert_eq!(notice.kind, EntryKind::Notice);
+    assert_eq!(notice.text, COMPACTED);
+    assert_eq!(card.entries[1].kind, EntryKind::User);
+    assert_eq!(card.entries[1].text, "test 3");
+    assert_eq!(card.title, "test 3", "the summary is never the title");
+}
+
+/// After a compact Claude Code writes the segment it kept into the same file
+/// again, same `uuid`s, same timestamps. Seen 2026-09-09: 1277 records of one
+/// transcript stood twice. One uuid is one row, and the first reading wins.
+/// tech.md 6.11.
+#[test]
+fn a_record_written_twice_is_read_once() {
+    let turn = r#"{"type":"user","uuid":"u1","sessionId":"s","cwd":"/tmp/p","timestamp":"2026-09-09T10:00:00.000Z","message":{"role":"user","content":"once"}}"#;
+    let answer = r#"{"type":"assistant","uuid":"a1","sessionId":"s","timestamp":"2026-09-09T10:00:05.000Z","message":{"role":"assistant","model":"claude-opus-5","usage":{"input_tokens":1},"content":[{"type":"text","text":"and only once"}]}}"#;
+    let later = r#"{"type":"user","uuid":"u2","sessionId":"s","timestamp":"2026-09-09T10:30:00.000Z","message":{"role":"user","content":"after"}}"#;
+    let lines = [turn, answer, later, turn, answer];
+    let card = card_from_lines(lines.iter(), "s", 0).unwrap();
+
+    let ids: Vec<&str> = card.entries.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, vec!["u1-1", "a1-1", "u2-1"]);
+    let texts: Vec<&str> = card.entries.iter().map(|e| e.text.as_str()).collect();
+    assert_eq!(texts, vec!["once", "and only once", "after"]);
+}

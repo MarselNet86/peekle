@@ -241,6 +241,10 @@ where
     let mut previous;
     // Where each open call sits in `entries`, so its result can find it.
     let mut open_calls: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    // Every `uuid` read so far. After a compact, Claude Code writes the
+    // segment it kept into the same file again under the same ids, and a row
+    // read twice is two rows with one key. The first reading wins. tech.md 6.11.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (number, line) in lines.into_iter().enumerate() {
         let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) else {
@@ -248,6 +252,11 @@ where
             // read. One bad line is skipped, the rest of the file still counts.
             continue;
         };
+        if let Some(uuid) = record.get("uuid").and_then(Value::as_str) {
+            if !seen.insert(uuid.to_string()) {
+                continue;
+            }
+        }
 
         agent.read(&record);
 
@@ -323,6 +332,20 @@ where
                     }
                 }
 
+                // The summary the CLI wrote itself after `/compact`. Nobody
+                // typed it, so it is not a turn; it is a thing that happened
+                // to the conversation, said the way the terminal says it.
+                // tech.md 6.11.
+                if is_compact_summary(&record) {
+                    entries.push(entry(
+                        next_id(),
+                        EntryKind::Notice,
+                        COMPACTED.to_string(),
+                        at,
+                    ));
+                    continue;
+                }
+
                 // A model change is not a turn and not synthetic noise: it is
                 // a thing that happened to this conversation, and the file is
                 // where it is written down. tech.md 6.15.
@@ -343,6 +366,13 @@ where
                 }
             }
             Some("assistant") => {
+                // A turn the model never answered: the CLI closes it with a
+                // synthetic `No response requested.` after a local command
+                // or a resume. Not an answer, not an error, not a row.
+                // tech.md 6.11.
+                if is_unanswered(&record) {
+                    continue;
+                }
                 // The turn did not get an answer, it got an error, and the
                 // file says so. Shown as a failed answer rather than an
                 // ordinary one, and it is the end of the turn: no `Stop`
@@ -566,15 +596,42 @@ pub fn switched_model(text: &str) -> Option<String> {
 /// answering. Claude Code flags it, and names the model `<synthetic>` for
 /// good measure; either mark is enough. tech.md 6.11.
 pub fn is_api_error(record: &Value) -> bool {
+    flagged_api_error(record) || is_synthetic_model(record)
+}
+
+/// Whether an `assistant` record is the CLI closing a turn the model never
+/// took: `<synthetic>` without the error flag, which is what it writes as
+/// `No response requested.` after a local command or on a resume. Seen live
+/// 2026-09-09, standing in the feed as a failed answer. tech.md 6.11.
+pub fn is_unanswered(record: &Value) -> bool {
+    is_synthetic_model(record) && !flagged_api_error(record)
+}
+
+fn flagged_api_error(record: &Value) -> bool {
     record
         .get("isApiErrorMessage")
         .and_then(Value::as_bool)
         .unwrap_or(false)
-        || record
-            .get("message")
-            .and_then(|m| m.get("model"))
-            .and_then(Value::as_str)
-            == Some("<synthetic>")
+}
+
+fn is_synthetic_model(record: &Value) -> bool {
+    record
+        .get("message")
+        .and_then(|m| m.get("model"))
+        .and_then(Value::as_str)
+        == Some("<synthetic>")
+}
+
+/// What the feed says where the CLI put its compact summary. tech.md 6.11.
+pub const COMPACTED: &str = "Compacted";
+
+/// Whether a `user` record is the summary the CLI wrote itself after
+/// `/compact` rather than something a person typed. tech.md 6.11.
+pub fn is_compact_summary(record: &Value) -> bool {
+    record
+        .get("isCompactSummary")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn entry(id: String, kind: EntryKind, text: String, at: i64) -> FeedEntry {
