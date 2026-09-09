@@ -2,8 +2,14 @@ name: ci
 
 on:
   pull_request:
+    paths-ignore: &docs
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.mp4'
+      - 'features/**'
   push:
     branches: [main]
+    paths-ignore: *docs
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,8 +19,45 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  gate:
-    name: pr gate
+  # Everything that does not need a Mac. GitHub bills a macOS minute as ten,
+  # so a step that runs here instead costs a tenth of what it did.
+  web:
+    name: web gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm lint
+        run: pnpm lint
+
+      - name: svelte-check
+        run: pnpm check
+
+      - name: vitest
+        run: pnpm test
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: playwright
+        run: pnpm test:e2e
+
+  # The parts that are about macOS itself: the Rust workspace builds the
+  # NSPanel shell, and the bundle is the thing users install.
+  mac:
+    name: mac gate
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +77,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # The bundle is built from the compiled frontend, so the dependencies
+      # are needed here too.
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
@@ -50,21 +95,6 @@ jobs:
         run: |
           cargo test -p peekle-core export_bindings
           git diff --exit-code -- src/lib/types/generated
-
-      - name: pnpm lint
-        run: pnpm lint
-
-      - name: svelte-check
-        run: pnpm check
-
-      - name: vitest
-        run: pnpm test
-
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: playwright
-        run: pnpm test:e2e
 
       - name: tauri build
         run: pnpm tauri build --debug
