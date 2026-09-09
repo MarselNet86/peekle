@@ -9,17 +9,37 @@ Add an entry when a feature merges. Keep it to what a person needs to recognise
 the thing on screen — the reasoning belongs in `tech.md`, the mechanics belong
 in the code.
 
-| Version | Feature                                                                       | Contract           |
-| ------- | ----------------------------------------------------------------------------- | ------------------ |
-| v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9            |
-| v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9  |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it) | 6.4                |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)            | 6.3, 6.12, 6.16, 9 |
-| v60     | [Composer layout](#v60--composer-layout)                                      | 6.12, 6.15, 9      |
-| v59     | [Permission panel](#v59--permission-panel)                                    | 6.3, 6.7, 9        |
-| v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9 |
-| v57     | [Work line](#v57--work-line)                                                  | 6.12, 9            |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9       |
+| Version | Feature                                                                       | Contract            |
+| ------- | ----------------------------------------------------------------------------- | ------------------- |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)           | 6.12, 6.15, 6.20, 9 |
+| v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9             |
+| v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9   |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it) | 6.4                 |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)            | 6.3, 6.12, 6.16, 9  |
+| v60     | [Composer layout](#v60--composer-layout)                                      | 6.12, 6.15, 9       |
+| v59     | [Permission panel](#v59--permission-panel)                                    | 6.3, 6.7, 9         |
+| v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9  |
+| v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
+
+## v65 — Composer row, as the original
+
+2026-09-09 · `61f88e7`
+
+![The composer row and its menu](composer-row.png)
+
+Left to right: the context ring, the model with its weight, thinking, then a
+gap, then the mode beside the send button. The ring is furthest from send
+because it acts on what is already spent; the mode is nearest because it
+decides what the next press may do.
+
+One menu holds model and effort, the effort as a track carrying the CLI's own
+five descriptions, with `ultracode` as the stop past the last level — its own
+command, because `--effort` does not take it, and its own colour, `#d0b4ff`.
+
+Thinking is a grey block with a switch. `MAX_THINKING_TOKENS=0` is the only
+lever the CLI offers and the process reads it once at startup, so it is set
+before a session runs and read after.
 
 ## v64 — Live mode switching
 
