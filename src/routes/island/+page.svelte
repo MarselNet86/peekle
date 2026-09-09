@@ -46,7 +46,6 @@
   import PromptInput from '$lib/ui/PromptInput.svelte';
   import AskPanel from '$lib/ui/AskPanel.svelte';
   import RestMark from '$lib/ui/RestMark.svelte';
-  import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import UsageCorner from '$lib/ui/UsageCorner.svelte';
@@ -95,13 +94,18 @@
   // rather than about the number of rows. tech.md 6.12.
   let scroller = $state<HTMLElement | null>(null);
   let atBottom = $state(true);
-  let showHint = $state(false);
 
   function readScroll() {
     if (!scroller) return;
-    const state = scrollState(scroller.scrollTop, scroller.clientHeight, scroller.scrollHeight);
-    atBottom = state.atBottom;
-    showHint = state.showHint;
+    // Only whether the reader is at the end, which decides whether a new row
+    // may follow the feed down. Nothing is drawn about it any more: the hint
+    // was a chevron over the last line of the conversation, and the scrollbar
+    // already says there is more. tech.md 6.12.
+    atBottom = scrollState(
+      scroller.scrollTop,
+      scroller.clientHeight,
+      scroller.scrollHeight,
+    ).atBottom;
   }
 
   function toBottom(smooth = true) {
@@ -756,7 +760,6 @@
             {/if}
           {/each}
         </div>
-        <ScrollHint visible={showHint} onclick={() => toBottom()} />
         {@render connect()}
 
         {#if permission}
