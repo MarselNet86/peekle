@@ -184,6 +184,28 @@ export function contextLabel(agent: AgentSetup | null, canCompact = true): strin
 export type SettingsNote = { fact: string; how?: string };
 
 /**
+ * The width a menu is assumed to want, in pixels. The widest of them, the
+ * modes, sets it (9): a menu as wide as its longest word wrapped every line
+ * of explanation, so it has a floor.
+ */
+export const MENU_WIDTH = 300;
+
+/**
+ * Whether a menu opening from this button has to hold its right edge instead
+ * of its left. tech.md 9.
+ *
+ * Menus open upward and, until now, always rightward, which is right for a
+ * button on the left of the row and wrong for the one at its far right: the
+ * mode menu ran off the island and was cut by the window. Answered before the
+ * menu is drawn, from the button's own position, so nothing appears in one
+ * place and moves to another.
+ */
+export function opensRight(hostLeft: number, viewport: number, width = MENU_WIDTH): boolean {
+  const margin = 8;
+  return hostLeft + width > viewport - margin;
+}
+
+/**
  * How long an answer stands before it goes, in milliseconds.
  *
  * Ten seconds, and the block shows them leaking rather than vanishing at the
