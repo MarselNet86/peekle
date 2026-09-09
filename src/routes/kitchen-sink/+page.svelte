@@ -321,6 +321,7 @@
       <FeedRow
         entry={{ ...formatted, id: 'k2', kind: 'Notice', text: 'Switched to claude-opus-5[1m]' }}
       />
+      <FeedRow entry={{ ...formatted, id: 'k3', kind: 'Notice', text: 'Compacted' }} />
     </div>
   </section>
 
