@@ -1,7 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
+  import { ASK_PIXEL, ASK_PIXELS } from '$lib/logic/ask-sign';
   import type { RestStatus } from '$lib/logic/rest';
+  import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import { REST_SIDE } from '$lib/logic/shape';
   import { usageTone } from '$lib/logic/usage';
   import UsageDial from './UsageDial.svelte';
@@ -41,6 +43,10 @@
   };
   const usageLabel = $derived(known ? `, ${value}% of the 5h window used` : '');
 
+  /** The one state that is about the person rather than about the agent, and
+   * the one that swaps the glyph rather than only its colour. tech.md 6.7. */
+  const asking = $derived(status === 'waiting');
+
   /** How long the strokes hop for when the state changes under them. Long
    * enough to be seen from across a screen, short enough not to be a state of
    * its own. tech.md 6.21. */
@@ -79,34 +85,62 @@
 >
   <!-- Two strokes at rest. While the agent works they give way to one stroke
        stepping through `|`, `\`, `-`, `/`: the console spinner, where a frame
-       is replaced rather than turned. tech.md 6.12. -->
+       is replaced rather than turned. tech.md 6.12. A standing question takes
+       the whole glyph away and puts a question mark in its place: the sign
+       says Peekle, and what the island has to say here is not Peekle.
+       tech.md 6.7. -->
   <span class="glyph">
-    <svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
-      <g class="sign">
-        <path
-          class="stroke first"
-          d="M4 10.6L6.9 1.4"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-        />
-        <path
-          class="stroke second"
-          d="M9.1 10.6L12 1.4"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-        />
-      </g>
-      <!-- Four glyphs, not one turning stroke. A console spinner replaces the
-           character: the vertical bar is tall, the dash is short and wide, and
-           the eye reads a swap rather than a rotation. tech.md 6.12. -->
-      <g class="spin">
-        <path class="frame f1" d="M7 1.9L7 10.1" />
-        <path class="frame f2" d="M4.3 10.1L9.7 1.9" />
-        <path class="frame f3" d="M3.1 6L10.9 6" />
-        <path class="frame f4" d="M4.3 1.9L9.7 10.1" />
-      </g>
+    <svg
+      viewBox="0 0 {SIGN_BOX.width} {SIGN_BOX.height}"
+      width={SIGN_BOX.width}
+      height={SIGN_BOX.height}
+      aria-hidden="true"
+    >
+      {#if asking}
+        <!-- Whole pixels, drawn from `logic/ask-sign.ts`: at eight by twelve a
+             drawn curve turns to mush, and a bitmap is what a terminal would
+             have written anyway. It is swapped in rather than faded in, the
+             way the spinner replaces a frame, and it never moves -- the breath
+             is on the colour, and a pixel shifted by a fraction is a blurred
+             pixel. tech.md 6.7. -->
+        <g class="ask" shape-rendering="crispEdges">
+          {#each ASK_PIXELS as pixel (`${pixel.x},${pixel.y}`)}
+            <rect
+              x={pixel.x}
+              y={pixel.y}
+              width={ASK_PIXEL}
+              height={ASK_PIXEL}
+              fill="currentColor"
+            />
+          {/each}
+        </g>
+      {:else}
+        <g class="sign">
+          <!-- The geometry is the one in `logic/sign.ts`, not a copy of it: the
+               empty dialogue draws the same two strokes, and a sign drawn twice
+               by hand is a sign that drifts. tech.md 9. -->
+          {#each SIGN_STROKES as stroke, index (stroke)}
+            <path
+              class="stroke"
+              class:first={index === 0}
+              class:second={index === 1}
+              d={stroke}
+              stroke="currentColor"
+              stroke-width={SIGN_WEIGHT}
+              stroke-linecap="round"
+            />
+          {/each}
+        </g>
+        <!-- Four glyphs, not one turning stroke. A console spinner replaces the
+             character: the vertical bar is tall, the dash is short and wide, and
+             the eye reads a swap rather than a rotation. tech.md 6.12. -->
+        <g class="spin">
+          <path class="frame f1" d="M7 1.9L7 10.1" />
+          <path class="frame f2" d="M4.3 10.1L9.7 1.9" />
+          <path class="frame f3" d="M3.1 6L10.9 6" />
+          <path class="frame f4" d="M4.3 1.9L9.7 10.1" />
+        </g>
+      {/if}
     </svg>
   </span>
 
@@ -268,29 +302,18 @@
   }
 
   /* Waiting is the one state that costs the user time, so it is the one state
-     that moves, and the one that changes colour. The sign is green for Peekle
-     and for everything the agent does on its own; a question standing
-     unanswered is neither, and the eye has to find it from across a screen.
-     Never filter or backdrop-filter: those repaint everything under the
-     window on every frame. tech.md 6.7, 6.10 and 6.14. */
+     that changes its colour and the only one that changes its glyph. The sign
+     is green for Peekle and for everything the agent does on its own; a
+     question standing unanswered is neither, and the eye has to find it from
+     across a screen. The breath is all of the movement, and opacity is all of
+     the breath: the wave that ran through the two strokes until v80.3 went
+     with them, and a pixel glyph that scales or slides is a pixel glyph with
+     soft edges. Never filter or backdrop-filter: those repaint everything
+     under the window on every frame. tech.md 6.7, 6.10 and 6.14. */
   .mark[data-status='waiting'] .glyph {
     opacity: 1;
     color: var(--waiting);
     animation: breathe 1600ms ease-in-out infinite;
-  }
-
-  /* A wave running through the two strokes rather than two hops: each rides
-     one smooth cycle up and back down, and the second is half a period behind
-     the first, so one is always rising while the other falls. Nothing stops
-     and nothing snaps, which is what tells a wave from a jitter. */
-  .mark[data-status='waiting'] .stroke {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: wave 1600ms ease-in-out infinite;
-  }
-
-  .mark[data-status='waiting'] .second {
-    animation-delay: 800ms;
   }
 
   @keyframes wave {
@@ -312,8 +335,9 @@
     color: var(--orange);
   }
 
-  /* The same wave as waiting and a shade quicker: work moves, waiting
-     breathes. No breath under it, so the two states never read alike. */
+  /* The wave the waiting mark wore until v80.3, a shade quicker: work moves,
+     waiting breathes, and a compact rides this. No breath under it, so it and
+     waiting never read alike. */
   .mark[data-status='compacting'] .stroke {
     transform-box: fill-box;
     transform-origin: center;
@@ -368,7 +392,6 @@
     }
 
     /* The colour still says it, and the colour does not move. */
-    .mark[data-status='waiting'] .stroke,
     .mark[data-status='compacting'] .stroke,
     .mark.turned .stroke {
       animation: none;
