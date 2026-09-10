@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract             |
 | ------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                         | 6.7, 9               |
 | v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                       | 6.7, 9               |
 | v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                   | 6.12, 9              |
 | v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                 | 9                    |
@@ -37,6 +38,37 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9         |
+
+## v80.4 — The question lays itself out
+
+2026-09-10
+
+![The mark while a question stands](shots/asking-mark.png)
+
+Two things about the mark v80.3 put in the notch, both reported from the
+bezel: the glyph leaned, and it breathed.
+
+It leaned because it was four pixels wide. On an even width the stem cannot
+stand in the middle of the bowl — the centre falls between two pixels, the
+stem takes the one beside it, and the whole glyph tips. It is five wide now,
+so the stem and the dot share the centre column and the bowl is symmetric
+about it.
+
+![It assembling, stepped frame by frame](shots/ask-frames.png)
+
+And it no longer breathes. It lays itself out one pixel at a time — bowl,
+stem, dot, in the order `ASK_PIXELS` is written — stands whole for a beat,
+then comes apart in the same order and starts again. Each pixel runs the same
+cycle one step behind the one before it, in `steps(1, end)`, so a pixel is on
+or off and never half of either: at eight pixels a fade is a blur, and a blur
+is the one thing this glyph cannot afford.
+
+The three numbers that make the motion read — the step between pixels, the
+cycle, and how much of it a pixel stays on for — are checked against each
+other rather than eyeballed: the glyph has to stand whole for a real moment
+and be fully gone before the next round starts. The keyframe percentage, the
+one number a stylesheet cannot read from a constant, is pinned to that
+constant by a test that reads the component's own source.
 
 ## v80.3 — A question wears its own mark
 
