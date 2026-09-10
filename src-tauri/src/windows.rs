@@ -318,6 +318,18 @@ fn stands_until_answered(active: Option<&PromptRequest>) -> bool {
     active.is_some_and(|request| request.kind == PromptKind::Question)
 }
 
+/// Whether a pill has to stay down because something is waiting on the person.
+///
+/// Every request, not only a question: a pill replaces the view outright, so
+/// raising one over an open request throws away what the person is reading
+/// and, three seconds later, the island with it. What the pill had to say is
+/// dropped rather than queued -- by the time the request is answered it is
+/// about a moment that has passed, and the notification it came from has
+/// already rung as a system banner (6.17). tech.md 6.7.
+fn pill_holds_off(active: Option<&PromptRequest>) -> bool {
+    active.is_some()
+}
+
 /// Which view a blocking request raises, or None to leave the island alone.
 ///
 /// A permission asks for yes or no, and neither answer needs the feed, so it
@@ -421,7 +433,20 @@ pub fn warn_hotkey(app: &AppHandle, text: &str) {
 
 /// A toast is the `Pill` view for as long as it lives. Nothing here waits on
 /// the user, so the island collapses itself when the time is up.
+///
+/// Unless something is waiting on them. `set_view` does not queue behind what
+/// is on screen, it replaces it: a pill raised over a standing request took
+/// the request off the screen and then collapsed the island on its own clock,
+/// with the hook still pending and an answer half typed into the field. The
+/// same rule the end of a turn (6.2) and a screenshot offer (6.13) already
+/// keep, in the one place every pill goes through. tech.md 6.7.
 pub fn toast(app: &AppHandle, request: ToastRequest) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    if pill_holds_off(state.active_prompt().as_ref()) {
+        tracing::debug!("a request is standing, so the pill stays down");
+        return;
+    }
+
     let ttl = Duration::from_millis(u64::from(request.ttl_ms));
 
     if let Err(err) = app.emit_to(panel::ISLAND, events::TOAST, &request) {
@@ -446,7 +471,8 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 #[cfg(test)]
 mod tests {
     use super::{
-        stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
+        pill_holds_off, stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD,
+        PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
 
@@ -495,6 +521,28 @@ mod tests {
     /// The panel is a question with two answers on it, so it does not need the
     /// forty five seconds a question with four options and descriptions does.
     /// What it must never be is shorter than the walk to it. tech.md 6.7.
+    /// A pill takes the view outright, so raising one over a standing request
+    /// takes the request off the screen and then collapses the island on the
+    /// pill's own clock -- with the hook still pending and an answer half
+    /// typed. Every kind, not only a question: the person is answering all of
+    /// them. tech.md 6.7.
+    #[test]
+    fn a_pill_stays_down_while_anything_is_waiting_on_the_person() {
+        for kind in [
+            PromptKind::Question,
+            PromptKind::Permission,
+            PromptKind::Idle,
+        ] {
+            assert!(pill_holds_off(Some(&standing(kind))), "{kind:?}");
+        }
+    }
+
+    /// And with nothing standing it is the ordinary pill it always was.
+    #[test]
+    fn a_pill_rises_when_nothing_is_waiting() {
+        assert!(!pill_holds_off(None));
+    }
+
     #[test]
     fn the_permission_panel_stands_for_twenty_seconds() {
         assert_eq!(ASK_HOLD, Duration::from_secs(20));
