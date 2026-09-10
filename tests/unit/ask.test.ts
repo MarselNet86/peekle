@@ -25,6 +25,7 @@ const request: PromptRequest = {
     tty: null,
   },
   title: 'Bash needs permission',
+  tool: 'Bash',
   last_message: null,
   detail: 'cargo test --workspace',
   options: [

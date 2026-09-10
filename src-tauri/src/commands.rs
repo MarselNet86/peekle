@@ -96,10 +96,14 @@ pub(crate) fn settle(
 
 /// What a session is doing once its blocking prompt is settled. Any answer,
 /// allow or deny, releases the hook and the agent runs; a dismissal or a
-/// timeout hands the question back to the terminal. tech.md 6.3 and 6.5.
+/// timeout hands the question back to the terminal. An answer given in Claude
+/// Code itself is still an answer: the tool has run, and calling that idle
+/// would show a still island over a working agent. tech.md 6.3, 6.5 and 6.14.
 pub fn status_after(outcome: &PromptOutcome) -> peekle_core::types::SessionStatus {
     match outcome {
-        PromptOutcome::Answered(_) => peekle_core::types::SessionStatus::Working,
+        PromptOutcome::Answered(_) | PromptOutcome::AnsweredElsewhere => {
+            peekle_core::types::SessionStatus::Working
+        }
         _ => peekle_core::types::SessionStatus::Idle,
     }
 }
@@ -1829,6 +1833,12 @@ mod tests {
         });
         assert_eq!(status_after(&deny_without_a_word), SessionStatus::Working);
         assert_eq!(status_after(&PromptOutcome::Dismissed), SessionStatus::Idle);
+        // The tool ran, so the agent is going. Calling it idle would leave a
+        // still island over a working session. tech.md 6.14.
+        assert_eq!(
+            status_after(&PromptOutcome::AnsweredElsewhere),
+            SessionStatus::Working
+        );
         assert_eq!(status_after(&PromptOutcome::TimedOut), SessionStatus::Idle);
         assert_eq!(status_after(&PromptOutcome::Bypassed), SessionStatus::Idle);
     }

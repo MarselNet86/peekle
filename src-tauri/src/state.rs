@@ -1073,6 +1073,7 @@ mod tests {
                 tty: None,
             },
             title: "t".into(),
+            tool: None,
             last_message: None,
             detail: None,
             options: Vec::new(),
