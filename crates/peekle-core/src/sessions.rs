@@ -773,9 +773,7 @@ impl SessionRegistry {
     pub fn rest_stale_compacts(&mut self, now: i64, after: i64) -> bool {
         let mut changed = false;
         for card in self.cards.iter_mut() {
-            let stale = card
-                .compacting
-                .is_some_and(|run| now - run.since >= after);
+            let stale = card.compacting.is_some_and(|run| now - run.since >= after);
             if stale {
                 card.compacting = None;
                 changed = true;

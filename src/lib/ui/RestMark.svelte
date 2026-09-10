@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+
   import type { RestStatus } from '$lib/logic/rest';
   import { REST_SIDE } from '$lib/logic/shape';
   import { usageTone } from '$lib/logic/usage';
@@ -35,14 +37,41 @@
     idle: 'Peekle is running',
     working: 'Claude is working',
     waiting: 'Claude is waiting on you',
+    compacting: 'Claude is compacting the chat',
   };
   const usageLabel = $derived(known ? `, ${value}% of the 5h window used` : '');
+
+  /** How long the strokes hop for when the state changes under them. Long
+   * enough to be seen from across a screen, short enough not to be a state of
+   * its own. tech.md 6.21. */
+  const HOP_MS = 620;
+
+  // The colour says what is happening; the hop says it just changed. Without
+  // it a compact that ends while nobody is looking at the notch is a green
+  // sign that was orange a moment ago, and nothing was ever seen to happen.
+  let turned = $state(false);
+  let seen = $state<RestStatus | null>(null);
+
+  $effect(() => {
+    const next = status;
+    const before = untrack(() => seen);
+    if (before === next) return;
+    seen = next;
+    // The first paint is not a change. An island that hops on every launch
+    // is an island that hops for nothing.
+    if (before === null) return;
+
+    turned = true;
+    const timer = setTimeout(() => (turned = false), HOP_MS);
+    return () => clearTimeout(timer);
+  });
 </script>
 
 <!-- The whole resting shape is the target. Its middle is behind the camera
      housing, so asking the user to hit either end would be unfair. tech.md 6.7. -->
 <button
   class="mark"
+  class:turned
   data-status={status}
   style:--side="{REST_SIDE}px"
   aria-label="{labels[status]}{usageLabel}. Open the session list"
@@ -274,6 +303,51 @@
     }
   }
 
+  /* A compact is not the agent working and not the agent waiting: it is the
+     CLI folding the conversation up, for minutes at a time, while nothing
+     else moves. Orange rather than yellow or red, which mean warning and
+     fault, and neither is true here. tech.md 6.21. */
+  .mark[data-status='compacting'] .glyph {
+    opacity: 1;
+    color: var(--orange);
+  }
+
+  /* The same wave as waiting and a shade quicker: work moves, waiting
+     breathes. No breath under it, so the two states never read alike. */
+  .mark[data-status='compacting'] .stroke {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: wave 1200ms ease-in-out infinite;
+  }
+
+  .mark[data-status='compacting'] .second {
+    animation-delay: 600ms;
+  }
+
+  /* One hop on every change of state, the second stroke behind the first, so
+     the colour is seen changing rather than found already changed. Last in
+     the file on purpose: it has the same specificity as the state rules above
+     and has to win over them for as long as it stands. tech.md 6.21. */
+  .mark.turned .stroke {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: hop 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .mark.turned .second {
+    animation-delay: 140ms;
+  }
+
+  @keyframes hop {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-3px);
+    }
+  }
+
   .mark:hover .glyph {
     opacity: 1;
   }
@@ -294,7 +368,9 @@
     }
 
     /* The colour still says it, and the colour does not move. */
-    .mark[data-status='waiting'] .stroke {
+    .mark[data-status='waiting'] .stroke,
+    .mark[data-status='compacting'] .stroke,
+    .mark.turned .stroke {
       animation: none;
     }
 

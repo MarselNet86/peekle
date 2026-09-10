@@ -9,19 +9,26 @@
 import type { IslandView } from '$lib/types/generated/IslandView';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
-export type RestStatus = 'idle' | 'working' | 'waiting';
+export type RestStatus = 'idle' | 'working' | 'waiting' | 'compacting';
 
 /**
- * Waiting outranks working, and working outranks everything else. A session
- * that ended or went idle says nothing: Peekle is running either way.
+ * Waiting outranks compacting, compacting outranks working, and working
+ * outranks everything else. A session that ended or went idle says nothing:
+ * Peekle is running either way.
  *
  * Only a permission request makes the mark wait now. A finished turn no longer
  * needs anybody: it holds its channel open by itself and takes what is typed
  * whenever it is typed, so pulsing at the user would be asking for something
  * that is not required. tech.md 6.5 and 6.7.
+ *
+ * A compact stands above ordinary work because it is not ordinary work: it
+ * takes minutes rather than seconds, the agent answers nothing while it runs,
+ * and the spinner of a turn over it would say the usual thing is happening.
+ * tech.md 6.21.
  */
 export function restStatus(cards: SessionCard[], awaitingPermission = false): RestStatus {
   if (awaitingPermission) return 'waiting';
+  if (cards.some((card) => card.compacting !== null)) return 'compacting';
   if (cards.some((card) => card.status === 'Working')) return 'working';
   return 'idle';
 }

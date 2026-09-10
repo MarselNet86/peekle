@@ -23,6 +23,7 @@ const card = (
   agent: null,
   mode: null,
   thinking: null,
+  compacting: null,
   updated_at: 0,
 });
 

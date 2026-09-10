@@ -673,7 +673,6 @@ fn a_record_written_twice_is_read_once() {
     assert_eq!(texts, vec!["once", "and only once", "after"]);
 }
 
-
 /// The compact of tech.md 6.21, end to end, off a session driven live on
 /// 2026-09-10: five turns, one `/compact` that was refused for being too
 /// short, and one that ran. The fixture is that session's own transcript.
@@ -715,7 +714,9 @@ mod compact {
     fn a_compact_that_never_ran_is_refused_not_running() {
         // The file as it stood at that moment: the compact that ran came
         // fifty seconds later and had not been written yet.
-        let then = FIXTURE.lines().take_while(|line| !line.contains("compact_boundary"));
+        let then = FIXTURE
+            .lines()
+            .take_while(|line| !line.contains("compact_boundary"));
 
         assert_eq!(compact_state(then, BEFORE_REFUSAL), CompactState::Refused);
     }
@@ -725,7 +726,9 @@ mod compact {
     /// before it, so the eight seconds in between carry nothing at all.
     #[test]
     fn a_compact_that_is_running_is_not_read_as_refused() {
-        let mid = FIXTURE.lines().take_while(|line| !line.contains("compact_boundary"));
+        let mid = FIXTURE
+            .lines()
+            .take_while(|line| !line.contains("compact_boundary"));
 
         assert_eq!(compact_state(mid, BEFORE_COMPACT), CompactState::Running);
     }

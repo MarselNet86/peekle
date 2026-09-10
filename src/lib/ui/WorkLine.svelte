@@ -12,11 +12,16 @@
     from = null,
     to = null,
     words = ['Working', 'Reading', 'Thinking', 'Writing', 'Checking'],
+    tone = 'work',
   }: {
     running: boolean;
     from?: number | null;
     to?: number | null;
     words?: string[];
+    /** `compact` is the same line about a different pause: not the agent
+     * working through a turn but the CLI folding the chat up, which is why
+     * it wears the colour the resting sign wears. tech.md 6.21. */
+    tone?: 'work' | 'compact';
   } = $props();
 
   let shown = $state('');
@@ -70,7 +75,7 @@
 
 <!-- One line for a whole run of calls: the mark, the clock, the word. The
      calls themselves are the how, and the how is not the dialogue. tech.md 6.12. -->
-<div class="work" class:running aria-live="polite">
+<div class="work" class:running class:compact={tone === 'compact'} aria-live="polite">
   <span class="star" aria-hidden="true">✳</span>
   {#if running}
     {#if clock}
@@ -105,6 +110,12 @@
      stands still says nothing about whether anything is happening. */
   .running .star {
     animation: pulse 1600ms ease-in-out infinite;
+  }
+
+  /* One colour for one pause, wherever it is drawn: the same orange the
+     resting sign wears while the same compact runs. tech.md 6.21. */
+  .compact .star {
+    color: var(--orange);
   }
 
   /* The work is over, so the line stops asking for attention. It stays only
