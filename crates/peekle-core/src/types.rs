@@ -454,12 +454,9 @@ pub struct ModelChoice {
 pub enum UsageWindow {
     FiveHour,
     SevenDay,
-    /// The week a plan counts for one model on its own. Optional: a plan that
-    /// meters nothing separately never reports it. tech.md 6.4.
-    SevenDayScoped,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UsageWindowStat {
     pub window: UsageWindow,
@@ -468,31 +465,16 @@ pub struct UsageWindowStat {
     /// unix seconds
     #[ts(type = "number | null")]
     pub resets_at: Option<i64>,
-    /// Whose window it is, in the server's own word: `Fable`. Only ever set
-    /// on `SevenDayScoped`, and never invented here -- which models a plan
-    /// counts apart is the server's to say. tech.md 6.4.
-    #[ts(type = "string | null")]
-    pub scope: Option<String>,
 }
 
 impl UsageWindowStat {
-    /// The constructor for a window of the account itself. Rate limit headers
-    /// are undocumented and can hand back anything, so the clamp lives here
-    /// rather than in every caller.
+    /// The only constructor. Rate limit headers are undocumented and can hand
+    /// back anything, so the clamp lives here rather than in every caller.
     pub fn new(window: UsageWindow, used_pct: f32, resets_at: Option<i64>) -> Self {
         Self {
             window,
             used_pct: clamp_pct(used_pct),
             resets_at,
-            scope: None,
-        }
-    }
-
-    /// The week of one model, named as the server named it. tech.md 6.4.
-    pub fn scoped(used_pct: f32, resets_at: Option<i64>, scope: impl Into<String>) -> Self {
-        Self {
-            scope: Some(scope.into()),
-            ..Self::new(UsageWindow::SevenDayScoped, used_pct, resets_at)
         }
     }
 }

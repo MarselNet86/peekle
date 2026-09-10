@@ -23,14 +23,8 @@ fn the_live_account_still_reports_both_windows() {
     );
     for stat in &snapshot.windows {
         println!(
-            "{:?}{}: {:.1}% resets at {:?}",
-            stat.window,
-            stat.scope
-                .as_deref()
-                .map(|name| format!(" ({name})"))
-                .unwrap_or_default(),
-            stat.used_pct,
-            stat.resets_at
+            "{:?}: {:.1}% resets at {:?}",
+            stat.window, stat.used_pct, stat.resets_at
         );
     }
 
@@ -40,21 +34,7 @@ fn the_live_account_still_reports_both_windows() {
         "the body of 6.4 stopped arriving, so R-3 came true: {:?}",
         snapshot.reason
     );
-    // Two windows are the contract. A third is the week a plan counts for one
-    // model on its own, and not every plan has one. tech.md 6.4.
-    assert!(snapshot.windows.len() >= 2, "{:?}", snapshot.windows);
-
-    if let Some(scoped) = snapshot
-        .windows
-        .iter()
-        .find(|s| s.window == UsageWindow::SevenDayScoped)
-    {
-        assert!(
-            scoped.scope.as_deref().is_some_and(|name| !name.is_empty()),
-            "a scoped window with no name is a dial with no label: {scoped:?}"
-        );
-        assert!((0.0..=100.0).contains(&scoped.used_pct), "{scoped:?}");
-    }
+    assert_eq!(snapshot.windows.len(), 2);
 
     for window in [UsageWindow::FiveHour, UsageWindow::SevenDay] {
         let stat = snapshot
