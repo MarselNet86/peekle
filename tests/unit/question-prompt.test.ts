@@ -114,3 +114,97 @@ describe('more than one question', () => {
     expect(screen.queryByText('1 / 1')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The answer that is not on the list. AskUserQuestion always lets a person
+ * write their own, and without it the only way out of four answers that do not
+ * fit is to pick the nearest one. tech.md 6.14.
+ */
+describe('an answer of your own', () => {
+  it('is offered on every question, last', () => {
+    render(QuestionPrompt, { props: { questions: [single] } });
+
+    const rows = screen.getAllByText(/^(React|Vue|Other)$/);
+    expect(rows.map((row) => row.textContent)).toEqual(['React', 'Vue', 'Other']);
+  });
+
+  /// Picking the row is not an answer: the answer is what gets written in the
+  /// field it opens. Submitting on the pick would send the word "Other".
+  it('opens a field and answers nothing by itself', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [single], onsubmit } });
+
+    expect(screen.queryByPlaceholderText('Your answer')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('Other'));
+
+    expect(screen.getByPlaceholderText('Your answer')).toBeInTheDocument();
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  it('sends what was written as the answer', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [single], onsubmit } });
+
+    await userEvent.click(screen.getByText('Other'));
+    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Svelte 5');
+    await userEvent.keyboard('{Enter}');
+
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
+      { question: 'Which framework?', labels: ['Svelte 5'] },
+    ]);
+  });
+
+  /// The list listens on the window, so a digit typed into the field used to
+  /// pick a row instead of landing in the answer. tech.md 9.
+  it('takes digits as text once the field is open', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [single], onsubmit } });
+
+    await userEvent.click(screen.getByText('Other'));
+    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Svelte 5');
+
+    expect(onsubmit).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText('Your answer')).toHaveValue('Svelte 5');
+  });
+
+  it('sends nothing while the field is empty', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [single], onsubmit } });
+
+    await userEvent.click(screen.getByText('Other'));
+    await userEvent.keyboard('{Enter}');
+    expect(onsubmit).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByPlaceholderText('Your answer'), '   ');
+    await userEvent.keyboard('{Enter}');
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  /// In a multiSelect question it is one more answer, not a replacement for
+  /// the boxes that are checked.
+  it('stands beside the boxes that are checked', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [multi], onsubmit } });
+
+    await userEvent.click(screen.getByText('Lint'));
+    await userEvent.click(screen.getByText('Other'));
+    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Typecheck');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
+      {
+        question: 'Which checks should block the merge?',
+        labels: ['Lint', 'Typecheck'],
+      },
+    ]);
+  });
+
+  /// Checking it and writing nothing is not an answer, however many boxes are
+  /// beside it: the row on its own says nothing.
+  it('is not an answer while it is empty, even when checked', async () => {
+    render(QuestionPrompt, { props: { questions: [multi] } });
+
+    await userEvent.click(screen.getByText('Other'));
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+  });
+});
