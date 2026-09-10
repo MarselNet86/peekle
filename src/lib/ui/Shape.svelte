@@ -67,7 +67,17 @@
     <div class="rest">{@render rest()}</div>
   {/if}
   {#if children}
-    <div class="content" class:shown={contentShown} style:padding-top="{notch.height}px">
+    <!-- The content starts under the cutout, and the band it steps over is
+         handed on: a view with something to put beside the notch lifts its own
+         top row into it. Both are zero on a display with no notch, so the same
+         markup lands where it always did. tech.md 6.7. -->
+    <div
+      class="content"
+      class:shown={contentShown}
+      style:padding-top="{notch.height}px"
+      style:--notch-h="{notch.height}px"
+      style:--notch-w="{hasNotch ? notch.width : 0}px"
+    >
       {@render children()}
     </div>
   {/if}
