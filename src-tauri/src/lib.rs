@@ -348,15 +348,26 @@ fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
             // A compact that ends in neither a boundary nor a refusal ends
             // here: the process behind it died, and nothing else will ever
             // take the orange sign off. tech.md 6.21.
+            let rested = state.rest_stale_work(now, STALE_AFTER_MS);
+            if rested.is_some() {
+                tracing::debug!("a session stopped reporting, putting it back to idle");
+            }
+
             let given_up = state.rest_stale_compacts(now, peekle_core::sessions::COMPACT_LIMIT_MS);
             if given_up.is_some() {
                 tracing::debug!("a compact never ended, taking the sign off it");
             }
 
-            let Some(cards) = state.rest_stale_work(now, STALE_AFTER_MS).or(given_up) else {
+            // A stop request nothing ever answered: a button that never comes
+            // back is worse than one that lets you ask twice. tech.md 6.5.
+            let unanswered = state.rest_stale_stops(now, peekle_core::sessions::STOP_WAIT_MS);
+            if unanswered.is_some() {
+                tracing::debug!("a stop request went unanswered, giving the button back");
+            }
+
+            let Some(cards) = rested.or(given_up).or(unanswered) else {
                 continue;
             };
-            tracing::debug!("a session stopped reporting, putting it back to idle");
             if let Err(err) = handle.emit(events::SESSIONS, &cards) {
                 tracing::warn!(error = %err, "failed to emit rested sessions");
             }

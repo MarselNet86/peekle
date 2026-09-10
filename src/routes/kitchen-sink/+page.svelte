@@ -244,6 +244,7 @@
     mode: null,
     thinking: null,
     compacting: null,
+    stopping: null,
     updated_at: 0,
   }));
 
@@ -545,6 +546,8 @@
       <WorkLine running={false} from={0} to={74_000} />
       <!-- The same line about the pause the CLI takes on its own. 6.21. -->
       <WorkLine running tone="compact" words={['Compacting']} from={Date.now() - 134_000} />
+      <!-- And the one it says while a stop request stands. tech.md 6.5. -->
+      <WorkLine running words={['Asked to stop']} from={Date.now() - 12_000} />
     </div>
   </section>
 

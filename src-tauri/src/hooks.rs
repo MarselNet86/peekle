@@ -287,6 +287,8 @@ impl HookSink for AppSink {
         // still Running never reported success, because PostToolUse does not
         // fire for a failed call. tech.md 6.3.
         self.state.end_turn(&session.session_id, at);
+        // Whatever was asked of this turn is over with it. tech.md 6.5.
+        self.state.end_stop(&session.session_id);
         self.state
             .set_session_status(&session, SessionStatus::Idle, at);
 
@@ -470,6 +472,13 @@ pub(crate) fn refresh_session(
             tracing::debug!(path, "no transcript to read the words out of");
             return;
         };
+        // Before anything that can return: the two guards below are about the
+        // dialogue, and whether a compact is over is a different question the
+        // same text answers. A refused compact on a chat with nothing said in
+        // it yet leaves a file with no rows at all, and the orange sign used
+        // to stand on it until the ten minute ceiling. tech.md 6.21.
+        settle_compact(&app, &state, &session_id, &text);
+
         let Some(card) =
             peekle_core::transcripts::card_from_lines(text.lines(), &session_id, now_ms())
         else {
@@ -504,10 +513,6 @@ pub(crate) fn refresh_session(
         if let Err(err) = app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
-
-        // The same text answers the other question a compacting session has:
-        // whether it still is. tech.md 6.21.
-        settle_compact(&app, &state, &session_id, &text);
     });
 }
 
@@ -691,6 +696,7 @@ mod tests {
             mode: None,
             thinking: None,
             compacting: None,
+            stopping: None,
             updated_at: 0,
         }
     }

@@ -107,9 +107,29 @@ export function stopAvailable(state: {
   hasPrompt: boolean;
   owned: boolean;
   canContinue: boolean;
+  /** When the island already asked this chat to stop. A second press is a
+   * second message and a second turn in somebody's chat, so the button takes
+   * one press and waits. tech.md 6.5. */
+  asked?: number | null;
 }): boolean {
+  if (state.asked != null) return false;
   return state.status === 'Working' && !state.hasPrompt && (state.owned || state.canContinue);
 }
+
+/** Why a second press sends nothing. A press answered by silence reads as a
+ * broken button, and a press answered by a second message starts a second
+ * turn in somebody else's chat. tech.md 6.5. */
+export const STOP_ASKED_NOTE = {
+  fact: 'Peekle has already asked this chat to stop.',
+  how: 'It runs in another app, so the request waits until the agent reads it. Asking again would only queue a second message.',
+};
+
+/** The one word the work line says while a stop request stands.
+ *
+ * Not `Stopping`: the agent may finish its tool call first, or ignore the
+ * request altogether, and the island does not make promises it cannot keep.
+ * That it was asked stays true either way. tech.md 6.5 and 6.12. */
+export const ASKED_TO_STOP = 'Asked to stop';
 
 /** What one attempt at continuing a chat came back with. */
 export type ContinueOutcome =

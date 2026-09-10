@@ -1003,6 +1003,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         mode: None,
         thinking: None,
         compacting: None,
+        stopping: None,
         agent: None,
         updated_at: 2,
     }]);
@@ -1653,6 +1654,38 @@ mod compacting {
             .find(|card| card.session.session_id == "other")
             .expect("the other card");
         assert_eq!(waiting.entries[0].state, EntryState::Running);
+    }
+
+    /// A session that is over is running nothing. The sign is painted from
+    /// every card there is, so one card that ended mid compact kept the whole
+    /// island orange until the ten minute ceiling. tech.md 6.21.
+    #[test]
+    fn a_session_that_ended_carries_no_compact_and_no_request() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.start_compact(session.clone(), 1_000, true);
+        registry.start_stop(&session.session_id, 1_000);
+
+        registry.set_status(&session.session_id, SessionStatus::Ended, 2_000);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.compacting, None);
+        assert_eq!(card.stopping, None);
+    }
+
+    /// And an ordinary move to rest leaves both alone: a compact somebody
+    /// asked for on a chat that is not working is the ordinary case.
+    #[test]
+    fn resting_a_session_leaves_the_compact_running() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.start_compact(session.clone(), 1_000, true);
+
+        registry.set_status(&session.session_id, SessionStatus::Idle, 2_000);
+
+        assert!(registry.cards()[0].compacting.is_some());
     }
 
     /// `PreCompact` fires before the CLI decides there is anything to

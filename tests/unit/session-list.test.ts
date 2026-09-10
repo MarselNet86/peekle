@@ -27,6 +27,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   mode: null,
   thinking: null,
   compacting: null,
+  stopping: null,
   updated_at: 0,
 });
 
@@ -63,6 +64,35 @@ describe('the stop button', () => {
     expect(
       stopAvailable({ status: 'Working', hasPrompt: true, owned: true, canContinue: false }),
     ).toBe(false);
+  });
+
+  /// A stop into a chat Peekle does not own is a message, and a second press
+  /// is a second message and a second turn in somebody's chat. One press,
+  /// then wait. tech.md 6.5.
+  it('takes one press while the request it sent is still standing', () => {
+    const working = {
+      status: 'Working',
+      hasPrompt: false,
+      owned: false,
+      canContinue: true,
+    } as const;
+
+    expect(stopAvailable({ ...working, asked: null })).toBe(true);
+    expect(stopAvailable({ ...working, asked: 1_789_000_000_000 })).toBe(false);
+  });
+
+  it('never asks twice, whatever else is true', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...statuses),
+        fc.boolean(),
+        fc.boolean(),
+        fc.boolean(),
+        (status, hasPrompt, owned, canContinue) => {
+          expect(stopAvailable({ status, hasPrompt, owned, canContinue, asked: 1 })).toBe(false);
+        },
+      ),
+    );
   });
 });
 
@@ -134,6 +164,7 @@ describe('continuing a chat', () => {
     mode: null,
     thinking: null,
     compacting: null,
+    stopping: null,
     updated_at: 0,
   });
 
