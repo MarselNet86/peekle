@@ -23,10 +23,30 @@ export const ASK_PIXEL = 2;
 
 /**
  * The glyph as a bitmap, top row first: `#` is a pixel, anything else is the
- * gap around one. The bowl, its right side falling to the stem, then the gap
- * and the dot -- the same seven pixels a small bitmap font spends on `?`.
+ * gap around one.
+ *
+ * Five wide, and that is the whole of why it reads straight. On an even width
+ * the stem cannot sit in the middle of the bowl -- it lands half a pixel off
+ * and the glyph leans, which is exactly how the four wide one looked. Odd
+ * width puts the stem and the dot on the centre column, and the bowl falls
+ * into it one step at a time: the shape a small bitmap font draws.
  */
-export const ASK_ROWS = ['.##.', '#..#', '...#', '..#.', '....', '..#.'] as const;
+export const ASK_ROWS = ['.###.', '#...#', '...#.', '..#..', '.....', '..#..'] as const;
+
+/** How long one pixel waits behind the one before it, assembling and coming
+ * apart again. Slow enough to be seen laying itself out from across a screen,
+ * quick enough that the glyph stands whole for most of the cycle. */
+export const ASK_STEP_MS = 110;
+
+/** The whole cycle: it lays itself out, stands, comes apart in the same order,
+ * and the box is empty for a beat before it starts again. */
+export const ASK_CYCLE_MS = 2600;
+
+/** How much of the cycle one pixel stays on for, as the percentage the
+ * stylesheet writes into its keyframes. Everything below is checked against
+ * it: the glyph has to stand whole for a moment, and come fully apart before
+ * the next round starts. */
+export const ASK_ON_PCT = 58;
 
 /** One drawn pixel, by the corner it starts at, in box units. */
 export type AskPixel = { x: number; y: number };
@@ -45,5 +65,11 @@ function laid(rows: readonly string[]): AskPixel[] {
   );
 }
 
-/** Every pixel of the glyph, left to right and top to bottom. */
+/**
+ * Every pixel of the glyph, left to right and top to bottom.
+ *
+ * The order is the order it assembles in and the order it comes apart in --
+ * the bowl first, then the stem, then the dot -- so the index of a pixel here
+ * is the delay it is drawn with. tech.md 6.7.
+ */
 export const ASK_PIXELS: readonly AskPixel[] = laid(ASK_ROWS);

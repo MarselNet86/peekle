@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
-  import { ASK_PIXEL, ASK_PIXELS } from '$lib/logic/ask-sign';
+  import { ASK_CYCLE_MS, ASK_PIXEL, ASK_PIXELS, ASK_STEP_MS } from '$lib/logic/ask-sign';
   import type { RestStatus } from '$lib/logic/rest';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import { REST_SIDE } from '$lib/logic/shape';
@@ -97,20 +97,27 @@
       aria-hidden="true"
     >
       {#if asking}
-        <!-- Whole pixels, drawn from `logic/ask-sign.ts`: at eight by twelve a
+        <!-- Whole pixels, drawn from `logic/ask-sign.ts`: at ten by twelve a
              drawn curve turns to mush, and a bitmap is what a terminal would
-             have written anyway. It is swapped in rather than faded in, the
-             way the spinner replaces a frame, and it never moves -- the breath
-             is on the colour, and a pixel shifted by a fraction is a blurred
-             pixel. tech.md 6.7. -->
-        <g class="ask" shape-rendering="crispEdges">
-          {#each ASK_PIXELS as pixel (`${pixel.x},${pixel.y}`)}
+             have written anyway. Nothing here moves and nothing fades: a pixel
+             shifted or dimmed by a fraction is a blurred pixel. What it does
+             instead is lay itself out one pixel at a time and come apart in
+             the same order, which is a question being asked and taken back
+             rather than a light breathing. tech.md 6.7. -->
+        <g
+          class="ask"
+          shape-rendering="crispEdges"
+          style:--ask-step="{ASK_STEP_MS}ms"
+          style:--ask-cycle="{ASK_CYCLE_MS}ms"
+        >
+          {#each ASK_PIXELS as pixel, index (`${pixel.x},${pixel.y}`)}
             <rect
               x={pixel.x}
               y={pixel.y}
               width={ASK_PIXEL}
               height={ASK_PIXEL}
               fill="currentColor"
+              style:--i={index}
             />
           {/each}
         </g>
@@ -313,7 +320,30 @@
   .mark[data-status='waiting'] .glyph {
     opacity: 1;
     color: var(--waiting);
-    animation: breathe 1600ms ease-in-out infinite;
+  }
+
+  /* The glyph lays itself out a pixel at a time and takes itself apart in the
+     same order, in the order `ASK_PIXELS` is written: bowl, stem, dot. Each
+     pixel runs one cycle a step behind the one before it, so the wave through
+     the delays is the assembly, and the same wave through the far end of each
+     pixel's own span is the disassembly. `steps(1, end)` is what makes them
+     cubes rather than lights: a pixel is on or it is off. tech.md 6.7. */
+  .mark[data-status='waiting'] .ask rect {
+    /* Off until this pixel's turn comes, which is what the delay buys. */
+    opacity: 0;
+    animation: cube var(--ask-cycle) steps(1, end) infinite;
+    animation-delay: calc(var(--i) * var(--ask-step));
+  }
+
+  /* 58% is `ASK_ON_PCT`, and the arithmetic that keeps the glyph whole for a
+     beat and empty for a beat is checked against it. */
+  @keyframes cube {
+    0% {
+      opacity: 1;
+    }
+    58% {
+      opacity: 0;
+    }
   }
 
   @keyframes wave {
@@ -388,6 +418,13 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mark[data-status='waiting'] .glyph {
+      animation: none;
+    }
+
+    /* Nothing lays itself out; the whole question stands, which is the thing
+       the motion was there to say. */
+    .mark[data-status='waiting'] .ask rect {
+      opacity: 1;
       animation: none;
     }
 
