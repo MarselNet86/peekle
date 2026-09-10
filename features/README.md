@@ -11,22 +11,48 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                       | Contract            |
-| ------- | ----------------------------------------------------------------------------- | ------------------- |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)    | 6.15, 6.20, 9       |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)             | 6.5, 6.11           |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)               | 6.5, 6.11           |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                      | 6.5, 9              |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)           | 6.12, 6.15, 6.20, 9 |
-| v64     | [Live mode switching](#v64--live-mode-switching)                              | 6.19, 9             |
-| v63     | [Permission mode](#v63--permission-mode)                                      | 6.3, 6.5, 6.19, 9   |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it) | 6.4                 |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)            | 6.3, 6.12, 6.16, 9  |
-| v60     | [Composer layout](#v60--composer-layout)                                      | 6.12, 6.15, 9       |
-| v59     | [Permission panel](#v59--permission-panel)                                    | 6.3, 6.7, 9         |
-| v58     | [Usage badge](#v58--usage-badge)                                              | 6.8, 6.10, 6.18, 9  |
-| v57     | [Work line](#v57--work-line)                                                  | 6.12, 9             |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                    | 6.5, 6.15, 9        |
+| Version | Feature                                                                        | Contract            |
+| ------- | ------------------------------------------------------------------------------ | ------------------- |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch) | 6.7, 6.12, 9        |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)     | 6.15, 6.20, 9       |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)              | 6.5, 6.11           |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                | 6.5, 6.11           |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                       | 6.5, 9              |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)            | 6.12, 6.15, 6.20, 9 |
+| v64     | [Live mode switching](#v64--live-mode-switching)                               | 6.19, 9             |
+| v63     | [Permission mode](#v63--permission-mode)                                       | 6.3, 6.5, 6.19, 9   |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)  | 6.4                 |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)             | 6.3, 6.12, 6.16, 9  |
+| v60     | [Composer layout](#v60--composer-layout)                                       | 6.12, 6.15, 9       |
+| v59     | [Permission panel](#v59--permission-panel)                                     | 6.3, 6.7, 9         |
+| v58     | [Usage badge](#v58--usage-badge)                                               | 6.8, 6.10, 6.18, 9  |
+| v57     | [Work line](#v57--work-line)                                                   | 6.12, 9             |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                     | 6.5, 6.15, 9        |
+
+## v74 — The head moves up beside the notch
+
+2026-09-10
+
+![The head of a dialogue](shots/head-band.png)
+
+![The gear of the list](shots/head-band-list.png)
+
+The island drew nothing in the band beside the camera cutout. The cutout is a
+hole in the middle of the top edge, but the pixels either side of it are real
+screen, and the content was pushed below all of it — a black strip the full
+width of the shape, while the conversation underneath was short of room.
+
+The top row of each view now stands in that band: the way back with the
+project name on the left, the usage dials on the right, the gear of the
+session list where the gear already was. The gap between the two ends is the
+cutout itself, and each end is cut off at its own half of the band, so a long
+project name ends in an ellipsis rather than disappearing into the hole —
+nothing drawn across it can be seen at all. On a display with no notch both
+numbers are zero and the row stands where it always did.
+
+The feed keeps the whole band, and its bottom padding grew from 8 to 14 where
+the field stood on the kerb. Measured on a 14 inch: the cutout is 185 by 34
+points, which leaves 173 beside it and the two dials take 128.
 
 ## v68 — The answer stands where you look
 
