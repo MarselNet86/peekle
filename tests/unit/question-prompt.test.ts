@@ -199,6 +199,25 @@ describe('an answer of your own', () => {
     ]);
   });
 
+  /// Enter is the whole gesture, and it means the same thing next to a
+  /// Submit button as it does without one: send this answer.
+  it('sends on Enter even where a Submit button stands beside it', async () => {
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [multi], onsubmit } });
+
+    await userEvent.click(screen.getByText('Lint'));
+    await userEvent.click(screen.getByText('Other'));
+    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Typecheck');
+    await userEvent.keyboard('{Enter}');
+
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
+      {
+        question: 'Which checks should block the merge?',
+        labels: ['Lint', 'Typecheck'],
+      },
+    ]);
+  });
+
   /// Checking it and writing nothing is not an answer, however many boxes are
   /// beside it: the row on its own says nothing.
   it('is not an answer while it is empty, even when checked', async () => {
