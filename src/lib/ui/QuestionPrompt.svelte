@@ -134,7 +134,12 @@
        filled in and Enter in a field means done everywhere else in the
        product. tech.md 6.14. -->
   {#if writing}
-    <PromptInput bind:value={own} placeholder="Your answer" onsubmit={() => advance()} />
+    <PromptInput
+      compact
+      bind:value={own}
+      placeholder="Type your answer…"
+      onsubmit={() => advance()}
+    />
   {/if}
   <!-- Checked boxes need an explicit confirm: unlike a click, nothing about
        checking one says the user is done choosing. tech.md 6.14. -->

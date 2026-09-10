@@ -8,6 +8,7 @@
     placeholder = '',
     disabled = false,
     working = false,
+    compact = false,
     tools,
     onsubmit,
     onstop,
@@ -17,6 +18,12 @@
     value?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** One line with its button beside it, for a field that is part of
+     * something else rather than the composer of a message: the answer of
+     * your own on a question stands inside its own row, and a capsule with a
+     * tools line under it would be taller than the row it sits in.
+     * tech.md 6.14. */
+    compact?: boolean;
     /** A turn is running and can be ended from here. The one button turns
      * into the way to end it, which is where Claude Code puts it too: no
      * second control appears, and none has to be found. tech.md 6.5. */
@@ -78,8 +85,9 @@
   }
 </script>
 
-<!-- One capsule: the text on top, its controls under it. tech.md 6.15. -->
-<div class="capsule" class:off={disabled}>
+<!-- One capsule: the text on top, its controls under it. Compact puts the
+     one control beside the text instead. tech.md 6.15 and 6.14. -->
+<div class="capsule" class:off={disabled} class:compact>
   <textarea
     bind:this={field}
     bind:value
@@ -90,41 +98,49 @@
     onkeydown={keydown}
     onpaste={paste}></textarea>
 
-  <div class="tools">
-    <div class="left">
-      {#if tools}{@render tools()}{/if}
+  {#if compact}
+    {@render sendButton()}
+  {:else}
+    <div class="tools">
+      <div class="left">
+        {#if tools}{@render tools()}{/if}
+      </div>
+      {@render sendButton()}
     </div>
-    <!-- mousedown is swallowed so the caret stays where the user left it:
-         pressing send must not take the field's focus away. tech.md 6.7. -->
-    <button
-      class="send"
-      class:stop={stops}
-      type="button"
-      disabled={stops ? false : !sendable}
-      aria-label={stops ? 'Stop' : 'Send'}
-      onmousedown={(event) => event.preventDefault()}
-      onclick={() => (stops ? onstop?.() : send())}
-    >
-      {#if stops}
-        <!-- The square everything else uses for stop, filled and centred. -->
-        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-          <rect x="4" y="4" width="6" height="6" rx="1.2" fill="currentColor" />
-        </svg>
-      {:else}
-        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-          <path
-            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      {/if}
-    </button>
-  </div>
+  {/if}
 </div>
+
+{#snippet sendButton()}
+  <!-- mousedown is swallowed so the caret stays where the user left it:
+       pressing send must not take the field's focus away. tech.md 6.7. -->
+  <button
+    class="send"
+    class:stop={stops}
+    type="button"
+    disabled={stops ? false : !sendable}
+    aria-label={stops ? 'Stop' : 'Send'}
+    onmousedown={(event) => event.preventDefault()}
+    onclick={() => (stops ? onstop?.() : send())}
+  >
+    {#if stops}
+      <!-- The square everything else uses for stop, filled and centred. -->
+      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1.2" fill="currentColor" />
+      </svg>
+    {:else}
+      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+        <path
+          d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5l4 4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    {/if}
+  </button>
+{/snippet}
 
 <style>
   .capsule {
@@ -163,6 +179,31 @@
 
   .capsule.off {
     opacity: 0.5;
+  }
+
+  /* One line, its button beside it. The field belongs to the row it stands
+     in, so it is the size of a row and not the size of a composer: the same
+     capsule with a tools line under it was three times the height of the
+     answer it takes. tech.md 6.14. */
+  .capsule.compact {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 12px;
+    padding: 5px 5px 5px 10px;
+  }
+
+  .capsule.compact textarea {
+    font-size: 13px;
+    line-height: 19px;
+    /* Four lines at most: a written answer that long has stopped being an
+       answer to a multiple-choice question. */
+    max-height: 76px;
+  }
+
+  .capsule.compact .send {
+    width: 22px;
+    height: 22px;
   }
 
   textarea {

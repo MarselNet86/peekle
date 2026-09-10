@@ -134,10 +134,10 @@ describe('an answer of your own', () => {
     const onsubmit = vi.fn();
     render(QuestionPrompt, { props: { questions: [single], onsubmit } });
 
-    expect(screen.queryByPlaceholderText('Your answer')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Type your answer…')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Other'));
 
-    expect(screen.getByPlaceholderText('Your answer')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Type your answer…')).toBeInTheDocument();
     expect(onsubmit).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe('an answer of your own', () => {
     render(QuestionPrompt, { props: { questions: [single], onsubmit } });
 
     await userEvent.click(screen.getByText('Other'));
-    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Svelte 5');
+    await userEvent.type(screen.getByPlaceholderText('Type your answer…'), 'Svelte 5');
     await userEvent.keyboard('{Enter}');
 
     expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
@@ -161,10 +161,10 @@ describe('an answer of your own', () => {
     render(QuestionPrompt, { props: { questions: [single], onsubmit } });
 
     await userEvent.click(screen.getByText('Other'));
-    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Svelte 5');
+    await userEvent.type(screen.getByPlaceholderText('Type your answer…'), 'Svelte 5');
 
     expect(onsubmit).not.toHaveBeenCalled();
-    expect(screen.getByPlaceholderText('Your answer')).toHaveValue('Svelte 5');
+    expect(screen.getByPlaceholderText('Type your answer…')).toHaveValue('Svelte 5');
   });
 
   it('sends nothing while the field is empty', async () => {
@@ -175,7 +175,7 @@ describe('an answer of your own', () => {
     await userEvent.keyboard('{Enter}');
     expect(onsubmit).not.toHaveBeenCalled();
 
-    await userEvent.type(screen.getByPlaceholderText('Your answer'), '   ');
+    await userEvent.type(screen.getByPlaceholderText('Type your answer…'), '   ');
     await userEvent.keyboard('{Enter}');
     expect(onsubmit).not.toHaveBeenCalled();
   });
@@ -188,7 +188,7 @@ describe('an answer of your own', () => {
 
     await userEvent.click(screen.getByText('Lint'));
     await userEvent.click(screen.getByText('Other'));
-    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Typecheck');
+    await userEvent.type(screen.getByPlaceholderText('Type your answer…'), 'Typecheck');
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
@@ -207,7 +207,7 @@ describe('an answer of your own', () => {
 
     await userEvent.click(screen.getByText('Lint'));
     await userEvent.click(screen.getByText('Other'));
-    await userEvent.type(screen.getByPlaceholderText('Your answer'), 'Typecheck');
+    await userEvent.type(screen.getByPlaceholderText('Type your answer…'), 'Typecheck');
     await userEvent.keyboard('{Enter}');
 
     expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
