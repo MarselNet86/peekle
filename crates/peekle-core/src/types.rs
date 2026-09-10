@@ -52,6 +52,11 @@ pub struct PromptRequest {
     pub session: SessionRef,
     /// One line, for example "Claude finished".
     pub title: String,
+    /// The tool the request is about, as the hook named it. `None` for a
+    /// request that is not about one, like the end of a turn. It is what
+    /// says a later `PostToolUse` is about this very request, and so that
+    /// the question has been answered somewhere else. tech.md 6.14.
+    pub tool: Option<String>,
     /// last_assistant_message, truncated to 2000 characters.
     pub last_message: Option<String>,
     /// Tool name and input preview, 400 characters.
@@ -141,6 +146,13 @@ pub enum PromptOutcome {
     Dismissed,
     TimedOut,
     Bypassed,
+    /// The question was answered somewhere else. Claude Code shows its own
+    /// question without waiting for the hook, so an answer given there runs
+    /// the tool while the island is still holding the panel up. The body is
+    /// empty, like every outcome that is not an answer of ours, but the
+    /// session stays `Working`: the agent is not waiting on anything.
+    /// tech.md 6.14.
+    AnsweredElsewhere,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

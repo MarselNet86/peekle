@@ -39,6 +39,7 @@ const question: PromptRequest = {
   kind: 'Question',
   session: { session_id: 's', cwd: '/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Which framework?',
+  tool: 'AskUserQuestion',
   last_message: null,
   detail: null,
   options: [],

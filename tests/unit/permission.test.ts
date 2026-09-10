@@ -17,6 +17,7 @@ const request: PromptRequest = {
   kind: 'Permission',
   session: { session_id: 's', cwd: '/Users/x/peekle', project: 'peekle', pid: null, tty: null },
   title: 'Bash needs permission',
+  tool: 'Bash',
   last_message: null,
   detail: '{"command":"rm -rf target"}',
   options: [

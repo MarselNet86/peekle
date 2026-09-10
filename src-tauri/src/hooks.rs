@@ -162,6 +162,51 @@ impl AppSink {
             self.emit_sessions(cards);
         }
     }
+
+    /// Takes the panel down when the tool it is asking about has already run.
+    ///
+    /// Claude Code puts its own question on screen without waiting for the
+    /// hook, so the answer can be given there while the island still holds
+    /// the panel up. The tool runs, `PostToolUse` arrives, and what stands on
+    /// screen is a question about something already over -- for five minutes,
+    /// until `permission_wait_secs` gives up on it. tech.md 6.14.
+    fn settle_what_ran_elsewhere(&self, payload: &Value) {
+        let Some(request) = self.state.active_prompt() else {
+            return;
+        };
+        if !answered_elsewhere(payload, &request) {
+            return;
+        }
+
+        tracing::debug!(
+            session = request.session.session_id,
+            tool = request.tool.as_deref().unwrap_or_default(),
+            "the tool ran without us, so the panel comes down"
+        );
+        crate::commands::settle(
+            &self.app,
+            &self.state,
+            &request.id,
+            PromptOutcome::AnsweredElsewhere,
+        );
+    }
+}
+
+/// Whether this feed payload says the standing request has been answered
+/// somewhere else.
+///
+/// Both marks are needed and neither is enough on its own. The session,
+/// because another chat finishing a tool says nothing about this one. The
+/// tool name, because a turn runs tools in parallel, and a different one
+/// finishing while this question waits is the ordinary case, not a reason to
+/// take the question away from someone still reading it. tech.md 6.14.
+fn answered_elsewhere(payload: &Value, request: &PromptRequest) -> bool {
+    let field = |key: &str| payload.get(key).and_then(Value::as_str);
+
+    field("hook_event_name") == Some("PostToolUse")
+        && field("session_id") == Some(request.session.session_id.as_str())
+        && request.tool.is_some()
+        && field("tool_name") == request.tool.as_deref()
 }
 
 impl HookSink for AppSink {
@@ -257,6 +302,10 @@ impl HookSink for AppSink {
     /// all land here. tech.md 6.1.
     fn on_feed(&self, payload: &Value) {
         self.note_mode(payload);
+        // Before the event is read into the feed: what it settles is a
+        // question standing on screen, and it settles it whatever else the
+        // event turns out to carry. tech.md 6.14.
+        self.settle_what_ran_elsewhere(payload);
         if let Some(event) = FeedEvent::from_payload(payload) {
             let cards = self.state.apply_feed(event, now_ms());
             self.emit_sessions(cards);
@@ -453,6 +502,90 @@ fn parse_tasks(payload: &Value) -> Vec<TaskItem> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The captured `PostToolUse`, as a live session sends it. Rule 6: the
+    /// payload that decides this is not written by hand.
+    fn captured(name: &str) -> Value {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../fixtures/hooks")
+            .join(format!("{name}.jsonl"));
+        let raw = std::fs::read_to_string(&path).expect("fixture");
+        let line = raw
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .expect("a line");
+        serde_json::from_str(line).expect("json")
+    }
+
+    fn standing(session: &str, tool: Option<&str>) -> PromptRequest {
+        PromptRequest {
+            id: "p".into(),
+            kind: peekle_core::types::PromptKind::Question,
+            session: peekle_core::types::SessionRef {
+                session_id: session.into(),
+                cwd: "/tmp".into(),
+                project: "tmp".into(),
+                pid: None,
+                tty: None,
+            },
+            title: "t".into(),
+            tool: tool.map(str::to_string),
+            last_message: None,
+            detail: None,
+            options: Vec::new(),
+            questions: Vec::new(),
+            allow_free_text: false,
+            created_at: 0,
+            expires_at: 0,
+        }
+    }
+
+    /// The bug: Claude Code shows its own question without waiting for the
+    /// hook, so the answer can be given there while the panel is still up.
+    /// The tool runs, and this is the event that says so. tech.md 6.14.
+    #[test]
+    fn the_tool_finishing_settles_the_question_it_was_asked_for() {
+        let payload = captured("post_tool_use");
+        let session = payload["session_id"].as_str().expect("a session");
+        let tool = payload["tool_name"].as_str().expect("a tool");
+
+        assert!(answered_elsewhere(&payload, &standing(session, Some(tool))));
+    }
+
+    /// A turn runs tools in parallel, and chats run side by side. Neither is
+    /// a reason to take a question off the screen of someone reading it.
+    #[test]
+    fn another_tool_or_another_chat_settles_nothing() {
+        let payload = captured("post_tool_use");
+        let session = payload["session_id"].as_str().expect("a session");
+        let tool = payload["tool_name"].as_str().expect("a tool");
+
+        assert!(!answered_elsewhere(
+            &payload,
+            &standing("somebody else", Some(tool))
+        ));
+        assert!(!answered_elsewhere(
+            &payload,
+            &standing(session, Some("Write"))
+        ));
+        // A request about no tool at all -- the end of a turn -- is not
+        // finished by any tool finishing.
+        assert!(!answered_elsewhere(&payload, &standing(session, None)));
+    }
+
+    /// Only the event that means the tool is over. The call starting is the
+    /// moment the question is asked, not the moment it stops mattering.
+    #[test]
+    fn the_call_starting_settles_nothing() {
+        let payload = captured("pre_tool_use");
+        let session = payload["session_id"].as_str().expect("a session");
+        let tool = payload["tool_name"].as_str().expect("a tool");
+
+        assert!(!answered_elsewhere(
+            &payload,
+            &standing(session, Some(tool))
+        ));
+    }
 
     #[test]
     fn reads_todos_into_tasks() {

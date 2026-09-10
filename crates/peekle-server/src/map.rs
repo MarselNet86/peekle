@@ -104,7 +104,12 @@ pub fn permission_request(
     now_ms: i64,
     expires_ms: i64,
 ) -> PromptRequest {
-    let tool = string_field(payload, "tool_name").unwrap_or_else(|| "a tool".to_string());
+    // What the hook called it, and what to call it when the hook did not.
+    // The name is kept on the request: a `PostToolUse` for the same tool in
+    // the same session is how the island learns this very question has been
+    // answered somewhere else. tech.md 6.14.
+    let named = string_field(payload, "tool_name");
+    let tool = named.clone().unwrap_or_else(|| "a tool".to_string());
 
     // `AskUserQuestion` needs its own questions answered, not a generic
     // allow/deny: an allow alone never answers it, only `updatedInput` does,
@@ -124,6 +129,7 @@ pub fn permission_request(
                 kind: PromptKind::Question,
                 session: session_ref(payload),
                 title,
+                tool: named,
                 last_message: None,
                 detail: None,
                 options: Vec::new(),
@@ -148,6 +154,7 @@ pub fn permission_request(
         kind: PromptKind::Permission,
         session: session_ref(payload),
         title: format!("{tool} needs permission"),
+        tool: named,
         last_message: None,
         detail,
         options: vec![
@@ -342,6 +349,9 @@ mod tests {
             PromptOutcome::Dismissed,
             PromptOutcome::TimedOut,
             PromptOutcome::Bypassed,
+            // Answered in Claude Code itself: the tool has already run, and
+            // anything sent now would be an answer to nobody. tech.md 6.14.
+            PromptOutcome::AnsweredElsewhere,
         ] {
             assert_eq!(permission_body(&outcome, &permission()), json!({}));
         }

@@ -14,6 +14,13 @@ id: string, kind: PromptKind, session: SessionRef,
  */
 title: string, 
 /**
+ * The tool the request is about, as the hook named it. `None` for a
+ * request that is not about one, like the end of a turn. It is what
+ * says a later `PostToolUse` is about this very request, and so that
+ * the question has been answered somewhere else. tech.md 6.14.
+ */
+tool: string | null, 
+/**
  * last_assistant_message, truncated to 2000 characters.
  */
 last_message: string | null, 
