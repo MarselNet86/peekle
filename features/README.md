@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract            |
 | ------- | ------------------------------------------------------------------------------------------- | ------------------- |
+| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                 | 9                   |
 | v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)  | 6.5, 6.15           |
 | v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.5, 6.21 |
 | v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9    |
@@ -33,6 +34,21 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9        |
+
+## v80.1 — The app icon is the sign
+
+2026-09-10
+
+![The app icon at four sizes](shots/app-icon.png)
+
+The icon in Finder was a green dot, which the product uses nowhere. It is the
+two strokes now, the same `//` the resting island carries: same slant, same
+ratio of stroke to length, `--brand` green on the island's own black.
+
+The mark is drawn once in `src-tauri/icons/icon.svg` and rasterised by
+`node scripts/make-icon.mjs`, which writes every size Tauri lists and hands the
+full iconset to `iconutil`. Edit the SVG, run the script; nothing in the icon
+folder is hand-painted.
 
 ## v79 — A slash command answers its own question
 
