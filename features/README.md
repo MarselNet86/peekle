@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract             |
 | ------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                   | 6.12, 9              |
 | v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                 | 9                    |
 | v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                       | 6.3, 6.5, 6.11, 6.21 |
 | v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)  | 6.5, 6.15            |
@@ -35,6 +36,37 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9         |
+
+## v80.2 — The empty chat carries the sign
+
+2026-09-10
+
+![A fresh chat, with the sign where the emptiness was](shots/empty-chat.png)
+
+A chat with nothing in it yet was half a window of black over the field. There
+was nothing in it to say the window was alive and waiting on the first word,
+and a large blank area above an input reads as a screen that did not finish
+drawing.
+
+It carries the product's own mark now: the same two strokes the resting island
+and the app icon wear, `--brand` green at a sixth of full strength, in the
+middle of the room the feed has to itself and a touch above its arithmetic
+centre, because the composer weighs the bottom down.
+
+A line stands under the strokes: `Let's begin`. The sign says whose window this
+is, and it does not say what the window is waiting for. The words are dimmer
+than the field's own placeholder, because they are the last thing read in an
+empty room rather than the first, and they belong to the route rather than to
+the primitive -- `Sign` draws no copy of its own.
+
+The sign stands still. Movement in the island means the agent is working, and
+here nobody is. It is gone the moment the feed has a line — a reply, or the
+work line a turn puts there from its first second — so the condition is simply
+that there are no rows at all.
+
+The geometry now lives in one place, `src/lib/logic/sign.ts`, and both the
+resting mark and the new `Sign` primitive draw from it. The app icon keeps its
+own SVG: nothing in a webview can be rasterised into an `.icns`.
 
 ## v80.1 — The app icon is the sign
 

@@ -19,6 +19,7 @@
   import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
+  import Sign from '$lib/ui/Sign.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
@@ -311,6 +312,16 @@
           <RestMark status="idle" {pct} onopen={() => {}} />
         </div>
       {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>Sign</h2>
+    <!-- The same two strokes the mark and the app icon wear, standing still
+         where a dialogue has nothing in it yet. On the island's own black,
+         because that is the only surface it appears on. tech.md 9. -->
+    <div class="sign-stage">
+      <Sign caption="Let's begin" />
     </div>
   </section>
 
@@ -853,6 +864,18 @@
      wider than the mark beside it. tech.md 6.18. */
   .mark-stage.wide {
     width: 168px;
+  }
+
+  /* The room an empty dialogue gives the sign, at the proportions the feed
+     leaves for it. */
+  .sign-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 320px;
+    height: 140px;
+    background: var(--notch);
+    border-radius: 10px;
   }
 
   .row {
