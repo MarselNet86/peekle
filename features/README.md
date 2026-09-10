@@ -11,23 +11,52 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                        | Contract            |
-| ------- | ------------------------------------------------------------------------------ | ------------------- |
-| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch) | 6.7, 6.12, 9        |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)     | 6.15, 6.20, 9       |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)              | 6.5, 6.11           |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)                | 6.5, 6.11           |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                       | 6.5, 9              |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)            | 6.12, 6.15, 6.20, 9 |
-| v64     | [Live mode switching](#v64--live-mode-switching)                               | 6.19, 9             |
-| v63     | [Permission mode](#v63--permission-mode)                                       | 6.3, 6.5, 6.19, 9   |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)  | 6.4                 |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)             | 6.3, 6.12, 6.16, 9  |
-| v60     | [Composer layout](#v60--composer-layout)                                       | 6.12, 6.15, 9       |
-| v59     | [Permission panel](#v59--permission-panel)                                     | 6.3, 6.7, 9         |
-| v58     | [Usage badge](#v58--usage-badge)                                               | 6.8, 6.10, 6.18, 9  |
-| v57     | [Work line](#v57--work-line)                                                   | 6.12, 9             |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                     | 6.5, 6.15, 9        |
+| Version | Feature                                                                                | Contract            |
+| ------- | -------------------------------------------------------------------------------------- | ------------------- |
+| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out) | 6.3, 6.7, 6.14, 9   |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)         | 6.7, 6.12, 9        |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)             | 6.15, 6.20, 9       |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                      | 6.5, 6.11           |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                        | 6.5, 6.11           |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                               | 6.5, 9              |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                    | 6.12, 6.15, 6.20, 9 |
+| v64     | [Live mode switching](#v64--live-mode-switching)                                       | 6.19, 9             |
+| v63     | [Permission mode](#v63--permission-mode)                                               | 6.3, 6.5, 6.19, 9   |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)          | 6.4                 |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                     | 6.3, 6.12, 6.16, 9  |
+| v60     | [Composer layout](#v60--composer-layout)                                               | 6.12, 6.15, 9       |
+| v59     | [Permission panel](#v59--permission-panel)                                             | 6.3, 6.7, 9         |
+| v58     | [Usage badge](#v58--usage-badge)                                                       | 6.8, 6.10, 6.18, 9  |
+| v57     | [Work line](#v57--work-line)                                                           | 6.12, 9             |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                             | 6.5, 6.15, 9        |
+
+## v75 — A question gets the room and a way out
+
+2026-09-10
+
+![The whole window for a question](shots/question-room.png)
+
+![An answer of your own](shots/question-own-answer.png)
+
+Three things about `AskUserQuestion`, one of them a bug worth naming.
+
+The panel outlived the question. Claude Code puts its own question on screen
+without waiting for the hook, so an answer given there runs the tool while the
+island is still holding the panel up — and it held it for five minutes, until
+the hook timed out, over a question that was already answered. A `PostToolUse`
+for the same session and the same tool now takes it down. Both marks are
+needed: chats run side by side and a turn runs tools in parallel, so neither
+alone says anything about the question on screen. The session stays working,
+because the tool ran.
+
+Four options with their descriptions are taller than the dialogue, and the
+last of them was cut off by the bottom edge. The shape takes the whole window
+while a question stands and gives it back once it is answered; anything longer
+still scrolls inside the panel rather than being cut.
+
+And there was no way to answer anything but what Claude had listed. The last
+row is Other now, and it opens a field. What gets written goes out as the
+label of the answer, which is what the reply carries anyway.
 
 ## v74 — The head moves up beside the notch
 
