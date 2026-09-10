@@ -52,6 +52,13 @@
    * its own. tech.md 6.21. */
   const HOP_MS = 620;
 
+  /** The states the two strokes are drawn in, and so the only ones a hop of
+   * the strokes can be seen in. `working` swaps them for the spinner and
+   * `waiting` for the question mark, and each of those swaps is its own
+   * announcement -- a hop asked for behind a glyph that is not on screen is a
+   * promise the mark cannot keep. tech.md 6.7. */
+  const HOPS: readonly RestStatus[] = ['idle', 'compacting'];
+
   // The colour says what is happening; the hop says it just changed. Without
   // it a compact that ends while nobody is looking at the notch is a green
   // sign that was orange a moment ago, and nothing was ever seen to happen.
@@ -66,10 +73,31 @@
     // The first paint is not a change. An island that hops on every launch
     // is an island that hops for nothing.
     if (before === null) return;
+    // Into a state with no strokes the hop is called off rather than left
+    // standing: the class says the strokes are moving, and strokes that come
+    // back to a class still hanging from a change before them would hop for
+    // something that has already been read.
+    if (!HOPS.includes(next)) {
+      turned = false;
+      return;
+    }
 
-    turned = true;
-    const timer = setTimeout(() => (turned = false), HOP_MS);
-    return () => clearTimeout(timer);
+    // Off for a frame before it goes on again. A class that is already there
+    // starts no animation, so a second change inside the hop -- a compact
+    // refused a moment after it started, a question answered on one card
+    // while another one ends -- swapped the colour with nothing seen to move,
+    // which is the one thing the hop exists to prevent. tech.md 6.21.
+    turned = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      turned = true;
+      timer = setTimeout(() => (turned = false), HOP_MS);
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
   });
 </script>
 

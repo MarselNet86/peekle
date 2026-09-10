@@ -10,7 +10,7 @@
 
 import { render, screen } from '@testing-library/svelte';
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { restStatus } from '$lib/logic/rest';
 import { ASKED_TO_STOP } from '$lib/logic/sessions';
@@ -112,7 +112,46 @@ describe('RestMark on a compact', () => {
     expect(mark).not.toHaveClass('turned');
 
     await rerender({ status: 'compacting' as const, pct: 12, onopen: () => {} });
-    expect(mark).toHaveClass('turned');
+    await vi.waitFor(() => expect(mark).toHaveClass('turned'));
+  });
+
+  /// A class that is already on the element starts no animation. Without
+  /// dropping it first, a second change inside the hop -- a compact refused a
+  /// moment after it started -- swapped the colour with nothing seen to move,
+  /// which is the one thing the hop is for. tech.md 6.21.
+  it('starts over when the state changes again inside the hop', async () => {
+    const { container, rerender } = render(RestMark, {
+      props: { status: 'idle' as const, pct: 12, onopen: () => {} },
+    });
+    const mark = container.querySelector('.mark');
+
+    await rerender({ status: 'compacting' as const, pct: 12, onopen: () => {} });
+    await vi.waitFor(() => expect(mark).toHaveClass('turned'));
+
+    await rerender({ status: 'idle' as const, pct: 12, onopen: () => {} });
+    // Off in the same beat as the change...
+    expect(mark).not.toHaveClass('turned');
+    // ...and on again for a hop of its own.
+    await vi.waitFor(() => expect(mark).toHaveClass('turned'));
+  });
+
+  /// The hop is the strokes' own move. `working` draws the spinner instead
+  /// and `waiting` the question mark, and each of those swaps announces
+  /// itself: asking for a hop behind a glyph that is not on screen is a
+  /// promise the mark cannot keep. tech.md 6.7.
+  it('asks for no hop into a state that draws no strokes', async () => {
+    const { container, rerender } = render(RestMark, {
+      props: { status: 'idle' as const, pct: 12, onopen: () => {} },
+    });
+    const mark = container.querySelector('.mark');
+
+    for (const status of ['working', 'waiting'] as const) {
+      await rerender({ status, pct: 12, onopen: () => {} });
+      await new Promise((settle) => requestAnimationFrame(() => settle(null)));
+      expect(mark, status).not.toHaveClass('turned');
+      await rerender({ status: 'idle' as const, pct: 12, onopen: () => {} });
+      await vi.waitFor(() => expect(mark).toHaveClass('turned'));
+    }
   });
 });
 
