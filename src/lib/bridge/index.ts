@@ -72,6 +72,9 @@ export const commands = {
   submitSignInCode: (code: string) => call<SignInState>('submit_sign_in_code', { code }),
   openSignInPage: () => call<void>('open_sign_in_page'),
   cancelSignIn: () => call<void>('cancel_sign_in'),
+  // The address lives in Rust and this takes no argument, so a page cannot
+  // point it anywhere of its own. tech.md 6.22.
+  openBugReport: () => call<void>('open_bug_report'),
   setUsageEnabled: (enabled: boolean) => call<void>('set_usage_enabled', { enabled }),
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),
