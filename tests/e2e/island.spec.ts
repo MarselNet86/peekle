@@ -119,7 +119,16 @@ async function stub(page: Page, cards: Card[], view: unknown = { Session: 's1' }
           (window as unknown as Record<string, unknown>)[`_${id}`] = cb;
           return id;
         },
-        convertFileSrc: (path: string) => path,
+        // A shot has to actually load, or the row falls back to its path and
+        // there is nothing to press. Anything else keeps its path.
+        convertFileSrc: (path: string) =>
+          path.includes('/peekle/shots/')
+            ? 'data:image/svg+xml,' +
+              encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="1172" height="246">' +
+                  '<rect width="1172" height="246" fill="rgb(38,42,50)"/></svg>',
+              )
+            : path,
         invoke: async (command: string, args: Record<string, unknown>) => {
           if (command === 'plugin:event|listen') {
             handlers[args.event as string] = args.handler as number;
@@ -424,6 +433,31 @@ test.describe('the island route', () => {
     await expect(page.getByText('go on')).toBeVisible();
     await expect(page.locator('.aim')).toHaveCount(0);
     await expect(page.locator('.head .project')).toContainText('peekle');
+  });
+
+  /// A screenshot in a message is a reference to the picture, so pressing it
+  /// has to open the picture -- it is the only way to see what is on it. It
+  /// did not: the rule that takes an open picture away when its attachment is
+  /// taken back was written for the row above the field and ran on every open
+  /// picture, so one opened out of the feed closed itself in the tick it
+  /// opened. tech.md 6.13.
+  test('a screenshot in a message opens when it is pressed', async ({ page }) => {
+    const SHOT = '/Users/dev/Library/Caches/peekle/shots/01M238H5HQEQB3GY5V1SMPPFYF.png';
+    await stub(page, [observed([say('u1', `${SHOT}\nlook at this`, 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    const block = page.getByRole('button', { name: /Open the screenshot/ });
+    await expect(block).toBeVisible();
+    // What it says about the picture is measured off the picture itself.
+    await expect(block).toContainText('1172\u00d7246');
+
+    await block.click();
+    await expect(page.locator('.preview img')).toBeVisible();
+
+    // And it closes, the way it always did.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.preview')).toHaveCount(0);
+    await expect(block).toBeVisible();
   });
 
   /// The way to the developer stands in the corner of the list, and its line

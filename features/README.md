@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                            | Contract             |
 | ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                           | 6.13, 9              |
 | v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)       | 6.13, 9              |
 | v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                  | 6.23, 6.5, 9         |
 | v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                            | 6.22, 6.5, 9         |
@@ -44,6 +45,30 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.11 — Pressing a screenshot opens it
+
+2026-09-11
+
+It did not. The rule that takes an open picture away when its attachment is
+taken back was written for the row above the field, and it stood over every
+open picture: a shot pressed in a message is in no reply being written, so the
+effect closed it in the same tick it opened. Nothing happened, twice a second.
+
+The rule now knows where the picture was opened from. From the row above the
+field, it goes when the attachment goes. From the feed, it stands until it is
+closed — it was sent long ago, and nothing above the field owns it. The bug is
+older than the block: while the picture itself stood in the bubble there was
+no reason to press it.
+
+The block also went dark. It stands on two grounds at once — the green of a
+reply and the dark of an answer — and `--bubble` is a lightening, so on green
+it came out pale green and read as part of the bubble. And the tile got a
+hairline: a screenshot of this product is mostly black, which on a dark block
+is a hole in it rather than a picture.
+
+![A screenshot inside a message](shots/shot-in-message.png)
+![The same shot, opened](shots/shot-opened.png)
 
 ## v80.10 — A screenshot in a message is a reference
 

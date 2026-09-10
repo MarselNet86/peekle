@@ -386,13 +386,27 @@
   // Which attachment is open at full size. A layer over the content, so it is
   // the route's and not Rust's: no view changes and the window keeps its size.
   let opened = $state<string | null>(null);
+  // Whether what is open was opened from the row above the field. Those go
+  // when the attachment goes; a picture opened out of the feed was sent long
+  // ago and nothing above the field owns it. Without this the two were one
+  // rule, and a shot pressed in a message closed itself in the same tick it
+  // opened: it is in no reply being written, so the rule below took it.
+  // tech.md 6.13.
+  let openedFromField = $state(false);
+
+  function openShot(path: string, fromField: boolean) {
+    opened = path;
+    openedFromField = fromField;
+  }
 
   // An attachment taken back, or a message sent, takes its picture with it.
   // So does a collapse from any other cause: a picture left open would come
   // back up over whatever the island opens on next.
   $effect(() => {
     if (opened === null) return;
-    if (!attached.includes(opened) || island.view === 'Collapsed') opened = null;
+    if (island.view === 'Collapsed' || (openedFromField && !attached.includes(opened))) {
+      opened = null;
+    }
   });
 
   // Rust puts an island away when the pointer has been off it for 800ms, and
@@ -814,7 +828,11 @@
           {/if}
           {#each rows as row (row.id)}
             {#if row.kind === 'said'}
-              <FeedRow entry={row.entry} shotSrc={fileSrc} onopenshot={(path) => (opened = path)} />
+              <FeedRow
+                entry={row.entry}
+                shotSrc={fileSrc}
+                onopenshot={(path) => openShot(path, false)}
+              />
             {:else}
               <!-- A whole run of calls, as the one thing asked of it: whether
                    the agent is out, and for how long. tech.md 6.12. -->
@@ -863,7 +881,7 @@
                   <ShotChip
                     name={shotName(path)}
                     src={fileSrc(path)}
-                    onopen={() => (opened = path)}
+                    onopen={() => openShot(path, true)}
                     onremove={() => current && shots.remove(current.session.session_id, path)}
                   />
                 {/each}
