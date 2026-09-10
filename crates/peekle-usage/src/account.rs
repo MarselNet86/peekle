@@ -56,7 +56,13 @@ pub fn snapshot_from(body: &Value, fetched_at: i64) -> UsageSnapshot {
 
     match (five, week) {
         (Some(five), Some(week)) => UsageSnapshot {
-            windows: vec![five, week],
+            // The scoped week is optional and comes last: a plan that counts
+            // no model apart never reports one, and the two windows above are
+            // what every account has. tech.md 6.4.
+            windows: [Some(five), Some(week), scoped_stat(body)]
+                .into_iter()
+                .flatten()
+                .collect(),
             source: UsageSource::Account,
             reason: None,
             fetched_at,
@@ -82,6 +88,38 @@ fn window_stat(body: &Value, window: UsageWindow, key: &str) -> Option<UsageWind
 
     // UsageWindowStat clamps, so an out of range percentage cannot reach the UI.
     Some(UsageWindowStat::new(window, percent, resets_at))
+}
+
+/// The week a plan counts for one model on its own.
+///
+/// It has no key of its own at the top level -- it arrives as a row of
+/// `limits`, which is the one thing that array is read for. Two marks make a
+/// row that one: it is weekly, and it names the model it is scoped to. The
+/// name is the server's (`Fable`), never a guess from here: which models a
+/// plan counts apart is not ours to decide. `percent` here is a whole number
+/// on the same 0..100 scale as `utilization`. tech.md 6.4.
+///
+/// The other kinds are left alone. `session` and `weekly_all` are the numbers
+/// that already arrived as `five_hour` and `seven_day`, and one number read
+/// from two places drifts apart sooner or later.
+fn scoped_stat(body: &Value) -> Option<UsageWindowStat> {
+    body.get("limits")?.as_array()?.iter().find_map(|limit| {
+        if limit.get("group")?.as_str()? != "weekly" {
+            return None;
+        }
+        let scope = limit
+            .get("scope")?
+            .get("model")?
+            .get("display_name")?
+            .as_str()?;
+        let percent = limit.get("percent")?.as_f64()? as f32;
+        let resets_at = limit
+            .get("resets_at")
+            .and_then(Value::as_str)
+            .and_then(iso_seconds);
+
+        Some(UsageWindowStat::scoped(percent, resets_at, scope))
+    })
 }
 
 pub fn unavailable(reason: UsageUnavailable, fetched_at: i64) -> UsageSnapshot {
