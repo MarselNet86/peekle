@@ -11,34 +11,60 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                                     | Contract             |
-| ------- | ------------------------------------------------------------------------------------------- | -------------------- |
-| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                   | 6.2, 6.7             |
-| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                         | 6.7, 9               |
-| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                       | 6.7, 9               |
-| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                   | 6.12, 9              |
-| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                 | 9                    |
-| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                       | 6.3, 6.5, 6.11, 6.21 |
-| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)  | 6.5, 6.15            |
-| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.5, 6.21  |
-| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9     |
-| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                  | 6.7, 6.14, 9         |
-| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)      | 6.3, 6.7, 6.14, 9    |
-| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)              | 6.7, 6.12, 9         |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                  | 6.15, 6.20, 9        |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                           | 6.5, 6.11            |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)                             | 6.5, 6.11            |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                                    | 6.5, 9               |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                         | 6.12, 6.15, 6.20, 9  |
-| v64     | [Live mode switching](#v64--live-mode-switching)                                            | 6.19, 9              |
-| v63     | [Permission mode](#v63--permission-mode)                                                    | 6.3, 6.5, 6.19, 9    |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)               | 6.4                  |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                          | 6.3, 6.12, 6.16, 9   |
-| v60     | [Composer layout](#v60--composer-layout)                                                    | 6.12, 6.15, 9        |
-| v59     | [Permission panel](#v59--permission-panel)                                                  | 6.3, 6.7, 9          |
-| v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9   |
-| v57     | [Work line](#v57--work-line)                                                                | 6.12, 9              |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9         |
+| Version | Feature                                                                                            | Contract             |
+| ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows) | 6.21, 9              |
+| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                          | 6.2, 6.7             |
+| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                | 6.7, 9               |
+| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                              | 6.7, 9               |
+| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                          | 6.12, 9              |
+| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                        | 9                    |
+| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                              | 6.3, 6.5, 6.11, 6.21 |
+| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)         | 6.5, 6.15            |
+| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                               | 6.1, 6.3, 6.5, 6.21  |
+| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one)        | 6.2, 6.3, 6.7, 9     |
+| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                         | 6.7, 6.14, 9         |
+| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)             | 6.3, 6.7, 6.14, 9    |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)                     | 6.7, 6.12, 9         |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                         | 6.15, 6.20, 9        |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                                  | 6.5, 6.11            |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                                    | 6.5, 6.11            |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                                           | 6.5, 9               |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                                | 6.12, 6.15, 6.20, 9  |
+| v64     | [Live mode switching](#v64--live-mode-switching)                                                   | 6.19, 9              |
+| v63     | [Permission mode](#v63--permission-mode)                                                           | 6.3, 6.5, 6.19, 9    |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)                      | 6.4                  |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                                 | 6.3, 6.12, 6.16, 9   |
+| v60     | [Composer layout](#v60--composer-layout)                                                           | 6.12, 6.15, 9        |
+| v59     | [Permission panel](#v59--permission-panel)                                                         | 6.3, 6.7, 9          |
+| v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
+| v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.6 — The hop plays twice, and only where it shows
+
+2026-09-10
+
+Nothing new on screen — the same hop as v78, in the same strip
+([shots/compact-hop-frames.png](shots/compact-hop-frames.png)) — but it plays
+when it is supposed to now.
+
+A class that is already on the element starts no animation. So a second change
+of state inside the 620ms of a hop — a compact refused a moment after it
+started, a question answered on one card while another ends — swapped the
+colour with nothing seen to move, which is the one thing the hop exists to
+prevent. The class comes off for a frame before it goes on again.
+
+And no hop is asked for into a state that draws no strokes: `working` swaps
+them for the spinner, `waiting` for the question mark, and each of those swaps
+announces itself. A hop behind a glyph that is not on screen is a promise the
+mark cannot keep.
+
+The route's own rule about a compact — while one runs the turn's working line
+stands down, so there is exactly one clock — had no test that could fail: the
+unit test pinned `feedRows` with a hardcoded argument, and deleting the clause
+from the route broke nothing. It has one now, in the e2e that renders the
+route against a stub, because that is the only place the rule lives.
 
 ## v80.5 — A question stops closing itself
 

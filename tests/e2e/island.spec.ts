@@ -127,6 +127,45 @@ async function stub(page: Page, cards: Card[]) {
 }
 
 test.describe('the island route', () => {
+  /// While a compact runs the feed carries one clock and one only: the
+  /// compact's. The turn's own working line stands down, because the agent is
+  /// not working -- the CLI is -- and two clocks over one pause are two
+  /// answers to one question. The rule lives in the route, so this is the
+  /// only place it can be read. tech.md 6.21.
+  test('a compact leaves one clock running in the dialogue', async ({ page }) => {
+    const working = (compacting: unknown) => ({
+      ...observed([
+        say('u1', 'go on', 1_789_000_000_000),
+        {
+          id: 't1',
+          kind: 'Tool',
+          text: 'Read tech.md',
+          tool: 'Read',
+          detail: null,
+          state: 'Ok',
+          at: 1_789_000_001_000,
+        },
+      ]),
+      status: 'Working',
+      compacting,
+    });
+
+    await stub(page, [working({ since: Date.now() - 12_000, manual: true })]);
+    await page.goto(ROUTE);
+
+    const running = page.locator('.work.running');
+    await expect(running).toHaveCount(1);
+    await expect(running).toContainText('Compacting');
+
+    // And with no compact the same card runs the turn's line instead.
+    await page.evaluate((card) => {
+      (window as unknown as { __sessions: (cards: unknown) => void }).__sessions([card]);
+    }, working(null));
+
+    await expect(page.locator('.work.running')).toHaveCount(1);
+    await expect(page.locator('.work.running')).not.toContainText('Compacting');
+  });
+
   /// The answer to a press is spent by reading it, and by nothing else. It
   /// used to be cleared by the next card that arrived: the route watched the
   /// card for "the session changed", and a card is a new object on every
