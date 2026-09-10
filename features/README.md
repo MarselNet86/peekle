@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract            |
 | ------- | ------------------------------------------------------------------------------------------- | ------------------- |
+| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.21, 9   |
 | v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9    |
 | v76     | [A question waits for you](#v76--a-question-waits-for-you)                                  | 6.7, 6.14, 9        |
 | v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)      | 6.3, 6.7, 6.14, 9   |
@@ -31,6 +32,56 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9        |
+
+## v78 — A compact you can see
+
+2026-09-10
+
+![The dialogue while a compact runs](shots/compacting.png)
+
+`/compact` used to leave no trace in the island at all. The chat stood still,
+the notch stood green and empty, and the thing the CLI was doing took between
+seven seconds and three minutes — measured, not guessed, off twenty-four
+`compactMetadata` records. Nothing said it had started and nothing said it was
+over, which is the one state this product exists to remove.
+
+The start comes from `PreCompact`, the hook Peekle did not listen for.
+**Re-run `peekle init` after updating**: the handler is written into
+`~/.claude/settings.json`, and a compact cannot announce itself through a hook
+that is not installed.
+
+The end comes from the file, because no hook fires at all when a compact
+finishes — checked on a session driven live, where the compact was followed by
+neither a `Stop` nor a `SessionStart`. What is written is a `compact_boundary`
+record, and it carries the numbers as well as the news.
+
+![The row it leaves](shots/compact-done.png)
+
+So the row says what the terminal says, down to the number: the terminal
+prints `preTokens`, not the difference and not what is left. A manual compact
+opens the dialogue on that row when it lands — the person typed the command
+and waited out the minutes, and the answer to them is that one line. An
+automatic one opens nothing: nobody asked for it.
+
+![The sign while it runs](shots/compacting-mark.png)
+
+The resting sign carries it in `--orange` with the wave the waiting state
+uses. Two states now have a colour of their own, and both are states where
+something is happening to somebody: purple is the agent waiting on you, orange
+is the chat being folded up.
+
+![The hop, frame by frame](shots/compact-hop-frames.png)
+
+Every change of state hops both strokes, the second behind the first, so a
+compact ending while nobody is watching the notch is seen ending rather than
+found already ended.
+
+Two edges, both real. `PreCompact` fires **before** the CLI decides whether
+there is anything to compact — a chat of two replies gave the hook and then
+`Not enough messages to compact.` eight milliseconds later — so the local
+command line the CLI prints instead takes the sign back off. And a compact
+that ends in neither is given up on after ten minutes, because a sign nothing
+can take off is worse than no sign.
 
 ## v77 — The turn notice, as the system writes one
 
