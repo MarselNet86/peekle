@@ -367,3 +367,29 @@ async fn unknown_payload_fields_are_ignored_rather_than_rejected() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({}));
 }
+
+/// A compact starts with a hook and ends with none at all, so this one event
+/// is the only announcement there is. It travels to `/session` like every
+/// other lifecycle event and decides nothing: the CLI is already summarising
+/// by the time it arrives. tech.md 6.21.
+#[tokio::test]
+async fn the_captured_compact_hook_reaches_the_sink_and_decides_nothing() {
+    const CAPTURED: &str = include_str!("../../../fixtures/hooks/pre_compact.jsonl");
+
+    let line = CAPTURED
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .expect("a captured PreCompact");
+    let sink = TestSink::new(None);
+    let handle = Arc::clone(&sink);
+
+    let (status, body) = post(app(sink), &format!("/v1/h/{TOKEN}/session"), line).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({}));
+    let feeds = handle.feeds.lock().unwrap();
+    let (route, payload) = feeds.first().expect("the sink was handed it");
+    assert_eq!(*route, "session");
+    assert_eq!(payload["hook_event_name"], "PreCompact");
+    assert_eq!(payload["trigger"], "manual");
+}

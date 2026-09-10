@@ -268,6 +268,11 @@ where
     let mut entries: Vec<FeedEntry> = Vec::new();
     let mut latest = 0i64;
     let mut agent = AgentReader::default();
+    // What the last `compact_boundary` said, waiting for the summary record
+    // that follows it to put it into a row. The boundary carries the numbers
+    // and the summary carries nothing, and they arrive in that order.
+    // tech.md 6.21.
+    let mut boundary: Option<CompactRun> = None;
     // The timestamp of the record before this one, so a thought can report how
     // long it took. Assigned on every iteration before it is read.
     let mut previous;
@@ -324,6 +329,14 @@ where
         latest = latest.max(at);
 
         match record.get("type").and_then(Value::as_str) {
+            // The one record that says a compact happened, and the only place
+            // its numbers are written down. It is not a row of its own: the
+            // row is the summary that follows it. tech.md 6.21.
+            Some("system") => {
+                if let Some(run) = compact_run(&record, at) {
+                    boundary = Some(run);
+                }
+            }
             // The title Claude Code wrote for its own list. Better than a first
             // line, and it costs nothing to reuse.
             Some("ai-title") => {
@@ -369,12 +382,15 @@ where
                 // to the conversation, said the way the terminal says it.
                 // tech.md 6.11.
                 if is_compact_summary(&record) {
-                    entries.push(entry(
-                        next_id(),
-                        EntryKind::Notice,
-                        COMPACTED.to_string(),
-                        at,
-                    ));
+                    // The boundary just before it says how much was let go
+                    // of, and the terminal prints that number rather than the
+                    // difference. A file too old to carry the numbers leaves
+                    // the row saying the one thing it knows. tech.md 6.21.
+                    let text = boundary
+                        .take()
+                        .map(|run| compact_label(&run))
+                        .unwrap_or_else(|| COMPACTED.to_string());
+                    entries.push(entry(next_id(), EntryKind::Notice, text, at));
                     continue;
                 }
 
@@ -499,6 +515,9 @@ where
         // process, and its hooks are what carry it. tech.md 6.19.
         mode: None,
         thinking: None,
+        // Whether a compact is running is a fact about a live process too,
+        // and `PreCompact` is what carries it. tech.md 6.21.
+        compacting: None,
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }
@@ -654,8 +673,139 @@ fn is_synthetic_model(record: &Value) -> bool {
         == Some("<synthetic>")
 }
 
-/// What the feed says where the CLI put its compact summary. tech.md 6.11.
+/// What the feed says where the CLI put its compact summary, and all it can
+/// say about a compact whose numbers the file never recorded. tech.md 6.11.
 pub const COMPACTED: &str = "Compacted";
+
+/// A compact that happened, as its own record in the transcript describes it.
+///
+/// The only evidence there is: no hook fires when a compact ends, so this
+/// record is both the news and the numbers. tech.md 6.21.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompactRun {
+    /// unix ms, from the record's own timestamp.
+    pub at: i64,
+    /// `manual` or `auto`, exactly as the CLI wrote it. `None` for a word
+    /// this version has not seen: a made up trigger is worse than none.
+    pub trigger: Option<String>,
+    /// What the conversation stood at before it. This is the number the
+    /// terminal calls freed. tech.md 6.21.
+    pub pre_tokens: Option<u64>,
+    /// What it stands at after. Read for completeness; the row does not use
+    /// it, because the terminal does not.
+    pub post_tokens: Option<u64>,
+}
+
+/// One `compact_boundary` record, or nothing for any other record.
+pub fn compact_run(record: &Value, at: i64) -> Option<CompactRun> {
+    if record.get("type").and_then(Value::as_str) != Some("system")
+        || record.get("subtype").and_then(Value::as_str) != Some("compact_boundary")
+    {
+        return None;
+    }
+    let meta = record.get("compactMetadata");
+    let number = |key: &str| meta.and_then(|m| m.get(key)).and_then(Value::as_u64);
+    Some(CompactRun {
+        at,
+        trigger: meta
+            .and_then(|m| m.get("trigger"))
+            .and_then(Value::as_str)
+            .filter(|word| matches!(*word, "manual" | "auto"))
+            .map(str::to_string),
+        pre_tokens: number("preTokens"),
+        post_tokens: number("postTokens"),
+    })
+}
+
+/// Whether this record is the CLI printing the output of a local command.
+///
+/// It is what a compact that never ran leaves behind: `PreCompact` fires
+/// before the CLI checks whether there is anything to compact, so a refused
+/// `/compact` is a hook with nothing after it but this line. tech.md 6.21.
+pub fn is_local_command(record: &Value) -> bool {
+    record.get("type").and_then(Value::as_str) == Some("system")
+        && record.get("subtype").and_then(Value::as_str) == Some("local_command")
+}
+
+/// The row a finished compact leaves in the feed, in the terminal's own words.
+///
+/// `Compacted chat · manual · 466k tokens freed`. The number is `preTokens`,
+/// which is what the terminal prints: not the difference, and not what is
+/// left. A run with no numbers at all is still news, so it keeps the plain
+/// word. tech.md 6.21.
+pub fn compact_label(run: &CompactRun) -> String {
+    let mut label = String::from("Compacted chat");
+    if let Some(trigger) = run.trigger.as_deref() {
+        label.push_str(" · ");
+        label.push_str(trigger);
+    }
+    if let Some(freed) = run.pre_tokens {
+        label.push_str(" · ");
+        label.push_str(&tokens_label(freed));
+        label.push_str(" tokens freed");
+    }
+    if label == "Compacted chat" {
+        return COMPACTED.to_string();
+    }
+    label
+}
+
+/// `466k` for 465710, which is how the terminal rounded the one compact
+/// measured against it. Under a thousand it stays itself: `0k tokens freed`
+/// says nothing happened, and something did.
+fn tokens_label(tokens: u64) -> String {
+    if tokens < 1000 {
+        return tokens.to_string();
+    }
+    format!("{}k", (tokens + 500) / 1000)
+}
+
+/// Where a compact stands, read from the file the CLI writes. tech.md 6.21.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompactState {
+    /// Still going: nothing in the file has happened since it started.
+    Running,
+    /// Over, and this is what it did.
+    Done(CompactRun),
+    /// It never ran. `PreCompact` fires before the CLI decides whether there
+    /// is enough to compact, and on `Not enough messages to compact.` the
+    /// next thing in the file is the CLI printing that line.
+    Refused,
+}
+
+/// What the transcript says about the compact that started at `since`.
+///
+/// One pass, three answers, and both of the answers that end it are records
+/// the CLI writes itself. Anything older than `since` belongs to an earlier
+/// compact and decides nothing. tech.md 6.21.
+pub fn compact_state<I, S>(lines: I, since: i64) -> CompactState
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut state = CompactState::Running;
+    for line in lines {
+        let Ok(record) = serde_json::from_str::<Value>(line.as_ref()) else {
+            continue;
+        };
+        let at = record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(iso_ms)
+            .unwrap_or_default();
+        if at < since {
+            continue;
+        }
+        if let Some(run) = compact_run(&record, at) {
+            // A boundary is the end of it whatever else the file says after.
+            return CompactState::Done(run);
+        }
+        if is_local_command(&record) {
+            state = CompactState::Refused;
+        }
+    }
+    state
+}
 
 /// Whether a `user` record is the summary the CLI wrote itself after
 /// `/compact` rather than something a person typed. tech.md 6.11.

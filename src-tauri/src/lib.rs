@@ -302,7 +302,12 @@ fn watch_working_transcripts(app: &tauri::AppHandle, state: Arc<state::AppState>
         loop {
             ticker.tick().await;
             for card in state.sessions() {
-                if card.status != peekle_core::types::SessionStatus::Working {
+                // And every session in the middle of a compact, for the same
+                // reason: no hook fires when one ends, so the file is the
+                // only thing that can say it did. tech.md 6.21.
+                let watching = card.status == peekle_core::types::SessionStatus::Working
+                    || card.compacting.is_some();
+                if !watching {
                     continue;
                 }
                 let path = peekle_core::transcripts::transcript_path(
@@ -340,7 +345,16 @@ fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or_default();
 
-            let Some(cards) = state.rest_stale_work(now, STALE_AFTER_MS) else {
+            // A compact that ends in neither a boundary nor a refusal ends
+            // here: the process behind it died, and nothing else will ever
+            // take the orange sign off. tech.md 6.21.
+            let given_up =
+                state.rest_stale_compacts(now, peekle_core::sessions::COMPACT_LIMIT_MS);
+            if given_up.is_some() {
+                tracing::debug!("a compact never ended, taking the sign off it");
+            }
+
+            let Some(cards) = state.rest_stale_work(now, STALE_AFTER_MS).or(given_up) else {
                 continue;
             };
             tracing::debug!("a session stopped reporting, putting it back to idle");

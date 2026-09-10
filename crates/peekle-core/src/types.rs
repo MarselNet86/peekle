@@ -364,9 +364,29 @@ pub struct SessionCard {
     /// `MAX_THINKING_TOKENS=0` is the CLI's own way to turn it off, and no
     /// hook and no transcript field says which way it stands. tech.md 6.20.
     pub thinking: Option<bool>,
+    /// The compact this session is in the middle of, `None` when it is in
+    /// none. tech.md 6.21.
+    pub compacting: Option<Compacting>,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,
+}
+
+/// A compact that is running right now. tech.md 6.21.
+///
+/// `PreCompact` is the only thing that says one has started, and nothing at
+/// all says one has ended: the answer to that is in the transcript, so the
+/// card carries when it started and waits for the file to say it is over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Compacting {
+    /// unix ms, when `PreCompact` arrived.
+    #[ts(type = "number")]
+    pub since: i64,
+    /// Whether a person asked for it. An automatic compact fires mid turn
+    /// with nobody waiting on it, and what is shown at the end of the two
+    /// turns on that. tech.md 6.21.
+    pub manual: bool,
 }
 
 /// The model of a session, the effort it answers with, and how full its

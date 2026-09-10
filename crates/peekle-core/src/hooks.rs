@@ -12,6 +12,9 @@ pub const MANAGED_HOOK_EVENTS: &[&str] = &[
     "Notification",
     "SessionStart",
     "SessionEnd",
+    // The start of a compact, and the only thing that says one is running:
+    // nothing fires when it ends, and it takes minutes. tech.md 6.21.
+    "PreCompact",
 ];
 
 /// Path prefix every Peekle endpoint carries. The hook script posts to it, and
@@ -45,6 +48,14 @@ mod tests {
         for event in ["UserPromptSubmit", "PreToolUse", "PostToolUse"] {
             assert!(MANAGED_HOOK_EVENTS.contains(&event), "{event} is unmanaged");
         }
+    }
+
+    /// The one event that says a compact started. Nothing else does, and a
+    /// compact nobody announced is three minutes of a silent island.
+    /// tech.md 6.21.
+    #[test]
+    fn the_compact_event_is_managed() {
+        assert!(MANAGED_HOOK_EVENTS.contains(&"PreCompact"));
     }
 
     #[test]

@@ -12,14 +12,21 @@ use serde_json::Value;
 use ulid::Ulid;
 
 use crate::types::{
-    EntryKind, EntryState, FeedEntry, PermissionMode, SessionCard, SessionOrigin, SessionRef,
-    SessionStatus,
+    Compacting, EntryKind, EntryState, FeedEntry, PermissionMode, SessionCard, SessionOrigin,
+    SessionRef, SessionStatus,
 };
 
 /// Freshest activity first, capped. tech.md 6.3.
 pub const SESSION_CAP: usize = 20;
 /// Tail of the feed per session. tech.md 6.3.
 pub const ENTRY_CAP: usize = 200;
+
+/// How long a compact is given before the island stops believing in it.
+///
+/// The longest one measured took 170 seconds on a 634k-token conversation, so
+/// this is generous by a factor of three. It is a backstop, not a schedule:
+/// what normally ends a compact is the record the CLI writes. tech.md 6.21.
+pub const COMPACT_LIMIT_MS: i64 = 10 * 60 * 1000;
 
 /// First user turn becomes the title. tech.md 6.3.
 const TITLE_LIMIT: usize = 80;
@@ -279,6 +286,7 @@ impl SessionRegistry {
                 agent: None,
                 mode: None,
                 thinking: None,
+                compacting: None,
                 updated_at: at,
             },
         );
@@ -717,6 +725,65 @@ impl SessionRegistry {
     /// dark with nothing on the way. The window is generous on purpose. A long
     /// build reports nothing between `PreToolUse` and `PostToolUse`, and
     /// calling that dead would be worse than waiting. tech.md 6.3.
+    /// A compact started on this session. tech.md 6.21.
+    ///
+    /// Opens the card if `PreCompact` is the first thing Peekle has seen of
+    /// this session, and opens it at rest: a compact says a person typed a
+    /// command, not that a turn is running, and a card invented as `Working`
+    /// would spin until the stale sweep gave up on it.
+    pub fn start_compact(&mut self, session: SessionRef, at: i64, manual: bool) {
+        let known = self
+            .cards
+            .iter()
+            .any(|card| card.session.session_id == session.session_id);
+        let card = self.card_mut(session, at);
+        card.compacting = Some(Compacting { since: at, manual });
+        if !known {
+            card.status = SessionStatus::Idle;
+        }
+    }
+
+    /// What compact this session is in the middle of, if any. tech.md 6.21.
+    pub fn compacting(&self, session_id: &str) -> Option<Compacting> {
+        self.cards
+            .iter()
+            .find(|card| card.session.session_id == session_id)
+            .and_then(|card| card.compacting)
+    }
+
+    /// The compact is over, however it ended. `true` when there was one to
+    /// end, so nothing travels to the island for a card that was not
+    /// compacting. tech.md 6.21.
+    pub fn end_compact(&mut self, session_id: &str) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.compacting.take().is_some()
+    }
+
+    /// Drops a compact nothing ever ended. tech.md 6.21.
+    ///
+    /// The sign it carries is orange and the row it carries runs a clock, and
+    /// both would stand forever on a `PreCompact` whose compact died with the
+    /// process behind it. The same sweep that puts stale work back to rest.
+    pub fn rest_stale_compacts(&mut self, now: i64, after: i64) -> bool {
+        let mut changed = false;
+        for card in self.cards.iter_mut() {
+            let stale = card
+                .compacting
+                .is_some_and(|run| now - run.since >= after);
+            if stale {
+                card.compacting = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub fn rest_stale_work(&mut self, now: i64, after: i64) -> bool {
         let mut changed = false;
         for card in self.cards.iter_mut() {
@@ -849,6 +916,7 @@ impl SessionRegistry {
                     agent: None,
                     mode: None,
                     thinking: None,
+                    compacting: None,
                     updated_at: at,
                 },
             );

@@ -1002,6 +1002,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         entries: Vec::new(),
         mode: None,
         thinking: None,
+        compacting: None,
         agent: None,
         updated_at: 2,
     }]);
@@ -1546,5 +1547,89 @@ mod the_mode_cycle {
             None,
             "and a session already in one is not stepped out of it either"
         );
+    }
+}
+
+/// The compact of tech.md 6.21, on the card. `PreCompact` is the only event
+/// that says one has started, and the payload here is the captured one.
+mod compacting {
+    use super::fixture;
+    use peekle_core::sessions::{session_ref_of, SessionRegistry};
+    use peekle_core::types::SessionStatus;
+    use peekle_core::TaskFeed;
+
+    /// The `PreCompact` a live 2.1.263 sent on 2026-09-10.
+    fn pre_compact() -> serde_json::Value {
+        fixture("pre_compact.jsonl").next().expect("a payload")
+    }
+
+    /// A compact of a session no hook has ever mentioned still has to be
+    /// visible: Peekle is started mid conversation more often than not. The
+    /// card it opens rests, because a compact says a command was typed and
+    /// says nothing about a turn running.
+    #[test]
+    fn a_compact_opens_a_card_for_a_session_never_seen_before() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+
+        registry.start_compact(session.clone(), 1_000, true);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.session.session_id, session.session_id);
+        assert_eq!(card.status, SessionStatus::Idle);
+        let run = card.compacting.expect("the card is compacting");
+        assert_eq!(run.since, 1_000);
+        assert!(run.manual);
+    }
+
+    /// A compact does not make a session work, and does not stop one that is.
+    /// The agent stands still through it either way; what runs is the CLI.
+    #[test]
+    fn a_compact_leaves_a_working_session_working() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.ensure(session.clone(), 1);
+        registry.set_status(&session.session_id, SessionStatus::Working, 1);
+
+        registry.start_compact(session.clone(), 2, false);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.status, SessionStatus::Working);
+        assert!(!card.compacting.expect("compacting").manual);
+    }
+
+    /// Ending it is one flip and says whether there was anything to end: a
+    /// card that was not compacting is not news, and news is what travels.
+    #[test]
+    fn ending_a_compact_that_is_not_running_is_not_news() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.start_compact(session.clone(), 1, true);
+
+        assert!(registry.end_compact(&session.session_id));
+        assert!(registry.cards()[0].compacting.is_none());
+        assert!(!registry.end_compact(&session.session_id));
+        assert!(!registry.end_compact("nobody"));
+    }
+
+    /// `PreCompact` fires before the CLI decides there is anything to
+    /// compact, and a compact killed with its process ends with no record at
+    /// all. Either way the orange sign has to come off by itself.
+    #[test]
+    fn a_compact_nothing_ever_ended_is_given_up_on() {
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.start_compact(session.clone(), 1_000, true);
+
+        assert!(!registry.rest_stale_compacts(1_000 + 60_000, 600_000));
+        assert!(registry.cards()[0].compacting.is_some(), "a minute is not stale");
+
+        assert!(registry.rest_stale_compacts(1_000 + 600_000, 600_000));
+        assert!(registry.cards()[0].compacting.is_none());
+        assert!(!registry.rest_stale_compacts(1_000 + 600_000, 600_000));
     }
 }

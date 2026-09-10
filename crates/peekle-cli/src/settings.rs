@@ -229,6 +229,10 @@ fn matcher_for(event: &str) -> Option<&'static str> {
     match event {
         "PermissionRequest" | "PreToolUse" | "PostToolUse" => Some("*"),
         "Notification" => Some("permission_prompt|idle_prompt|agent_needs_input|agent_completed"),
+        // Both triggers: a compact a person asked for and one the window
+        // forced. They are shown differently and neither may be missed.
+        // tech.md 6.21.
+        "PreCompact" => Some("manual|auto"),
         _ => None,
     }
 }
@@ -290,6 +294,7 @@ mod tests {
             ),
             ("SessionStart", "session", None),
             ("SessionEnd", "session", None),
+            ("PreCompact", "session", Some("manual|auto")),
         ] {
             assert_eq!(endpoint_for(event), endpoint, "{event}");
             assert_eq!(matcher_for(event), matcher, "{event}");
