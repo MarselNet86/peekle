@@ -76,10 +76,12 @@
   // tech.md 6.17.
   let settingsOpen = $state(false);
 
-  const current = $derived.by(() => {
-    const id = sessionOf(island.view);
-    return id ? feed.card(id) : undefined;
-  });
+  /** Which session is open, by id. A string rather than the card: the card is
+   * a new object on every hook, and while a turn runs those arrive on every
+   * tool call, so anything watching it for "the session changed" fires
+   * constantly. tech.md 6.12. */
+  const openId = $derived(sessionOf(island.view));
+  const current = $derived.by(() => (openId ? feed.card(openId) : undefined));
   /** A question is standing in this dialogue and nothing else may move.
    * tech.md 6.14. */
   const asking = $derived(isQuestion(island.prompt));
@@ -252,8 +254,13 @@
   // next look elsewhere: it is an answer, not a state. tech.md 6.15.
   let rowNote = $state<SettingsNote | null>(null);
   $effect(() => {
-    // Reading `current` subscribes this to the session on screen.
-    void current?.session.session_id;
+    // The id, and never the card. Reading the card here subscribed this to
+    // every hook that touched the session, and while a turn runs those come
+    // with every tool call: the answer to a press was wiped a second after
+    // it was asked for, which is exactly when it is being read. It is spent
+    // by its own term, by the cross, or by leaving for another session.
+    // tech.md 6.15.
+    void openId;
     rowNote = null;
   });
 
