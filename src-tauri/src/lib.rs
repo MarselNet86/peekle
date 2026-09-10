@@ -348,8 +348,7 @@ fn rest_stale_sessions(app: &tauri::AppHandle, state: Arc<state::AppState>) {
             // A compact that ends in neither a boundary nor a refusal ends
             // here: the process behind it died, and nothing else will ever
             // take the orange sign off. tech.md 6.21.
-            let given_up =
-                state.rest_stale_compacts(now, peekle_core::sessions::COMPACT_LIMIT_MS);
+            let given_up = state.rest_stale_compacts(now, peekle_core::sessions::COMPACT_LIMIT_MS);
             if given_up.is_some() {
                 tracing::debug!("a compact never ended, taking the sign off it");
             }

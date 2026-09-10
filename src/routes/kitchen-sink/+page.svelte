@@ -243,6 +243,7 @@
     agent: null,
     mode: null,
     thinking: null,
+    compacting: null,
     updated_at: 0,
   }));
 
@@ -290,7 +291,7 @@
     <!-- Drawn on the island fill, because that is the only surface it ever
          appears on and any other background lies about the contrast. -->
     <div class="row">
-      {#each ['idle', 'working', 'waiting'] as const as status (status)}
+      {#each ['idle', 'working', 'waiting', 'compacting'] as const as status (status)}
         <div class="mark-stage">
           <RestMark {status} pct={12} onopen={() => {}} />
         </div>
@@ -542,6 +543,8 @@
     <div class="stage messages">
       <WorkLine running from={Date.now() - 42_000} />
       <WorkLine running={false} from={0} to={74_000} />
+      <!-- The same line about the pause the CLI takes on its own. 6.21. -->
+      <WorkLine running tone="compact" words={['Compacting']} from={Date.now() - 134_000} />
     </div>
   </section>
 

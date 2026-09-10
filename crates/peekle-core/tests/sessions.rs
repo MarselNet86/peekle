@@ -1626,7 +1626,10 @@ mod compacting {
         registry.start_compact(session.clone(), 1_000, true);
 
         assert!(!registry.rest_stale_compacts(1_000 + 60_000, 600_000));
-        assert!(registry.cards()[0].compacting.is_some(), "a minute is not stale");
+        assert!(
+            registry.cards()[0].compacting.is_some(),
+            "a minute is not stale"
+        );
 
         assert!(registry.rest_stale_compacts(1_000 + 600_000, 600_000));
         assert!(registry.cards()[0].compacting.is_none());

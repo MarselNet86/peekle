@@ -91,7 +91,17 @@
   // and a spinner beside one somebody is reading is movement asking for
   // attention it has no business taking. What it worked through before asking
   // stays, as the finished line it is. tech.md 6.14.
-  const rows = $derived(feedRows(current?.entries ?? [], current?.status === 'Working' && !asking));
+  // The compact this dialogue is in the middle of, or null. tech.md 6.21.
+  const compacting = $derived(current?.compacting ?? null);
+  const rows = $derived(
+    feedRows(
+      current?.entries ?? [],
+      // A compact takes the working line off the feed for the same reason a
+      // question does: the agent is not working, the CLI is, and two lines
+      // about one pause are two answers to one question. tech.md 6.21.
+      current?.status === 'Working' && !asking && compacting === null,
+    ),
+  );
   // A view naming a session the feed does not have falls back to the list.
   // The alternative is what it used to do: render none of the branches and
   // leave an empty black shape on screen, which reads as a crash.
@@ -750,6 +760,12 @@
               <WorkLine running={row.to === null} from={row.from} to={row.to} />
             {/if}
           {/each}
+          <!-- The one line about the one pause the CLI takes on its own: it
+               runs for minutes, the agent answers nothing through it, and a
+               feed that says nothing reads as a feed that died. tech.md 6.21. -->
+          {#if compacting}
+            <WorkLine running tone="compact" words={['Compacting']} from={compacting.since} />
+          {/if}
         </div>
         {@render connect()}
 
