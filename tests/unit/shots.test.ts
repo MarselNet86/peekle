@@ -12,7 +12,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, events } from '$lib/bridge';
 import { createIsland } from '$lib/features/island/island.svelte';
 import { createShots } from '$lib/features/shots/shots.svelte';
-import { looksLikeImagePaste, secondsLeft, shotLines, shotName, timeLeft } from '$lib/logic/shots';
+import {
+  looksLikeImagePaste,
+  secondsLeft,
+  shotLines,
+  shotName,
+  shotSize,
+  timeLeft,
+} from '$lib/logic/shots';
 import FeedRow from '$lib/ui/FeedRow.svelte';
 import PromptInput from '$lib/ui/PromptInput.svelte';
 import ShotChip from '$lib/ui/ShotChip.svelte';
@@ -423,9 +430,12 @@ describe('a reply that carried a screenshot', () => {
     expect(shotLines('/Users/dev/Pictures/01M238H5HQEQB3GY5V1SMPPFYF.png').shots).toEqual([]);
   });
 
-  it('shows the picture and opens it when pressed', async () => {
+  /// A reference to the picture rather than the picture: at 220 by 110 it was
+  /// too small to read a screenshot of a screen and big enough to push the
+  /// words that came with it off the island. tech.md 6.13.
+  it('stands as a small block and opens the picture when pressed', async () => {
     const onopenshot = vi.fn();
-    render(FeedRow, {
+    const { container } = render(FeedRow, {
       props: {
         entry: said(`${SHOT}\nlook at this`),
         shotSrc: (path: string) => `asset://${path}`,
@@ -433,14 +443,39 @@ describe('a reply that carried a screenshot', () => {
       },
     });
 
-    const picture = screen.getByRole('img');
+    const picture = container.querySelector('img') as HTMLImageElement;
     expect(picture).toHaveAttribute('src', `asset://${SHOT}`);
+    expect(screen.getByText('Screenshot')).toBeInTheDocument();
     // The words stay, and the path does not stand in them twice.
     expect(screen.getByText('look at this')).toBeInTheDocument();
     expect(screen.queryByText(SHOT)).toBeNull();
 
-    await userEvent.click(screen.getByRole('button', { name: /Open/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Open the screenshot/ }));
     expect(onopenshot).toHaveBeenCalledWith(SHOT);
+  });
+
+  /// How big it is, in the words the CLI uses for the same thing. It is read
+  /// off the picture the webview has already loaded: a number carried on the
+  /// entry would be a second answer to a question the file answers.
+  it('says how big the picture is, once the picture says', async () => {
+    const { container } = render(FeedRow, {
+      props: {
+        entry: said(`${SHOT}\nlook at this`),
+        shotSrc: (path: string) => `asset://${path}`,
+      },
+    });
+
+    // Nothing measured yet, and `0\u00d70` is worse than no size at all.
+    expect(screen.queryByText(/\u00d7/)).toBeNull();
+
+    const picture = container.querySelector('img') as HTMLImageElement;
+    Object.defineProperty(picture, 'naturalWidth', { value: 1172 });
+    Object.defineProperty(picture, 'naturalHeight', { value: 246 });
+    picture.dispatchEvent(new Event('load'));
+
+    expect(await screen.findByText('1172\u00d7246')).toBeInTheDocument();
+    // And the number is in what the button is called, so it is not only seen.
+    expect(screen.getByRole('button', { name: /1172\u00d7246/ })).toBeInTheDocument();
   });
 
   /// The cache is a cache and the user may empty it. A reply must still show
@@ -463,7 +498,19 @@ describe('a reply that carried a screenshot', () => {
   it('stays a line where no picture can be drawn', () => {
     render(FeedRow, { props: { entry: said(`${SHOT}\nlook at this`) } });
 
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.queryByText('Screenshot')).toBeNull();
     expect(screen.getByText(SHOT, { exact: false })).toBeInTheDocument();
+  });
+
+  /// The pure half of the size, where the awkward answers live: a picture
+  /// that has not loaded measures zero, and zero is not a size.
+  it('has no size to show until there is one', () => {
+    expect(shotSize(1172, 246)).toBe('1172\u00d7246');
+    expect(shotSize(0, 0)).toBeNull();
+    expect(shotSize(1172, 0)).toBeNull();
+    expect(shotSize(Number.NaN, 10)).toBeNull();
+    // A browser answers in CSS pixels, which can be fractional on a picture
+    // scaled by its own metadata. Nobody wants `1171.5\u00d7246`.
+    expect(shotSize(1171.5, 245.6)).toBe('1172\u00d7246');
   });
 });

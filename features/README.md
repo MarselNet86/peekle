@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                            | Contract             |
 | ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)       | 6.13, 9              |
 | v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                  | 6.23, 6.5, 9         |
 | v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                            | 6.22, 6.5, 9         |
 | v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                  | 6.5                  |
@@ -43,6 +44,29 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.10 — A screenshot in a message is a reference
+
+2026-09-11
+
+A reply that carried a screenshot drew the picture in its bubble, 220 by 110.
+That size works for neither job: a screenshot is a picture of a screen, so
+nothing on it can be read at 220 pixels, and the words the shot was sent with
+got pushed off the bottom of the island by it.
+
+The message now carries a block instead — a 22-pixel tile, the word
+**Screenshot**, and how big it is in the words the CLI uses for the same
+thing, `1172×246`. Pressing it opens the whole picture in the same full view
+it always opened in, which is where a screenshot is actually read.
+
+The size is measured off the picture on its own `load` rather than carried on
+the entry: the webview has already loaded the file to draw the tile, and a
+second number about one file is a number that can disagree with the first.
+Until it is measured there is no size on screen at all — `0×0` is worse than
+nothing. A picture that will not load still puts the path back, so a reply
+always shows what actually went to the agent.
+
+![A screenshot inside a message](shots/shot-in-message.png)
 
 ## v80.9 — A new chat picks its folder
 

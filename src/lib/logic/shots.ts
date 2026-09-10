@@ -82,6 +82,22 @@ export function shotLines(text: string): SaidWithShots {
 }
 
 /**
+ * How big the picture is, in the words the CLI uses for the same thing:
+ * `1172×246`. tech.md 6.13.
+ *
+ * `null` until the picture has been measured, which is what a browser answers
+ * with before it has loaded one: a size of `0×0` on screen is worse than no
+ * size at all. Read off the image itself rather than carried on the entry --
+ * the webview has already loaded the file to draw it, and a number Rust sent
+ * would be a second answer to a question the picture answers.
+ */
+export function shotSize(width: number, height: number): string | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  if (width <= 0 || height <= 0) return null;
+  return `${Math.round(width)}\u00d7${Math.round(height)}`;
+}
+
+/**
  * What the chip above the field calls the attachment. The full path is what
  * the agent gets, and it is far too long to sit over a reply box.
  */
