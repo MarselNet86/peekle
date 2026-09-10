@@ -60,70 +60,98 @@ function say(id: string, text: string, at: number) {
   return { id, kind: 'User', text, tool: null, detail: null, state: 'Ok', at };
 }
 
-/** Everything the route asks for on mount, plus a way to push events at it. */
-async function stub(page: Page, cards: Card[]) {
-  await page.addInitScript((cards) => {
-    const handlers: Record<string, number> = {};
-    let counter = 0;
-    const usage = {
-      windows: [
-        { window: 'FiveHour', used_pct: 43, resets_at: null },
-        { window: 'SevenDay', used_pct: 35, resets_at: null },
-      ],
-      source: 'Account',
-      reason: null,
-      fetched_at: 0,
-      keychain_granted: true,
-      retry_after_ms: null,
-    };
-    const answers: Record<string, unknown> = {
-      get_state: {
-        enabled: true,
-        view: { Session: 's1' },
-        active_prompt: null,
-        sessions: cards,
-        tasks: [],
-        usage,
-        shot: null,
-        live_sessions: 1,
-        hotkey_ok: true,
-      },
-      get_sessions: cards,
-      get_models: [],
-      get_defaults: null,
-      refresh_usage: usage,
-    };
+/** Everything the route asks for on mount, plus a way to push events at it.
+ * Every call the route makes is kept on `window.__calls`, because what a
+ * button sends is as much the contract as what it looks like. */
+async function stub(page: Page, cards: Card[], view: unknown = { Session: 's1' }) {
+  await page.addInitScript(
+    ({ cards, view }: { cards: Card[]; view: unknown }) => {
+      const handlers: Record<string, number> = {};
+      const calls: { command: string; args: unknown }[] = [];
+      (window as unknown as Record<string, unknown>).__calls = calls;
+      let counter = 0;
+      const usage = {
+        windows: [
+          { window: 'FiveHour', used_pct: 43, resets_at: null },
+          { window: 'SevenDay', used_pct: 35, resets_at: null },
+        ],
+        source: 'Account',
+        reason: null,
+        fetched_at: 0,
+        keychain_granted: true,
+        retry_after_ms: null,
+      };
+      const answers: Record<string, unknown> = {
+        get_state: {
+          enabled: true,
+          view,
+          active_prompt: null,
+          sessions: cards,
+          tasks: [],
+          usage,
+          shot: null,
+          live_sessions: 1,
+          hotkey_ok: true,
+        },
+        get_sessions: cards,
+        get_models: [],
+        get_defaults: null,
+        refresh_usage: usage,
+      };
 
-    // The shape @tauri-apps/api talks to. `transformCallback` hands the
-    // runtime a number and expects the callback back under that name.
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
-      transformCallback: (cb: unknown) => {
-        const id = ++counter;
-        (window as unknown as Record<string, unknown>)[`_${id}`] = cb;
-        return id;
-      },
-      convertFileSrc: (path: string) => path,
-      invoke: async (command: string, args: Record<string, unknown>) => {
-        if (command === 'plugin:event|listen') {
-          handlers[args.event as string] = args.handler as number;
-          return 1;
-        }
-        if (command.startsWith('plugin:event|')) return 1;
-        return command in answers ? answers[command] : null;
-      },
-    };
+      // The shape @tauri-apps/api talks to. `transformCallback` hands the
+      // runtime a number and expects the callback back under that name.
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+        transformCallback: (cb: unknown) => {
+          const id = ++counter;
+          (window as unknown as Record<string, unknown>)[`_${id}`] = cb;
+          return id;
+        },
+        convertFileSrc: (path: string) => path,
+        invoke: async (command: string, args: Record<string, unknown>) => {
+          if (command === 'plugin:event|listen') {
+            handlers[args.event as string] = args.handler as number;
+            return 1;
+          }
+          if (command.startsWith('plugin:event|')) return 1;
+          calls.push({ command, args: args ?? null });
+          return command in answers ? answers[command] : null;
+        },
+      };
 
-    const push = (event: string, payload: unknown) => {
-      const id = handlers[event];
-      const handler = (window as unknown as Record<string, (payload: unknown) => void>)[`_${id}`];
-      handler?.({ event, id: 1, payload });
-    };
-    (window as unknown as Record<string, unknown>).__sessions = (next: unknown) =>
-      push('peekle://sessions', next);
-    // The view is Rust's, and this is how it arrives. tech.md section 8.
-    (window as unknown as Record<string, unknown>).__view = (next: unknown) =>
-      push('peekle://view', next);
-  }, cards);
+      const push = (event: string, payload: unknown) => {
+        const id = handlers[event];
+        const handler = (window as unknown as Record<string, (payload: unknown) => void>)[`_${id}`];
+        handler?.({ event, id: 1, payload });
+      };
+      (window as unknown as Record<string, unknown>).__sessions = (next: unknown) =>
+        push('peekle://sessions', next);
+      // The view is Rust's, and this is how it arrives. tech.md section 8.
+      (window as unknown as Record<string, unknown>).__view = (next: unknown) =>
+        push('peekle://view', next);
+    },
+    { cards, view },
+  );
+}
+
+/** Waits out the opening spring and hands back the box it settled on: the
+ * island grows into place over a few frames, and a measurement taken while it
+ * is still growing says nothing about what moved. */
+async function settled(locator: ReturnType<Page['locator']>) {
+  let last: { x: number; y: number; width: number; height: number } | null = null;
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      const still =
+        !!box &&
+        !!last &&
+        Math.abs(box.y - last.y) < 0.5 &&
+        Math.abs(box.height - last.height) < 0.5;
+      last = box;
+      return still;
+    })
+    .toBe(true);
+  return last!;
 }
 
 test.describe('the island route', () => {
@@ -327,5 +355,52 @@ test.describe('the island route', () => {
 
     await expect(page.locator('.work').first()).toBeVisible();
     await expect(page.getByRole('img', { name: 'Nothing said in this chat yet' })).toHaveCount(0);
+  });
+
+  /// The way to the developer stands in the corner of the list, and its line
+  /// is a layer rather than a row: a hint that pushes the list down moves the
+  /// thing the reader was about to press. Layout is why this lives here --
+  /// jsdom measures nothing. tech.md 6.22.
+  test('the bug button stands beside the gear and its line moves no row', async ({ page }) => {
+    await stub(page, [fresh()], 'Sessions');
+    await page.goto(ROUTE);
+
+    const bug = page.getByRole('button', { name: 'Report a bug' });
+    const gear = page.getByRole('button', { name: 'Settings' });
+    await expect(bug).toBeVisible();
+    const rows = page.locator('.rows');
+    const before = await settled(rows);
+
+    // Beside the gear, and on the inside of it: the gear stood in the very
+    // corner first, and a button that arrived later does not take its place.
+    const beside = (await bug.boundingBox())!;
+    const corner = (await gear.boundingBox())!;
+    expect(beside.x).toBeLessThan(corner.x);
+    expect(Math.abs(beside.y - corner.y)).toBeLessThan(1);
+
+    const hint = page.getByRole('tooltip');
+    await expect(hint).toHaveCount(0);
+
+    await bug.hover();
+    await expect(hint).toContainText('Tell the developer what broke');
+    expect((await rows.boundingBox())!.y).toBe(before.y);
+    // And it stays inside the shape rather than hanging off its side.
+    const line = (await hint.boundingBox())!;
+    const shape = (await page.locator('.shape').boundingBox())!;
+    expect(line.x).toBeGreaterThanOrEqual(shape.x);
+    expect(line.x + line.width).toBeLessThanOrEqual(shape.x + shape.width);
+
+    await gear.hover();
+    await expect(hint).toHaveCount(0);
+
+    // What it sends is the contract: the address is Rust's, so the press
+    // carries no address of its own. tech.md 6.22.
+    await bug.click();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const sent = calls.filter((call) => call.command === 'open_bug_report');
+    expect(sent).toHaveLength(1);
+    expect(Object.keys(sent[0].args as Record<string, unknown>)).toEqual([]);
   });
 });

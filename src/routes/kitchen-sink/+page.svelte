@@ -489,6 +489,13 @@
       <IconButton name="settings" title="Settings" onclick={() => {}} />
       <IconButton name="settings" title="Settings" pressed onclick={() => {}} />
       <IconButton name="back" title="Back to the session list" onclick={() => {}} />
+      <!-- The one button that carries a line of its own. tech.md 6.22. -->
+      <IconButton
+        name="bug"
+        title="Report a bug"
+        hint="Tell the developer what broke. Opens Telegram."
+        onclick={() => {}}
+      />
     </div>
     <Toggle
       label="Notify when a turn ends"

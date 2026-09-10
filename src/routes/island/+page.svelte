@@ -644,12 +644,24 @@
                 onclick={() => (settingsOpen = false)}
               />
             {/if}
-            <IconButton
-              name="settings"
-              title="Settings"
-              pressed={settingsOpen}
-              onclick={() => (settingsOpen = !settingsOpen)}
-            />
+            <!-- The bug and the gear travel together so the way back keeps
+                 the left end to itself. The gear stays in the very corner:
+                 it stood there first, and a button that arrived later does
+                 not take its place. tech.md 6.22. -->
+            <div class="corner">
+              <IconButton
+                name="bug"
+                title="Report a bug"
+                hint="Tell the developer what broke. Opens Telegram."
+                onclick={() => commands.openBugReport()}
+              />
+              <IconButton
+                name="settings"
+                title="Settings"
+                pressed={settingsOpen}
+                onclick={() => (settingsOpen = !settingsOpen)}
+              />
+            </div>
           </div>
           {#if settingsOpen}
             <div class="settings">
@@ -1016,6 +1028,12 @@
     align-items: center;
     justify-content: flex-end;
     flex: none;
+  }
+
+  .corner {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   /* With a way out on the left, the two controls take the ends of the row

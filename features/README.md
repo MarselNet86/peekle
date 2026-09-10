@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                            | Contract             |
 | ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                            | 6.22, 6.5, 9         |
 | v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                  | 6.5                  |
 | v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows) | 6.21, 9              |
 | v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                          | 6.2, 6.7             |
@@ -41,6 +42,30 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.8 — A way to the developer
+
+2026-09-10
+
+The overlay runs on other people's machines, breaks there, and writes no log
+anybody will collect and send. Whoever saw it break closed the island and got
+on with their day, because the product offered no road out of the moment the
+break was seen.
+
+Now the road starts there: a bug beside the gear in the corner of the session
+list. Hovering it, or reaching it by keyboard, raises one line — **Tell the
+developer what broke. Opens Telegram.** — and pressing it opens
+`https://t.me/marselnet`.
+
+Two things it does not do. The line is drawn by the primitive rather than left
+to the system: a macOS tooltip comes up on the key window, and the island does
+not become key unless a text field needs it, so the system line would often
+never appear at all — and when it did, it would be a second window standing
+beside a shape that is the whole product. And the address is a constant in
+Rust with no argument on the command, the rule `open_sign_in_page` set: a
+command that takes a URL from the page opens whatever the page asks for.
+
+![The bug button and its line](shots/bug-button.png)
 
 ## v80.7 — Stop says which of the three it was
 
