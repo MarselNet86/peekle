@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The app icon is the product's own sign, not a dot: the same two strokes
+       the resting island carries, at the same slant and the same proportion of
+       stroke to length. Geometry scaled from RestMark's 14x12 glyph by 20.
+       Colour is --brand, the green that has to read as ours. tech.md 9. -->
+  <rect x="24" y="24" width="464" height="464" rx="102" ry="102" fill="#0c0c0e" />
+  <g stroke="#30d158" stroke-width="44" stroke-linecap="round">
+    <path d="M176 348L234 164" />
+    <path d="M278 348L336 164" />
+  </g>
+</svg>
