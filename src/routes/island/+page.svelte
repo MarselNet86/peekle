@@ -784,29 +784,12 @@
           />
         {/if}
         <div class="head">
-          <!-- A chat that has not begun is still choosing where to work, and
-               the name in this corner is that choice. Once something has been
-               said the agent lives in that folder and the name goes back to
-               being a name. tech.md 6.23. -->
-          <div class="lead">
-            <button class="back" onclick={() => openList()} aria-label="Back to the session list">
-              <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
-                <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-              </svg>
-              {#if !aiming}
-                <span class="project">{current.session.project}</span>
-              {/if}
-            </button>
-            {#if aiming}
-              <PickerMenu
-                label={current.session.project}
-                icon="folder"
-                options={folders}
-                value={current.session.cwd}
-                onpick={(id) => pickFolder(id)}
-              />
-            {/if}
-          </div>
+          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+            <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+              <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <span class="project">{current.session.project}</span>
+          </button>
           <!-- Everything that says how much is left, in one corner: the two
                windows and the context. The ring is the button that compacts.
                tech.md 6.12 and 6.15. -->
@@ -891,6 +874,22 @@
             {/if}
             {#if startError}
               <p class="empty">{startError}</p>
+            {/if}
+            <!-- Where the agent will work, above the field and at its left
+                 edge: the folder is part of what is about to be said, and it
+                 is chosen in the same breath as the first message. It stands
+                 only while it can be taken -- nothing said in this chat yet.
+                 tech.md 6.23. -->
+            {#if aiming}
+              <div class="aim">
+                <PickerMenu
+                  label={current.session.project}
+                  icon="folder"
+                  options={folders}
+                  value={current.session.cwd}
+                  onpick={(id) => pickFolder(id)}
+                />
+              </div>
             {/if}
             <PromptInput
               bind:value={reply}
@@ -1113,16 +1112,6 @@
 
   /* Off it reads as an offer, on it reads as a state, because on it is
      costing the user their extension. tech.md 6.5. */
-  /* The left end of the head band: the way out, and what this chat is called.
-     One child, so the corner opposite keeps its own end of the row. */
-  .lead {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
   .back {
     display: flex;
     align-items: center;
@@ -1183,5 +1172,13 @@
     flex-wrap: wrap;
     gap: 6px;
     padding: 0 2px 8px;
+  }
+
+  /* Its own line over the capsule, held to the same left edge the field has:
+     a control tucked into the row under the text would be a fourth thing in a
+     row that is already about the answer, not about where it happens. */
+  .aim {
+    display: flex;
+    padding: 0 4px 5px;
   }
 </style>

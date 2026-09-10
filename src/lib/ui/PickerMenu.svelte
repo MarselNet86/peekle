@@ -3,13 +3,13 @@
    * A short menu over the content: the current value as a button, the options
    * above it, a tick on the one in force. tech.md 9 and 6.15.
    *
-   * It opens where it fits, on both axes: up for the buttons in the bottom
-   * strip, where a menu opening down is drawn off the shape, and down for the
-   * one in the head band, which has the top edge of the screen above it.
+   * It opens upward because every button that carries one stands in the bottom
+   * strip of the island, and a menu that opens down there is a menu drawn off
+   * the shape.
    */
   import { CodeXml, Folder, Hand, ScrollText, Zap } from '@lucide/svelte';
 
-  import { opensDown, opensRight } from '$lib/logic/agent';
+  import { opensRight } from '$lib/logic/agent';
   import type { PickIcon, PickOption } from '$lib/logic/agent';
 
   /** The signs the rows wear. Names are the icon set's own: a hand drawn by
@@ -45,7 +45,6 @@
   // pressed, before anything is drawn: a menu that appears on one side and
   // jumps to the other is worse than one that is cut off. tech.md 9.
   let flip = $state(false);
-  let down = $state(false);
 
   const usable = $derived(!disabled && options.length > 0);
 
@@ -57,9 +56,7 @@
   function toggle() {
     if (!usable) return;
     if (!open && host) {
-      const box = host.getBoundingClientRect();
-      flip = opensRight(box.left, window.innerWidth);
-      down = opensDown(box.top);
+      flip = opensRight(host.getBoundingClientRect().left, window.innerWidth);
     }
     open = !open;
   }
@@ -112,7 +109,7 @@
   </button>
 
   {#if open}
-    <span class="menu" class:flip class:down role="menu">
+    <span class="menu" class:flip role="menu">
       {#each options as option, index (option.id)}
         <button
           class="option"
@@ -190,6 +187,11 @@
     display: flex;
     flex-direction: column;
     min-width: 130px;
+    /* As many rows as there are projects, and the island is not as tall as
+       that: a menu longer than this scrolls rather than running off the
+       shape. tech.md 9 and 6.23. */
+    max-height: 240px;
+    overflow-y: auto;
     padding: 4px;
     border: 1px solid var(--hairline);
     border-radius: 10px;
@@ -208,36 +210,10 @@
     transform-origin: bottom right;
   }
 
-  /* Hung below, for the button in the head band: above it is the top edge of
-     the screen. tech.md 6.23. */
-  .menu.down {
-    bottom: auto;
-    top: calc(100% + 6px);
-    transform-origin: top left;
-    /* Grown from the button, which is now above it, so it comes down rather
-       than up: motion that contradicts the geometry reads as two menus. */
-    animation-name: grow-down;
-  }
-
-  .menu.down.flip {
-    transform-origin: top right;
-  }
-
   @keyframes grow {
     from {
       opacity: 0;
       transform: scale(0.94) translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes grow-down {
-    from {
-      opacity: 0;
-      transform: scale(0.94) translateY(-4px);
     }
     to {
       opacity: 1;

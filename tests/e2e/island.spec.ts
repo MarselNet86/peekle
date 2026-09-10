@@ -370,10 +370,9 @@ test.describe('the island route', () => {
   });
 
   /// A chat that has not begun is still choosing where the agent will work,
-  /// and the choice stands where the folder is already named: the top left of
-  /// the dialogue. The menu hangs below it, because above it is the top edge
-  /// of the screen -- which is layout, and layout is measured here. tech.md
-  /// 6.23.
+  /// and the choice stands over the field, on its left edge: the folder is
+  /// part of what is about to be said. Where it stands is layout, and layout
+  /// is measured here. tech.md 6.23.
   test('a chat that has not begun chooses its folder', async ({ page }) => {
     await stub(page, [
       aimed('/Users/dev/peekle'),
@@ -397,11 +396,13 @@ test.describe('the island route', () => {
       'true',
     );
 
-    // Below the button, and on a ground of its own: the ground lived in the
-    // flipped rule alone until v80.9, so a menu opening left had none at all.
-    const under = (await menu.boundingBox())!;
-    const over = (await chip.boundingBox())!;
-    expect(under.y).toBeGreaterThan(over.y);
+    // Over the field and on its left edge, and on a ground of its own: the
+    // ground lived in the flipped rule alone until v80.9, so a menu opening
+    // left had none at all.
+    const button = (await chip.boundingBox())!;
+    const field = (await page.locator('.reply textarea, .reply input').first().boundingBox())!;
+    expect(button.y + button.height).toBeLessThanOrEqual(field.y);
+    expect(Math.abs(button.x - field.x)).toBeLessThan(24);
     const ground = await menu.evaluate((node) => getComputedStyle(node).backgroundColor);
     expect(ground).not.toBe('rgba(0, 0, 0, 0)');
 
@@ -421,7 +422,7 @@ test.describe('the island route', () => {
     await page.goto(ROUTE);
 
     await expect(page.getByText('go on')).toBeVisible();
-    await expect(page.locator('.head .picker-menu')).toHaveCount(0);
+    await expect(page.locator('.aim')).toHaveCount(0);
     await expect(page.locator('.head .project')).toContainText('peekle');
   });
 
