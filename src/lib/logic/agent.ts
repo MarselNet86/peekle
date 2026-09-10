@@ -206,28 +206,6 @@ export function opensRight(hostLeft: number, viewport: number, width = MENU_WIDT
 }
 
 /**
- * The room a menu is assumed to want above the button that opens it.
- *
- * Three rows and their descriptions. Not the tallest menu there is -- the
- * folders are as many as the projects -- because a menu that is too tall for
- * either side has to pick one, and up is where they have always opened.
- */
-export const MENU_ROOM = 200;
-
-/**
- * Whether a menu opening from this button has to hang below it instead.
- * tech.md 9 and 6.23.
- *
- * The same question as `opensRight`, on the other axis, answered the same way:
- * from where the button is, before anything is drawn. A button in the head
- * band stands under the top edge of the screen, and there is no upward for it
- * to open into.
- */
-export function opensDown(hostTop: number, room = MENU_ROOM): boolean {
-  return hostTop < room;
-}
-
-/**
  * How long an answer stands before it goes, in milliseconds.
  *
  * Ten seconds, and the block shows them leaking rather than vanishing at the

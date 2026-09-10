@@ -56,23 +56,25 @@ and opening it in a terminal, which is the trip this product exists to save.
 `start_session` only aims: the card exists, the process starts with the first
 message. Until then the folder is an intention nobody has read, and that is
 exactly the window the choice lives in. So a chat that has not begun carries
-its folder in the top left of the dialogue, where its name already stood:
-pressing it opens every folder the island knows — the `cwd` of the cards it
-holds, each named once, newest first, the path under the name, a tick on the
-one in force — and **Open folder…** last, which raises the macOS dialog for
-anything else on disk. Say one word and the choice is over: the agent is living
-in that folder, and no `cd` reaches it. Rust refuses on its own too, in its own
-words for each of the three ways it can be asked wrongly.
+its folder on its own line over the field, held to the field's left edge —
+the folder is part of what is about to be said, since the first message is
+what starts the agent and starts it there. Pressing it opens every folder the
+island knows — the `cwd` of the cards it holds, each named once, newest first,
+the path under the name, a tick on the one in force — and **Open folder…**
+last, which raises the macOS dialog for anything else on disk. Say one word
+and the choice is over: the agent is living in that folder, and no `cd`
+reaches it. Rust refuses on its own too, in its own words for each of the
+three ways it can be asked wrongly.
 
 `choose_folder` is the one place the app takes the front deliberately — a
 system dialog only comes up on the active application — and it gives it back
 the moment the dialog closes.
 
-Two things the menu needed on the way. It opens downward now, decided from
-where its button is, the same way it already decided which side to hold: there
-is no upward for a button under the top edge of the screen. And its ground
-lived in the flipped rule alone, so a menu that held its left edge was drawn
-with no ground at all.
+Two things the menu needed on the way. Its ground lived in the flipped rule
+alone, so a menu that held its left edge — the models, every time — was drawn
+with no ground at all, its rows straight over the conversation. And it stops
+growing at 240 pixels and scrolls: there are as many folder rows as the person
+has projects, and the island is not that tall.
 
 ![Choosing the folder a new chat works in](shots/folder-pick.png)
 
