@@ -80,9 +80,18 @@
     const id = sessionOf(island.view);
     return id ? feed.card(id) : undefined;
   });
+  /** A question is standing in this dialogue and nothing else may move.
+   * tech.md 6.14. */
+  const asking = $derived(isQuestion(island.prompt));
   // Everything said, in order, with each run of calls folded into one line
   // that carries a clock. tech.md 6.12.
-  const rows = $derived(feedRows(current?.entries ?? [], current?.status === 'Working'));
+  // `working` is false while a question stands, and that is not a lie about
+  // the session: the agent is parked on the question and doing nothing at
+  // all. A clock ticking above a question says the opposite of what is true,
+  // and a spinner beside one somebody is reading is movement asking for
+  // attention it has no business taking. What it worked through before asking
+  // stays, as the finished line it is. tech.md 6.14.
+  const rows = $derived(feedRows(current?.entries ?? [], current?.status === 'Working' && !asking));
   // A view naming a session the feed does not have falls back to the list.
   // The alternative is what it used to do: render none of the branches and
   // leave an empty black shape on screen, which reads as a crash.
@@ -533,7 +542,7 @@
 <div class="island" bind:this={host}>
   <!-- A question outgrows the dialogue, so the shape takes the window while
        one stands. tech.md 6.14. -->
-  <Shape view={island.view} notch={island.notch} badge={badge.wide} asking={question !== null}>
+  <Shape view={island.view} notch={island.notch} badge={badge.wide} {asking}>
     {#snippet rest()}
       <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />
     {/snippet}
@@ -749,6 +758,7 @@
             <QuestionPrompt
               questions={question.questions}
               onsubmit={(answers) => island.answerQuestions(answers)}
+              onclose={() => island.dismiss()}
             />
           </div>
         {:else}

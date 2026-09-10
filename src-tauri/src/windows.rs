@@ -141,6 +141,20 @@ fn update_hover(app: &AppHandle) {
         return;
     }
 
+    // A question stands until it is answered. Every other open state is the
+    // island showing something, and walking away from something you are shown
+    // is a way of being done with it; a question is the one state where the
+    // agent is parked waiting for this person, and taking it off the screen
+    // while they think, or while they go and look at what it is about, leaves
+    // them with a pulsing mark instead of the question they were reading.
+    // Putting it away by hand still works -- a click outside is a decision,
+    // not a wander -- and then the mark says who is waiting. tech.md 6.7
+    // and 6.14.
+    if stands_until_answered(state.active_prompt().as_ref()) {
+        state.pointer_returned();
+        return;
+    }
+
     if inside {
         // Engaged, so the opening hold has done its job and ordinary leave
         // rules take over. tech.md 6.7.
@@ -290,6 +304,20 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     state.hold_open(Instant::now() + hold);
 }
 
+/// Whether what is on screen has to stay there until it is answered.
+///
+/// Every other open state is the island showing something, and walking away
+/// from something you are shown is a way of being done with it. A question is
+/// the one state where the agent is parked waiting for this person: taking it
+/// off the screen while they think, or while they go and look at the thing it
+/// is about, leaves them with a pulsing mark instead of the question they were
+/// reading. Putting it away by hand still works -- a click beside the shape is
+/// a decision, not a wander -- and then the mark says who is waiting.
+/// tech.md 6.7 and 6.14.
+fn stands_until_answered(active: Option<&PromptRequest>) -> bool {
+    active.is_some_and(|request| request.kind == PromptKind::Question)
+}
+
 /// Which view a blocking request raises, or None to leave the island alone.
 ///
 /// A permission asks for yes or no, and neither answer needs the feed, so it
@@ -415,8 +443,52 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 
 #[cfg(test)]
 mod tests {
-    use super::{view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD};
-    use peekle_core::types::{IslandView, PromptKind};
+    use super::{
+        stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
+    };
+    use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+
+    fn standing(kind: PromptKind) -> PromptRequest {
+        PromptRequest {
+            id: "p".into(),
+            kind,
+            session: SessionRef {
+                session_id: "s".into(),
+                cwd: "/tmp".into(),
+                project: "tmp".into(),
+                pid: None,
+                tty: None,
+            },
+            title: "t".into(),
+            tool: None,
+            last_message: None,
+            detail: None,
+            options: Vec::new(),
+            questions: Vec::new(),
+            allow_free_text: false,
+            created_at: 0,
+            expires_at: 0,
+        }
+    }
+
+    /// A question is the one thing on screen the agent is parked on. Walking
+    /// away from it is not an answer, and it used to put the question away
+    /// eight hundred milliseconds after the pointer left. tech.md 6.14.
+    #[test]
+    fn a_question_stays_until_it_is_answered() {
+        assert!(stands_until_answered(Some(&standing(PromptKind::Question))));
+    }
+
+    /// Everything else keeps the rules it had. The compact panel runs its
+    /// twenty seconds and the end of a turn is a notice nobody has to answer,
+    /// so both may be walked away from. tech.md 6.7.
+    #[test]
+    fn nothing_else_holds_the_island_open() {
+        for kind in [PromptKind::Permission, PromptKind::Idle] {
+            assert!(!stands_until_answered(Some(&standing(kind))), "{kind:?}");
+        }
+        assert!(!stands_until_answered(None));
+    }
 
     /// The panel is a question with two answers on it, so it does not need the
     /// forty five seconds a question with four options and descriptions does.

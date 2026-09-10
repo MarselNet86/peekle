@@ -17,6 +17,12 @@
   /* The sign in the resting mark. Apple's system green, brighter than the
      accent on purpose: it is the one mark that has to read as ours. */
   --brand: #30d158;
+  /* The sign while the agent is waiting on the user. Apple's system purple:
+     the mark is green for "Peekle is here" and every state of the agent's own
+     work, and a question nobody has answered is not that -- it is the one
+     state that costs the person time, and the one worth spotting across a
+     screen. tech.md 6.7 and 6.14. */
+  --waiting: #af52de;
   /* Ultracode, in the original's own colour: it paints the effort block when
      the session runs at xhigh plus dynamic workflows. tech.md 6.15. */
   --ultra: #d0b4ff;
