@@ -31,8 +31,8 @@ const notches = fc.record({
 describe('shape bounds', () => {
   it('never leaves the window, whatever the notch measures', () => {
     fc.assert(
-      fc.property(views, notches, (view, notch) => {
-        const bounds = shapeBounds(view, notch);
+      fc.property(views, notches, fc.boolean(), (view, notch, asking) => {
+        const bounds = shapeBounds(view, notch, false, asking);
 
         expect(Number.isFinite(bounds.width)).toBe(true);
         expect(Number.isFinite(bounds.height)).toBe(true);
@@ -48,8 +48,8 @@ describe('shape bounds', () => {
 
   it('never rounds a corner past the half of the side it sits on', () => {
     fc.assert(
-      fc.property(views, notches, (view, notch) => {
-        const bounds = shapeBounds(view, notch);
+      fc.property(views, notches, fc.boolean(), (view, notch, asking) => {
+        const bounds = shapeBounds(view, notch, false, asking);
         expect(bounds.radius).toBeGreaterThanOrEqual(0);
         expect(bounds.radius).toBeLessThanOrEqual(Math.min(bounds.width, bounds.height) / 2);
       }),
@@ -141,5 +141,39 @@ describe('a display with no notch', () => {
         expect(bounds.width).toBeLessThanOrEqual(WINDOW.width);
       }),
     );
+  });
+});
+
+/**
+ * A question is taller than the dialogue it arrives in: four options with
+ * their descriptions run past the bottom edge, and the last of them was cut
+ * off by it. tech.md 6.14.
+ */
+describe('a question standing in the dialogue', () => {
+  const notch = { width: 185, height: 34 };
+
+  it('takes the whole window while it stands', () => {
+    const asking = shapeBounds({ Session: 'abc' }, notch, false, true);
+    const answered = shapeBounds({ Session: 'abc' }, notch, false, false);
+
+    expect(asking.height).toBe(WINDOW.height);
+    expect(asking.height).toBeGreaterThan(answered.height);
+    // Only the height: a shape that also widened would read as a different
+    // panel arriving rather than as this one making room.
+    expect(asking.width).toBe(answered.width);
+  });
+
+  it('gives it back the moment it is answered', () => {
+    expect(shapeBounds({ Session: 'abc' }, notch, false, false)).toEqual(
+      shapeBounds({ Session: 'abc' }, notch),
+    );
+  });
+
+  /// A question is answered in the dialogue and nowhere else. The compact
+  /// panel of 6.7 has its own two lines, and the resting island has none.
+  it('changes no other view', () => {
+    for (const view of ['Collapsed', 'Pill', 'Ask', 'Sessions'] as IslandView[]) {
+      expect(shapeBounds(view, notch, false, true)).toEqual(shapeBounds(view, notch, false, false));
+    }
   });
 });

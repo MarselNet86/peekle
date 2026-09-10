@@ -32,7 +32,21 @@
     values = values.includes(id) ? values.filter((v) => v !== id) : [...values, id];
   }
 
+  /** Whether the key went into something that takes text. */
+  function typing(target: EventTarget | null): boolean {
+    const element = target as HTMLElement | null;
+    if (!element) return false;
+    return (
+      element.isContentEditable || element.tagName === 'INPUT' || element.tagName === 'TEXTAREA'
+    );
+  }
+
   function keydown(event: KeyboardEvent) {
+    // A digit typed into a field is a digit, not a shortcut. The list listens
+    // on the window, so without this it swallows every number written in the
+    // answer field standing beside it. tech.md 6.14.
+    if (typing(event.target)) return;
+
     // Digits pick a row outright in single mode, toggle it in multi mode.
     // Four options at most, so 1..4 covers it.
     const digit = Number(event.key);

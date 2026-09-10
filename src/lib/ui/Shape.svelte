@@ -9,6 +9,7 @@
     view,
     notch,
     badge = false,
+    asking = false,
     rest,
     children,
   }: {
@@ -16,6 +17,9 @@
     notch: Notch;
     /** The resting shape stands open for the usage number. tech.md 6.18. */
     badge?: boolean;
+    /** A question is standing in the dialogue, so the shape takes the whole
+     * window until it is answered. tech.md 6.14. */
+    asking?: boolean;
     rest?: Snippet;
     children?: Snippet;
   } = $props();
@@ -23,7 +27,7 @@
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
 
-  const target = $derived(shapeBounds(view, notch, badge));
+  const target = $derived(shapeBounds(view, notch, badge, asking));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
 

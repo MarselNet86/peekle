@@ -531,7 +531,9 @@
 {/snippet}
 
 <div class="island" bind:this={host}>
-  <Shape view={island.view} notch={island.notch} badge={badge.wide}>
+  <!-- A question outgrows the dialogue, so the shape takes the window while
+       one stands. tech.md 6.14. -->
+  <Shape view={island.view} notch={island.notch} badge={badge.wide} asking={question !== null}>
     {#snippet rest()}
       <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />
     {/snippet}
@@ -739,7 +741,11 @@
             />
           </div>
         {:else if question}
-          <div class="reply">
+          <!-- The shape has already grown to the window for this (6.14). What
+               a very long question still cannot fit scrolls here, because an
+               option cut off by the bottom edge is an option that is not
+               there. -->
+          <div class="reply asking">
             <QuestionPrompt
               questions={question.questions}
               onsubmit={(answers) => island.answerQuestions(answers)}
@@ -1007,6 +1013,24 @@
   .reply {
     flex: none;
     padding-top: 10px;
+  }
+
+  /* Shrinks before it overflows, and scrolls what is left over. The feed
+     above gives up its room first: it has `min-height: 0` and nothing in it
+     is being asked a question. tech.md 6.14. */
+  .reply.asking {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    /* The answer rows bleed ten pixels either side of the text to make room
+       for their own hover ground, so the scroller has to be that much wider
+       than the column: a scroller narrower than what it holds scrolls
+       sideways too, and the first thing to go is the digit at the head of
+       every row. tech.md 9. */
+    margin: 0 -10px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
   .attached {

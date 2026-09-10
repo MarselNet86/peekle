@@ -70,12 +70,26 @@ function sane(value: number, fallback: number): number {
 }
 
 /**
- * Target bounds of the black shape for a view. Collapsed returns the notch
- * plus the resting drop rather than zero: the spring has to grow out of the
- * bezel, and a shape that starts at nothing reads as a window appearing rather
- * than as the notch opening.
+ * Target bounds of the black shape for a view.
+ *
+ * Collapsed returns the notch plus the resting drop rather than zero: the
+ * spring has to grow out of the bezel, and a shape that starts at nothing
+ * reads as a window appearing rather than as the notch opening.
+ *
+ * `asking` is a question standing in the dialogue. Four options with their
+ * descriptions are taller than the 420 a dialogue stands at, and the last of
+ * them was cut off by the bottom edge -- an option nobody can see is an option
+ * that is not there. So the shape takes the whole window for as long as the
+ * question stands and gives it back the moment it is answered. There is
+ * nowhere further to grow: the window itself never resizes (6.7), and what
+ * still does not fit scrolls inside the panel. tech.md 6.14.
  */
-export function shapeBounds(view: IslandView, notch: Notch, badge = false): ShapeBounds {
+export function shapeBounds(
+  view: IslandView,
+  notch: Notch,
+  badge = false,
+  asking = false,
+): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
 
@@ -104,7 +118,11 @@ export function shapeBounds(view: IslandView, notch: Notch, badge = false): Shap
           ? { width: 460, height: height + 62, radius: 22 }
           : view === 'Sessions'
             ? { width: 460, height: height + 380, radius: 24 }
-            : { width: 560, height: height + 420, radius: 24 };
+            : {
+                width: 560,
+                height: asking ? WINDOW.height : height + 420,
+                radius: 24,
+              };
 
   return clamp(bounds);
 }
