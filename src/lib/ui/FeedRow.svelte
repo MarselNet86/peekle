@@ -1,6 +1,7 @@
 <script lang="ts">
   import { blocks } from '$lib/logic/markdown';
   import { shotLines, shotName } from '$lib/logic/shots';
+  import ShotBlock from './ShotBlock.svelte';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 
   let {
@@ -56,19 +57,12 @@
       {#if shown.length > 0}
         <div class="shots">
           {#each shown as path (path)}
-            <button
-              type="button"
-              class="shot"
-              aria-label="Open {shotName(path)}"
-              onclick={() => onopenshot?.(path)}
-            >
-              <img
-                src={shotSrc?.(path)}
-                alt={shotName(path)}
-                title={shotName(path)}
-                onerror={() => (broken = [...broken, path])}
-              />
-            </button>
+            <ShotBlock
+              name={shotName(path)}
+              src={shotSrc?.(path)}
+              onopen={() => onopenshot?.(path)}
+              onbroken={() => (broken = [...broken, path])}
+            />
           {/each}
         </div>
       {/if}
@@ -336,42 +330,15 @@
     background: transparent;
     border: 1px solid var(--text-dim);
   }
-  /* The picture the reply carried, at the top of its own bubble: it is what
-     the message is about, and the words under it are the ask. Pressing it
-     opens the same full view the chip above the field opens. tech.md 6.13. */
+  /* What the reply carried, at the top of its own bubble: it is what the
+     message is about, and the words under it are the ask. Each one is a
+     reference rather than the picture -- `ShotBlock` -- and pressing it opens
+     the same full view the chip above the field opens. tech.md 6.13. */
   .shots {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 6px;
-  }
-
-  .shot {
-    display: block;
-    border: none;
-    border-radius: 8px;
-    padding: 0;
-    background: none;
-    cursor: pointer;
-    line-height: 0;
-    overflow: hidden;
-    max-width: 100%;
-  }
-
-  /* Small enough to be a reference to the shot rather than the shot itself:
-     at full width it took half the feed, and the whole picture is one press
-     away. tech.md 6.13. */
-  .shot img {
-    display: block;
-    max-width: min(220px, 100%);
-    max-height: 110px;
-    border-radius: 8px;
-    object-fit: contain;
-  }
-
-  .shot:focus,
-  .shot:focus-visible {
-    outline: none;
   }
 
   .dot[data-state='Failed'] {

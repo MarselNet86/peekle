@@ -20,6 +20,7 @@
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Sign from '$lib/ui/Sign.svelte';
+  import ShotBlock from '$lib/ui/ShotBlock.svelte';
   import ShotChip from '$lib/ui/ShotChip.svelte';
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
@@ -599,6 +600,16 @@
     <div class="frame row">
       <ShotChip name="01JBQ8WMKX.png" src={SHOT} />
       <ShotChip name="a-screenshot-with-a-very-long-name-indeed.png" />
+    </div>
+  </section>
+
+  <section>
+    <h2>ShotBlock</h2>
+    <!-- The screenshot as it stands inside a message: a reference, not the
+         picture. tech.md 6.13. -->
+    <div class="frame row">
+      <ShotBlock name="01JBQ8WMKX.png" src={SHOT} />
+      <ShotBlock name="01JBQ8WMKY.png" />
     </div>
   </section>
 

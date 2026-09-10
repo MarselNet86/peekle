@@ -112,6 +112,7 @@ test.describe('overlay routes', () => {
       'WorkLine',
       'ShotPrompt',
       'ShotChip',
+      'ShotBlock',
       'ShotPreview',
       'QuestionPrompt',
       'PromptInput',
