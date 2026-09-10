@@ -707,11 +707,7 @@
           <!-- Everything that says how much is left, in one corner: the two
                windows and the context. The ring is the button that compacts.
                tech.md 6.12 and 6.15. -->
-          <UsageCorner
-            hour={usage.bars[0]?.pct ?? null}
-            week={usage.bars[1]?.pct ?? null}
-            scoped={usage.scoped}
-          />
+          <UsageCorner hour={usage.bars[0]?.pct ?? null} week={usage.bars[1]?.pct ?? null} />
         </div>
         <!-- The answer to a press stands here, above the feed, where the eye
              lands when something does not happen. Under the input it sat
@@ -857,6 +853,14 @@
   .top {
     margin-top: calc(-1 * var(--notch-h, 0px));
     min-height: var(--notch-h, 0px);
+  }
+
+  /* Neither end of the row reaches past its own side of the cutout, however
+     long a project is named: what crosses the hole cannot be seen at all, so
+     it is cut here instead. Half the row, less half the cutout, less the
+     breathing room the eye needs beside a hole. tech.md 6.7. */
+  .head > :global(*) {
+    max-width: calc(50% - var(--notch-w, 0px) / 2 - 6px);
   }
 
   /* A layer over the conversation, not a row in it. Standing in the flow, it

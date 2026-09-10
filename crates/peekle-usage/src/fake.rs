@@ -10,11 +10,6 @@ use peekle_core::types::{
 
 use crate::UsageProvider;
 
-/// The model a fake plan counts on its own, standing in for whatever the real
-/// endpoint names in `scope.model.display_name`. A stand-in, not a claim: the
-/// real provider never invents this word. tech.md 6.4 and section 7.
-const SCOPED_MODEL: &str = "Fable";
-
 /// Every mode the real provider can end up in, so the UI for each one is
 /// reachable without breaking anything on purpose.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -84,14 +79,6 @@ impl UsageProvider for FakeUsage {
                         seven_day,
                         Some(now_secs() + 4 * 24 * 60 * 60),
                     ),
-                    // A plan that counts one model apart, so the third dial is
-                    // reachable in dev. Lower than the whole week, because a
-                    // part of it cannot be more than all of it.
-                    UsageWindowStat::scoped(
-                        seven_day * 0.8,
-                        Some(now_secs() + 4 * 24 * 60 * 60),
-                        SCOPED_MODEL,
-                    ),
                 ],
                 source: UsageSource::Fake,
                 reason: None,
@@ -132,26 +119,13 @@ mod tests {
     #[test]
     fn numbers_mode_yields_both_windows_in_range() {
         let snapshot = FakeUsage::default().snapshot();
-        assert_eq!(snapshot.windows.len(), 3);
+        assert_eq!(snapshot.windows.len(), 2);
         assert_eq!(snapshot.source, UsageSource::Fake);
         assert_eq!(snapshot.reason, None);
-        for window in &snapshot.windows {
+        for window in snapshot.windows {
             assert!((0.0..=100.0).contains(&window.used_pct));
             assert!(window.resets_at.is_some());
         }
-    }
-
-    /// The third window is the one a plan may not have at all, so it is the
-    /// one the fake has to be able to show. It carries a name; the other two
-    /// never do. tech.md 6.4.
-    #[test]
-    fn the_scoped_window_carries_a_name_and_the_others_do_not() {
-        let snapshot = FakeUsage::default().snapshot();
-
-        assert_eq!(snapshot.windows[2].window, UsageWindow::SevenDayScoped);
-        assert_eq!(snapshot.windows[2].scope.as_deref(), Some(SCOPED_MODEL));
-        assert_eq!(snapshot.windows[0].scope, None);
-        assert_eq!(snapshot.windows[1].scope, None);
     }
 
     #[test]

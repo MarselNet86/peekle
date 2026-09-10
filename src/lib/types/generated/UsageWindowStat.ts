@@ -9,10 +9,4 @@ used_pct: number,
 /**
  * unix seconds
  */
-resets_at: number | null, 
-/**
- * Whose window it is, in the server's own word: `Fable`. Only ever set
- * on `SevenDayScoped`, and never invented here -- which models a plan
- * counts apart is the server's to say. tech.md 6.4.
- */
-scope: string | null, };
+resets_at: number | null, };
