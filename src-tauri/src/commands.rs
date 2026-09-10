@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
 use crate::notify::Notifier;
+use crate::panel;
 use crate::state::{AppState, HeldKind, HeldSettings};
 use crate::windows;
 
@@ -1729,6 +1730,81 @@ pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     }
 }
 
+/// Raises the macOS folder dialog and answers with what was chosen.
+///
+/// `None` is a cancel, and a cancel is not an error: the person changed their
+/// mind, which is not an event. The app takes the front for the length of the
+/// dialog and gives it straight back -- a system dialog only comes up on the
+/// active app, and one nobody can see is worse than none. tech.md 6.23.
+#[tauri::command]
+pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    // AppKit only from the main thread, and this command is not on it.
+    let _ = app.run_on_main_thread(panel::take_front);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose the folder this chat works in")
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
+
+    let picked = rx.await;
+    let _ = app.run_on_main_thread(panel::give_front_back);
+    let picked = picked.map_err(|_| "the folder dialog went away".to_string())?;
+
+    let Some(folder) = picked else {
+        tracing::debug!("the folder dialog was cancelled");
+        return Ok(None);
+    };
+    let Ok(path) = folder.into_path() else {
+        return Err("That folder cannot be reached".to_string());
+    };
+    let path = path.to_string_lossy().to_string();
+    tracing::info!(folder = %path, "a folder was chosen");
+    Ok(Some(path))
+}
+
+/// Every refusal names what is so, because each is a different thing: the
+/// folder is gone, the chat is somebody else's, or the chat has already begun
+/// and no `cd` reaches a running agent. tech.md 6.23.
+fn aim_folder(
+    state: &Arc<AppState>,
+    session_id: &str,
+    cwd: &str,
+) -> Result<Vec<peekle_core::types::SessionCard>, String> {
+    if !std::path::Path::new(cwd).is_dir() {
+        return Err("That folder does not exist".to_string());
+    }
+    if !state.owns_session(session_id) {
+        return Err("Peekle can only aim sessions it started".to_string());
+    }
+    if state.pty_running(session_id) {
+        return Err("This chat is already running in its folder".to_string());
+    }
+    state
+        .aim_session(session_id, cwd)
+        .ok_or_else(|| "This chat has already begun".to_string())
+}
+
+/// Points an aimed chat at another folder. tech.md 6.23.
+#[tauri::command]
+pub fn set_session_cwd(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    cwd: String,
+) -> Result<(), String> {
+    let cards = aim_folder(state.inner(), &session_id, &cwd)?;
+
+    tracing::info!(session_id, cwd, "aimed a chat at another folder");
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+    Ok(())
+}
+
 /// Where a bug goes. tech.md 6.22.
 ///
 /// The address is here rather than in the webview for the reason
@@ -2180,6 +2256,53 @@ mod tests {
                 peekle_core::agent::COMPACT_COMMAND
             ),
             Err("There is nothing to compact yet".to_string())
+        );
+    }
+
+    /// tech.md 6.23. Three ways a folder cannot be taken, and each says which
+    /// one it was: a chat that has begun is a different thing from a chat the
+    /// island never started, and "no" alone teaches nobody which.
+    #[test]
+    fn a_folder_that_cannot_be_taken_says_why() {
+        let state = fresh();
+        let here = std::env::temp_dir();
+        let here = here.to_string_lossy().to_string();
+
+        let gone = aim_folder(&state, "ours", "/no/such/folder/here");
+        assert_eq!(gone, Err("That folder does not exist".to_string()));
+
+        // A chat somebody else runs has no folder of ours to point.
+        let theirs = aim_folder(&state, "theirs", &here);
+        assert_eq!(
+            theirs,
+            Err("Peekle can only aim sessions it started".to_string())
+        );
+
+        // Ours, aimed and empty: it moves.
+        state.claim_session("ours");
+        state.open_owned_session(
+            peekle_core::types::SessionRef {
+                session_id: "ours".to_string(),
+                cwd: "/tmp/project".to_string(),
+                project: "project".to_string(),
+                pid: None,
+                tty: None,
+            },
+            1,
+        );
+        let cards = aim_folder(&state, "ours", &here).expect("an aimed chat moves");
+        assert_eq!(cards[0].session.cwd, here);
+
+        // Said something, so the agent is already living in a folder.
+        state.user_turn(
+            &cards[0].session,
+            "go on",
+            peekle_core::types::EntryState::Running,
+            2,
+        );
+        assert_eq!(
+            aim_folder(&state, "ours", &here),
+            Err("This chat has already begun".to_string())
         );
     }
 

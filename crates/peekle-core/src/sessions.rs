@@ -344,6 +344,34 @@ impl SessionRegistry {
         true
     }
 
+    /// Points an aimed chat at another folder, before anything runs in it.
+    ///
+    /// The folder is only an intention until the first message: that is what
+    /// starts the process, and it starts it in the `cwd` the card carries. A
+    /// chat that has said something is already living somewhere, and no `cd`
+    /// reaches a running agent -- so the emptiness of the feed is the whole
+    /// rule, and it is checked here rather than taken on the webview's word.
+    /// `false` when there is no such card, when it is not ours, or when the
+    /// chat has begun. tech.md 6.23.
+    pub fn aim_at(&mut self, session_id: &str, cwd: &str) -> bool {
+        if !self.owned.contains(session_id) {
+            return false;
+        }
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return false;
+        };
+        if !card.entries.is_empty() || card.status == SessionStatus::Ended {
+            return false;
+        }
+        card.session.project = project_of(cwd);
+        card.session.cwd = cwd.to_string();
+        true
+    }
+
     /// Puts a session away for good. The transcript is not touched: those
     /// files belong to Claude Code and Peekle only reads them. tech.md 11.
     pub fn hide(&mut self, session_id: &str) {

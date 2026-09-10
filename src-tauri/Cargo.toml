@@ -42,6 +42,7 @@ objc2-foundation = "0.3.2"
 tauri-plugin-global-shortcut = "2.3.2"
 peekle-hotkey = { version = "0.1.0", path = "../crates/peekle-hotkey" }
 tauri-plugin-notification = "2.4.0"
+tauri-plugin-dialog = "2.7.3"
 
 [lints]
 workspace = true

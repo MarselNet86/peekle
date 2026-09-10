@@ -305,3 +305,34 @@ fn position(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     );
     Ok(())
 }
+
+/// Brings the app to the front for the length of a system dialog.
+///
+/// The one place the product takes focus on purpose. A file dialog comes up on
+/// the active application, and this one is an accessory with no window of its
+/// own to activate through, so it has to say so. tech.md 6.23.
+pub fn take_front() {
+    use objc2_app_kit::NSApplication;
+    use tauri_nspanel::objc2::MainThreadMarker;
+
+    let Some(marker) = MainThreadMarker::new() else {
+        // Off the main thread there is nothing safe to do with AppKit, and a
+        // dialog behind another window is better than a crash.
+        tracing::warn!("not on the main thread, leaving the front alone");
+        return;
+    };
+    // `activateIgnoringOtherApps:` is deprecated since macOS 14 and does
+    // nothing there; this is the call that still means what it says.
+    NSApplication::sharedApplication(marker).activate();
+}
+
+/// Gives the front back to whoever had it. tech.md 6.23.
+pub fn give_front_back() {
+    use objc2_app_kit::NSApplication;
+    use tauri_nspanel::objc2::MainThreadMarker;
+
+    let Some(marker) = MainThreadMarker::new() else {
+        return;
+    };
+    NSApplication::sharedApplication(marker).deactivate();
+}

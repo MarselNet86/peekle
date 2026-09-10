@@ -835,6 +835,67 @@ fn a_session_we_start_has_a_card_before_any_hook_arrives() {
     assert!(registry.is_owned("ours"));
 }
 
+/// tech.md 6.23. The folder is an intention until the first message: nothing
+/// has read it yet, so it moves freely, and the card's project name moves
+/// with it -- a chat named for the folder it left is a chat named wrong.
+#[test]
+fn an_aimed_chat_moves_to_another_folder() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.claim("ours");
+    registry.open_owned(session.clone(), 1);
+
+    assert!(registry.aim_at("ours", "/tmp/other"));
+    let cards = registry.cards();
+    assert_eq!(cards[0].session.cwd, "/tmp/other");
+    assert_eq!(cards[0].session.project, "other");
+}
+
+/// And once something has been said, the agent is already living somewhere:
+/// the process was started in that folder and no `cd` reaches it. The store
+/// answers that itself rather than trusting whoever asked.
+#[test]
+fn a_chat_that_has_begun_stays_in_its_folder() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.claim("ours");
+    registry.open_owned(session.clone(), 1);
+    registry.user_turn(session, "go on", EntryState::Running, 2);
+
+    assert!(!registry.aim_at("ours", "/tmp/other"));
+    assert_eq!(registry.cards()[0].session.cwd, "/tmp/project");
+}
+
+/// A chat somebody else is running has no folder of ours to move: its process
+/// is theirs, and the card is a reading of their transcript.
+#[test]
+fn a_chat_that_is_not_ours_cannot_be_aimed() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "theirs".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.ensure(session, 1);
+
+    assert!(!registry.aim_at("theirs", "/tmp/other"));
+    assert!(!registry.aim_at("nobody", "/tmp/other"));
+}
+
 /// Opening it twice must not stack two cards for one process.
 #[test]
 fn opening_a_session_we_already_have_moves_it_rather_than_doubling_it() {

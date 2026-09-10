@@ -347,6 +347,16 @@ impl AppState {
         sessions.cards().to_vec()
     }
 
+    /// Points an aimed chat at another folder. `None` when the store refused:
+    /// the chat is not ours, or it has already begun. tech.md 6.23.
+    pub fn aim_session(&self, session_id: &str, cwd: &str) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        if !sessions.aim_at(session_id, cwd) {
+            return None;
+        }
+        Some(sessions.cards().to_vec())
+    }
+
     /// Renames a session and remembers it. False means nobody knows the id.
     pub fn rename_session(&self, session_id: &str, title: &str) -> Option<Vec<SessionCard>> {
         let mut sessions = self.lock(&self.sessions);
