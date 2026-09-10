@@ -232,9 +232,6 @@
   // asked, and it deserves an answer where the eye already is. It goes on the
   // next look elsewhere: it is an answer, not a state. tech.md 6.15.
   let rowNote = $state<SettingsNote | null>(null);
-  // What the head measures, so the panel over the feed starts under it rather
-  // than over the way back to the list. tech.md 9.
-  let headHigh = $state(0);
   $effect(() => {
     // Reading `current` subscribes this to the session on screen.
     void current?.session.session_id;
@@ -673,7 +670,7 @@
            what is wrong; a header repeating it would be the second title on a
            screen that has room for one. tech.md 6.16. -->
       <div class="feed">
-        <div class="head" bind:clientHeight={headHigh}>
+        <div class="head">
           <button class="back" onclick={() => openList()} aria-label="Back to the session list">
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
               <path
@@ -705,18 +702,22 @@
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
               <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
             </svg>
-            <span>{current.session.project}</span>
+            <span class="project">{current.session.project}</span>
           </button>
           <!-- Everything that says how much is left, in one corner: the two
                windows and the context. The ring is the button that compacts.
                tech.md 6.12 and 6.15. -->
-          <UsageCorner hour={usage.bars[0]?.pct ?? null} week={usage.bars[1]?.pct ?? null} />
+          <UsageCorner
+            hour={usage.bars[0]?.pct ?? null}
+            week={usage.bars[1]?.pct ?? null}
+            scoped={usage.scoped}
+          />
         </div>
         <!-- The answer to a press stands here, above the feed, where the eye
              lands when something does not happen. Under the input it sat
              below what the reader was looking at. tech.md 6.15 and 9. -->
         {#if rowNote}
-          <div class="note" style:top="{headHigh + 4}px">
+          <div class="note">
             <NoteBlock fact={rowNote.fact} how={rowNote.how} onclose={() => (rowNote = null)} />
           </div>
         {/if}
@@ -837,8 +838,25 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 6px 14px 8px;
+    /* No top padding: the row that stood there has gone up into the band
+       beside the cutout (6.7), and what is left starts at the shape's own
+       edge. The bottom is 14 rather than 8 -- the field and the last row of
+       the list both stood on the kerb. tech.md 9. */
+    padding: 0 14px 14px;
     box-sizing: border-box;
+  }
+
+  /* The band beside the notch, taken by whichever row stands at the top of a
+     view: the head of a dialogue, the gear of the list. Lifted by exactly the
+     height of the cutout, so it costs the content below nothing, and held to
+     that height so it reads as one row with the menu bar beside it. The gap
+     is the cutout itself: nothing is drawn across it, because across it there
+     are no pixels to draw on. Zero on a display with no notch, and then this
+     is an ordinary row at the top. tech.md 6.7. */
+  .head,
+  .top {
+    margin-top: calc(-1 * var(--notch-h, 0px));
+    min-height: var(--notch-h, 0px);
   }
 
   /* A layer over the conversation, not a row in it. Standing in the flow, it
@@ -848,6 +866,7 @@
      untouched. tech.md 9. */
   .note {
     position: absolute;
+    top: 4px;
     left: 14px;
     right: 14px;
     z-index: 3;
@@ -907,9 +926,9 @@
 
   .top {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     flex: none;
-    padding-bottom: 2px;
   }
 
   /* With a way out on the left, the two controls take the ends of the row
@@ -938,7 +957,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    /* Wide enough to clear the cutout between the two ends of the row. */
+    gap: calc(var(--notch-w, 0px) + 10px);
     flex: none;
   }
 
@@ -952,14 +972,25 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    flex: none;
+    /* It shrinks and the corner does not: a project name can be any length,
+       and the two windows are always the same two words. */
+    flex: 0 1 auto;
+    min-width: 0;
     border: none;
     background: transparent;
     color: var(--text-dim);
     font: inherit;
     font-size: 11px;
-    padding: 0 0 4px;
+    padding: 0;
     cursor: pointer;
+  }
+
+  /* Cut rather than drawn under the cutout, where there is nothing to draw
+     on. tech.md 6.7. */
+  .project {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .back:hover {

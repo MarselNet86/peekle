@@ -99,6 +99,36 @@ describe('Shape with content', () => {
     expect((content as HTMLElement).style.paddingTop).toBe('32px');
   });
 
+  /// The cutout is a hole in the middle of the top edge, and the pixels
+  /// beside it are real screen. The shape hands both numbers to whatever it
+  /// draws, so a view can put its top row up there rather than leaving the
+  /// band black. tech.md 6.7.
+  it('hands out the band beside the cutout', () => {
+    const { container } = render(Shape, {
+      props: { view: 'Pill' as IslandView, notch, children: label },
+    });
+
+    const content = container.querySelector('.content') as HTMLElement;
+    expect(content.style.getPropertyValue('--notch-h')).toBe('32px');
+    expect(content.style.getPropertyValue('--notch-w')).toBe('200px');
+  });
+
+  /// No cutout, no band and nothing to step around: a row that reads these
+  /// stands exactly where it would have stood anyway.
+  it('hands out nothing on a display with no notch', () => {
+    const { container } = render(Shape, {
+      props: {
+        view: 'Pill' as IslandView,
+        notch: { width: 200, height: 0 },
+        children: label,
+      },
+    });
+
+    const content = container.querySelector('.content') as HTMLElement;
+    expect(content.style.getPropertyValue('--notch-h')).toBe('0px');
+    expect(content.style.getPropertyValue('--notch-w')).toBe('0px');
+  });
+
   it('holds the content back until the shape has moved, then fades it in', async () => {
     const { container, rerender } = render(Shape, {
       props: { view: 'Collapsed' as IslandView, notch, children: label },

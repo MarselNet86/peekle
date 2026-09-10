@@ -26,6 +26,9 @@ const REASONS: Record<UsageUnavailable, string> = {
 export const WINDOW_LABELS: Record<UsageWindow, string> = {
   FiveHour: '5h',
   SevenDay: 'Week',
+  // A stand-in only. The scoped window is named by the server, and the name
+  // it gave is what the dial wears. tech.md 6.4.
+  SevenDayScoped: 'Model',
 };
 
 export function reasonText(snapshot: UsageSnapshot | null): string {
@@ -49,6 +52,29 @@ export function bars(
       resetsAt: stat?.resets_at ?? null,
     };
   });
+}
+
+/**
+ * The week a plan counts for one model on its own, or null when the plan has
+ * no such window.
+ *
+ * Null is the whole point: this one is not part of the contract of two, and a
+ * dash where the plan has no window at all would promise a number that is
+ * never coming. It wears the name the server gave it, because Peekle does not
+ * know which models a plan counts apart. tech.md 6.4.
+ */
+export function scopedBar(
+  snapshot: UsageSnapshot | null,
+): { label: string; pct: number; resetsAt: number | null } | null {
+  const stat = snapshot?.windows.find((w) => w.window === 'SevenDayScoped');
+  if (!stat) return null;
+
+  // A window with no name has nothing to write under the dial, and a dial
+  // labelled after a guess is worse than no dial.
+  const label = stat.scope?.trim();
+  if (!label) return null;
+
+  return { label, pct: stat.used_pct, resetsAt: stat.resets_at };
 }
 
 /**
@@ -159,6 +185,10 @@ export function createUsage() {
     },
     get bars() {
       return bars(snapshot);
+    },
+    /** The model window, when the plan has one. tech.md 6.4. */
+    get scoped() {
+      return scopedBar(snapshot);
     },
     get reason() {
       return reasonText(snapshot);

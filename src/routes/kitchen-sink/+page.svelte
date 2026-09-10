@@ -395,10 +395,13 @@
     </div>
 
     <h2>UsageCorner</h2>
-    <!-- The top right corner of a dialogue: both windows and the context, the
-         last of them a button. tech.md 6.12 and 6.15. -->
+    <!-- The top right corner of a dialogue: both windows of the account, and
+         the model window on a plan that has one. tech.md 6.4 and 6.12. -->
     <div class="frame">
       <UsageCorner hour={42} week={68} />
+    </div>
+    <div class="frame">
+      <UsageCorner hour={42} week={68} scoped={{ label: 'Fable', pct: 22 }} />
     </div>
 
     <h2>AgentBar</h2>

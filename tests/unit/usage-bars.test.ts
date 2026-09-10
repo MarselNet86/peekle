@@ -13,16 +13,18 @@ import {
   connectLabel,
   gateSessions,
   reasonText,
+  scopedBar,
   WINDOW_LABELS,
 } from '$lib/features/usage/usage.svelte';
 import UsageBar from '$lib/ui/UsageBar.svelte';
+import UsageCorner from '$lib/ui/UsageCorner.svelte';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 
 const live: UsageSnapshot = {
   windows: [
-    { window: 'FiveHour', used_pct: 17, resets_at: 1787140200 },
-    { window: 'SevenDay', used_pct: 48, resets_at: 1787151600 },
+    { window: 'FiveHour', used_pct: 17, resets_at: 1787140200, scope: null },
+    { window: 'SevenDay', used_pct: 48, resets_at: 1787151600, scope: null },
   ],
   source: 'Account',
   reason: null,
@@ -63,6 +65,69 @@ describe('the two bars', () => {
 
     expect(drawn[0].pct).toBe(17);
     expect(drawn[1].pct).toBeNull();
+  });
+});
+
+/**
+ * The week a plan counts for one model on its own. Not part of the contract of
+ * two: a plan that counts nothing apart never reports it, and then there is no
+ * dial rather than a dial full of dashes. tech.md 6.4.
+ */
+describe('the model window', () => {
+  const withScope = (scope: string | null): UsageSnapshot => ({
+    ...live,
+    windows: [
+      ...live.windows,
+      { window: 'SevenDayScoped', used_pct: 22, resets_at: 1787151600, scope },
+    ],
+  });
+
+  it('wears the name the server gave it', () => {
+    expect(scopedBar(withScope('Fable'))).toEqual({
+      label: 'Fable',
+      pct: 22,
+      resetsAt: 1787151600,
+    });
+  });
+
+  it('is nothing at all when the plan has no such window', () => {
+    expect(scopedBar(live)).toBeNull();
+    expect(scopedBar(null)).toBeNull();
+  });
+
+  /// With no name there is nothing to write under the dial, and naming it
+  /// from here would be Peekle deciding which model a plan counts apart.
+  it('is nothing when it arrived without a name', () => {
+    expect(scopedBar(withScope(null))).toBeNull();
+    expect(scopedBar(withScope('   '))).toBeNull();
+  });
+
+  /// The two windows of the account never carry a name, so the third can
+  /// never be confused for one of them.
+  it('leaves the two windows of the account alone', () => {
+    const drawn = bars(withScope('Fable'));
+
+    expect(drawn).toHaveLength(2);
+    expect(drawn.map((b) => b.label)).toEqual([WINDOW_LABELS.FiveHour, WINDOW_LABELS.SevenDay]);
+  });
+});
+
+describe('the corner of an open dialogue', () => {
+  it('carries the two windows of the account', () => {
+    const { container } = render(UsageCorner, { props: { hour: 17, week: 48 } });
+
+    expect(container.querySelectorAll('.usage-dial')).toHaveLength(2);
+    expect(screen.getByText('17% 5h')).toBeInTheDocument();
+    expect(screen.getByText('48% 7d')).toBeInTheDocument();
+  });
+
+  it('carries the model window beside them when the plan has one', () => {
+    const { container } = render(UsageCorner, {
+      props: { hour: 17, week: 48, scoped: { label: 'Fable', pct: 22 } },
+    });
+
+    expect(container.querySelectorAll('.usage-dial')).toHaveLength(3);
+    expect(screen.getByText('22% Fable')).toBeInTheDocument();
   });
 });
 
