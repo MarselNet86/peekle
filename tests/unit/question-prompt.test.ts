@@ -227,3 +227,28 @@ describe('an answer of your own', () => {
     expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
   });
 });
+
+/**
+ * A way out of the question itself. Without it the only way past a question
+ * with nothing right in it is to answer it wrongly. tech.md 6.14.
+ */
+describe('closing a question instead of answering it', () => {
+  it('offers a cross, and it answers nothing', async () => {
+    const onclose = vi.fn();
+    const onsubmit = vi.fn();
+    render(QuestionPrompt, { props: { questions: [single], onclose, onsubmit } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close the question' }));
+
+    expect(onclose).toHaveBeenCalledOnce();
+    expect(onsubmit).not.toHaveBeenCalled();
+  });
+
+  /// Nothing to close it into: a caller that does not take a refusal is not
+  /// given a control that would do nothing.
+  it('draws no cross where there is nowhere to close to', () => {
+    render(QuestionPrompt, { props: { questions: [single] } });
+
+    expect(screen.queryByRole('button', { name: 'Close the question' })).not.toBeInTheDocument();
+  });
+});

@@ -553,12 +553,31 @@ async fn a_multi_select_answer_joins_its_labels_with_a_comma() {
     );
 }
 
-/// Closed without answering -- Escape, or the timeout -- carries no decision,
-/// same as a permission with no recognised choice: Claude Code falls back to
-/// its own prompt rather than the tool call hanging on nothing.
+/// Closed by hand -- the cross on the panel, or Escape -- refuses the tool.
+/// The cross says the answer is none of these, so the agent is told the
+/// question was closed and moves on rather than being asked it again in the
+/// terminal. tech.md 6.14.
 #[tokio::test]
-async fn an_unanswered_ask_user_question_carries_no_decision() {
-    for outcome in [PromptOutcome::Dismissed, PromptOutcome::TimedOut] {
+async fn a_question_closed_by_hand_refuses_the_tool() {
+    let sink = FixtureSink::new(Some(PromptOutcome::Dismissed));
+    let (status, body) = post(sink, "permission", &payload("ask_user_question")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["hookSpecificOutput"]["decision"]["behavior"], "deny");
+    assert!(
+        body["hookSpecificOutput"]["decision"]["message"]
+            .as_str()
+            .is_some_and(|line| !line.is_empty()),
+        "a refusal says what happened: {body}"
+    );
+}
+
+/// Nobody closed anything: the island was never answered and the hook ran out
+/// of time. That hands the question to Claude Code to ask in the terminal,
+/// which is what silence has always meant. tech.md 6.14.
+#[tokio::test]
+async fn an_ask_user_question_nobody_touched_carries_no_decision() {
+    for outcome in [PromptOutcome::TimedOut, PromptOutcome::Bypassed] {
         let sink = FixtureSink::new(Some(outcome.clone()));
         let (status, body) = post(sink, "permission", &payload("ask_user_question")).await;
 

@@ -186,6 +186,24 @@ pub fn permission_request(
 
 /// Response body for `/permission`.
 pub fn permission_body(outcome: &PromptOutcome, request: &PromptRequest) -> Value {
+    // A question closed by hand is a refusal, not a silence. An empty body
+    // hands it to Claude Code to ask again, which is right for a permission --
+    // Escape there means "not now", and the terminal is where the user then
+    // says yes or no. A question is the opposite: the cross on it says the
+    // answer is none of these and the tool should not run. That reaches the
+    // agent as the tool being refused, and it moves on. tech.md 6.14.
+    if matches!(outcome, PromptOutcome::Dismissed) && request.kind == PromptKind::Question {
+        return json!({
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {
+                    "behavior": "deny",
+                    "message": REFUSED,
+                }
+            }
+        });
+    }
+
     let PromptOutcome::Answered(answer) = outcome else {
         return json!({});
     };
@@ -220,6 +238,11 @@ pub fn permission_body(outcome: &PromptOutcome, request: &PromptRequest) -> Valu
         }
     })
 }
+
+/// What the agent is told when the question is closed without an answer. One
+/// line, and it says what happened rather than what to do about it: the agent
+/// decides that. tech.md 6.14.
+const REFUSED: &str = "The user closed the question without answering it.";
 
 /// Answers an `AskUserQuestion`. `"allow"` alone never answers it: Claude Code
 /// still needs the tool's input filled in, so the decision carries

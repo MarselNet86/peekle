@@ -54,8 +54,15 @@
   <span class="glyph">
     <svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
       <g class="sign">
-        <path d="M4 10.6L6.9 1.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
         <path
+          class="stroke first"
+          d="M4 10.6L6.9 1.4"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+        />
+        <path
+          class="stroke second"
           d="M9.1 10.6L12 1.4"
           stroke="currentColor"
           stroke-width="2.2"
@@ -232,11 +239,39 @@
   }
 
   /* Waiting is the one state that costs the user time, so it is the one state
-     that moves. Never filter or backdrop-filter: those repaint everything
-     under the window on every frame. tech.md 6.10. */
+     that moves, and the one that changes colour. The sign is green for Peekle
+     and for everything the agent does on its own; a question standing
+     unanswered is neither, and the eye has to find it from across a screen.
+     Never filter or backdrop-filter: those repaint everything under the
+     window on every frame. tech.md 6.7, 6.10 and 6.14. */
   .mark[data-status='waiting'] .glyph {
     opacity: 1;
+    color: var(--waiting);
     animation: breathe 1600ms ease-in-out infinite;
+  }
+
+  /* One stroke goes up and comes back down, then the other: a walk, not a
+     jitter. The two halves of the cycle are the two strokes, so the sign is
+     never still and never leaves its own footprint. */
+  .mark[data-status='waiting'] .stroke {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: hop 1400ms ease-in-out infinite;
+  }
+
+  .mark[data-status='waiting'] .second {
+    animation-delay: 700ms;
+  }
+
+  @keyframes hop {
+    0%,
+    30%,
+    100% {
+      transform: translateY(0);
+    }
+    15% {
+      transform: translateY(-2.2px);
+    }
   }
 
   .mark:hover .glyph {
@@ -255,6 +290,11 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mark[data-status='waiting'] .glyph {
+      animation: none;
+    }
+
+    /* The colour still says it, and the colour does not move. */
+    .mark[data-status='waiting'] .stroke {
       animation: none;
     }
 

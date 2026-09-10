@@ -11,6 +11,7 @@
   import type { Question } from '$lib/types/generated/Question';
   import type { QuestionAnswer } from '$lib/types/generated/QuestionAnswer';
   import Button from './Button.svelte';
+  import IconButton from './IconButton.svelte';
   import OptionList from './OptionList.svelte';
   import PromptInput from './PromptInput.svelte';
 
@@ -28,9 +29,14 @@
   let {
     questions,
     onsubmit,
+    onclose,
   }: {
     questions: Question[];
     onsubmit?: (answers: QuestionAnswer[]) => void;
+    /** None of these, and not a later one either. The tool is refused and the
+     * agent moves on, rather than being handed the question again in the
+     * terminal. tech.md 6.14. */
+    onclose?: () => void;
   } = $props();
 
   /** AskUserQuestion identifies an option by its label, not by an id: the
@@ -96,6 +102,12 @@
     {#if questions.length > 1}
       <span class="progress">{index + 1} / {questions.length}</span>
     {/if}
+    <!-- A way out of the question itself, not just out of this one of its
+         answers. Without it the only way past a question with nothing right
+         in it is to answer it wrongly. tech.md 6.14. -->
+    {#if onclose}
+      <IconButton name="close" title="Close the question" onclick={onclose} />
+    {/if}
   </div>
   <p class="text">{question.question}</p>
   <!-- Pulled out by the row's own padding, so the answers line up with the
@@ -149,8 +161,9 @@
 
   .head {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+    /* The cross is a round button and the header a small caps line, so they
+       are centred against each other rather than sat on one baseline. */
+    align-items: center;
     gap: 8px;
   }
 
@@ -161,7 +174,10 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* The header takes the room and the cross keeps to its end, so a question
+     with one page and a question with four look the same at the corner. */
   .header {
+    flex: 1;
     color: var(--text-dim);
     font-size: 10px;
     text-transform: uppercase;
