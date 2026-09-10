@@ -1082,7 +1082,9 @@ pub async fn send_message(
     let body = text.to_string();
     let wrote = tauri::async_runtime::spawn_blocking(move || {
         for line in held.lines() {
-            owner.pty().send(&id, &line)?;
+            // Each pick answers its own question before the next one goes, or
+            // the line after it lands in a dialog. tech.md 6.15.
+            owner.pty().command(&id, &line)?;
             std::thread::sleep(peekle_core::pty::SETTING_GAP);
         }
         owner.pty().send(&id, &body)
@@ -1315,7 +1317,10 @@ fn command_session(
         return Ok(());
     }
 
-    state.pty().send(session_id, line).map_err(|err| {
+    // `command`, not `send`: a setting the CLI cannot apply silently asks
+    // about it first, and until that dialog is answered it eats whatever is
+    // written next -- the message the person types after picking. tech.md 6.15.
+    state.pty().command(session_id, line).map_err(|err| {
         tracing::warn!(error = %err, session_id, "the pty refused the setting");
         "That session is no longer listening".to_string()
     })?;

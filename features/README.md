@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract            |
 | ------- | ------------------------------------------------------------------------------------------- | ------------------- |
+| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)  | 6.5, 6.15           |
 | v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.5, 6.21 |
 | v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9    |
 | v76     | [A question waits for you](#v76--a-question-waits-for-you)                                  | 6.7, 6.14, 9        |
@@ -32,6 +33,40 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9  |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9             |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9        |
+
+## v79 — A slash command answers its own question
+
+2026-09-10
+
+Nothing new to look at, which is the point: the message you type after
+changing a setting now reaches the agent.
+
+Picking `Ultracode` wrote `/effort ultracode` into the session and looked
+like it worked. It did — but on a conversation that is already cached the CLI
+does not apply it silently. It draws a dialog:
+
+```
+Change effort level?
+This conversation is cached for the current effort level. Switching to xhigh
+means the full history gets re-read on your next message.
+  ❯ 1. Yes, switch to xhigh
+    2. No, go back
+```
+
+and the TUI stays modal on it. Everything written next belongs to that dialog.
+So the message typed after the pick was swallowed whole and its own newline
+answered the question — the agent never saw a word of it, while the island had
+already drawn the bubble as sent. Reproduced on a live 2.1.263 with Opus 5,
+twice: once through a pty driven by hand, once through `PtyHost` itself.
+
+A slash command now goes as three writes rather than two: the line, its
+newline, and 400ms later one more. The second newline takes the option under
+the cursor — the change that was just asked for — and on a command that raised
+no dialog it lands in an empty input box, where a newline does nothing at all.
+That is the same ground the delivery nudge has always stood on.
+
+A reply still goes as two: a message is never asked a question back, and a
+spare newline behind one is an empty turn.
 
 ## v78 — A compact you can see
 

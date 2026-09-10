@@ -179,6 +179,33 @@ pub const ENTER_GAP: std::time::Duration = std::time::Duration::from_millis(120)
 /// travel together, and this is the distance between them.
 pub const SETTING_GAP: std::time::Duration = std::time::Duration::from_millis(400);
 
+/// The bytes one slash command puts on the wire: the line, its newline, and a
+/// second newline behind that.
+///
+/// A setting the CLI cannot apply silently asks about it instead.
+/// `/effort ultracode` on a conversation that is already cached draws
+/// `Change effort level?` with `Yes, switch to xhigh` under the cursor, and
+/// the TUI stays modal until something answers. Everything written while it
+/// stands belongs to the dialog: measured on a live 2.1.263 with Opus 5, the
+/// message typed next was swallowed whole and its own newline answered the
+/// question, so the words never reached the agent and nothing said so.
+///
+/// So the command answers its own question. Enter takes the option under the
+/// cursor, which is the change that was just asked for; on a command that
+/// raised no dialog it lands on an empty input box, where a newline does
+/// nothing at all -- the same ground `NUDGE` stands on. tech.md 6.15.
+pub fn command_writes(line: &str) -> Vec<Vec<u8>> {
+    vec![line.as_bytes().to_vec(), b"\r".to_vec(), b"\r".to_vec()]
+}
+
+/// How long the answering newline waits behind a slash command.
+///
+/// The TUI has to run the command and draw what it asks before there is
+/// anything to answer. The same 400ms that already separates one setting from
+/// the next: measured against a live session, the dialog is up well inside
+/// it, and the message that follows lands in the box the way it should.
+pub const CONFIRM_GAP: std::time::Duration = SETTING_GAP;
+
 /// A session id Claude Code accepts: it insists on a UUID.
 pub fn new_session_id() -> String {
     let raw = ulid::Ulid::generate().to_bytes();
@@ -276,6 +303,22 @@ struct Owned {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     /// Held so the pty is not closed while the reader thread drains it.
     _master: Box<dyn portable_pty::MasterPty + Send>,
+}
+
+/// One chunk out to a session, flushed on its own.
+///
+/// Every write is flushed where it is written: two chunks left in the buffer
+/// arrive as one read however long the gap between them was, and the gap is
+/// the whole mechanism. tech.md 6.5.
+fn put(owned: &mut Owned, chunk: &[u8]) -> Result<(), PtyError> {
+    owned
+        .writer
+        .write_all(chunk)
+        .map_err(|err| PtyError::Pty(err.to_string()))?;
+    owned
+        .writer
+        .flush()
+        .map_err(|err| PtyError::Pty(err.to_string()))
 }
 
 /// The sessions Peekle started, by `session_id`.
@@ -408,14 +451,29 @@ impl PtyHost {
             if index > 0 {
                 std::thread::sleep(ENTER_GAP);
             }
-            owned
-                .writer
-                .write_all(&chunk)
-                .map_err(|err| PtyError::Pty(err.to_string()))?;
-            owned
-                .writer
-                .flush()
-                .map_err(|err| PtyError::Pty(err.to_string()))?;
+            put(owned, &chunk)?;
+        }
+        Ok(())
+    }
+
+    /// Writes one slash command, and answers the question it may raise.
+    ///
+    /// The same channel a message takes, with one more newline behind it: a
+    /// setting the CLI cannot apply silently puts a dialog on screen instead,
+    /// and until something answers, everything written next is eaten by it --
+    /// including the next thing the person types. See [`command_writes`].
+    /// tech.md 6.15.
+    pub fn command(&self, session_id: &str, line: &str) -> Result<(), PtyError> {
+        let mut sessions = self.lock();
+        let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
+
+        for (index, chunk) in command_writes(line).into_iter().enumerate() {
+            match index {
+                0 => {}
+                1 => std::thread::sleep(ENTER_GAP),
+                _ => std::thread::sleep(CONFIRM_GAP),
+            }
+            put(owned, &chunk)?;
         }
         Ok(())
     }
@@ -659,6 +717,42 @@ mod tests {
         assert_eq!(writes.len(), 2);
         assert_eq!(writes[0], b"build it");
         assert_eq!(writes[1], b"\r");
+    }
+
+    /// A slash command answers the question it raises.
+    ///
+    /// `/effort ultracode` on a cached conversation draws `Change effort
+    /// level?` and the TUI stays modal on it. The message typed next went
+    /// into that dialog and its newline answered the question: the words were
+    /// gone, the agent never saw them, and the island had already drawn the
+    /// bubble. Measured on a live 2.1.263 with Opus 5. tech.md 6.15.
+    #[test]
+    fn a_slash_command_answers_its_own_question() {
+        let writes = command_writes("/effort ultracode");
+
+        assert_eq!(writes.len(), 3);
+        assert_eq!(writes[0], b"/effort ultracode");
+        assert_eq!(writes[1], b"\r");
+        assert_eq!(writes[2], NUDGE, "and the answer is one plain newline");
+    }
+
+    /// It is a message plus one newline, and nothing else: a dialog that is
+    /// not there must be answered by something an empty input box ignores.
+    #[test]
+    fn the_answer_adds_nothing_a_box_could_keep() {
+        let line = "/model opus";
+        let message = message_writes(line);
+        let command = command_writes(line);
+
+        assert_eq!(command[..2], message[..]);
+        assert_eq!(command[2], b"\r");
+    }
+
+    /// Long enough for the TUI to run the command and draw what it asks.
+    #[test]
+    fn the_answer_waits_for_the_question_to_be_drawn() {
+        assert!(CONFIRM_GAP >= std::time::Duration::from_millis(300));
+        assert!(CONFIRM_GAP <= std::time::Duration::from_millis(1000));
     }
 
     /// Below the measured threshold the two writes arrive as one read, the TUI
