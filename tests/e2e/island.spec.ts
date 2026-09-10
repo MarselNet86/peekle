@@ -56,6 +56,18 @@ function fresh(status = 'Idle', entries: unknown[] = []): Card {
   return { ...observed(entries), status, agent: null };
 }
 
+/** A chat Peekle aimed and nobody has spoken in: the folder is still a choice.
+ * tech.md 6.23. */
+function aimed(cwd: string, id = 's1', entries: unknown[] = []): Card {
+  const project = cwd.split('/').filter(Boolean).at(-1) ?? '';
+  const card = fresh('Idle', entries) as Card & { session: Record<string, unknown> };
+  return {
+    ...card,
+    session: { ...card.session, session_id: id, cwd, project },
+    origin: 'Owned',
+  };
+}
+
 function say(id: string, text: string, at: number) {
   return { id, kind: 'User', text, tool: null, detail: null, state: 'Ok', at };
 }
@@ -355,6 +367,62 @@ test.describe('the island route', () => {
 
     await expect(page.locator('.work').first()).toBeVisible();
     await expect(page.getByRole('img', { name: 'Nothing said in this chat yet' })).toHaveCount(0);
+  });
+
+  /// A chat that has not begun is still choosing where the agent will work,
+  /// and the choice stands where the folder is already named: the top left of
+  /// the dialogue. The menu hangs below it, because above it is the top edge
+  /// of the screen -- which is layout, and layout is measured here. tech.md
+  /// 6.23.
+  test('a chat that has not begun chooses its folder', async ({ page }) => {
+    await stub(page, [
+      aimed('/Users/dev/peekle'),
+      aimed('/Users/dev/site', 's2'),
+      aimed('/Users/dev/notes', 's3'),
+    ]);
+    await page.goto(ROUTE);
+
+    const chip = page.getByRole('button', { name: 'peekle' });
+    await expect(chip).toBeVisible();
+    await chip.click();
+
+    const menu = page.getByRole('menu');
+    const site = menu.getByRole('menuitemradio', { name: /site/ });
+    await expect(site).toBeVisible();
+    // Every folder the island knows, and the way to the rest of the disk last.
+    await expect(menu.getByText('Open folder…')).toBeVisible();
+    // The tick stands on the folder in force.
+    await expect(menu.getByRole('menuitemradio', { name: /peekle/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    // Below the button, and on a ground of its own: the ground lived in the
+    // flipped rule alone until v80.9, so a menu opening left had none at all.
+    const under = (await menu.boundingBox())!;
+    const over = (await chip.boundingBox())!;
+    expect(under.y).toBeGreaterThan(over.y);
+    const ground = await menu.evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(ground).not.toBe('rgba(0, 0, 0, 0)');
+
+    await site.click();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const aimedAt = calls.filter((call) => call.command === 'set_session_cwd');
+    expect(aimedAt).toHaveLength(1);
+    expect(aimedAt[0].args).toEqual({ sessionId: 's1', cwd: '/Users/dev/site' });
+  });
+
+  /// And once something has been said, the agent is living in that folder:
+  /// the name goes back to being a name. tech.md 6.23.
+  test('a chat that has begun only names its folder', async ({ page }) => {
+    await stub(page, [aimed('/Users/dev/peekle', 's1', [say('u1', 'go on', 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    await expect(page.getByText('go on')).toBeVisible();
+    await expect(page.locator('.head .picker-menu')).toHaveCount(0);
+    await expect(page.locator('.head .project')).toContainText('peekle');
   });
 
   /// The way to the developer stands in the corner of the list, and its line

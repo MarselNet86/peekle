@@ -3,17 +3,18 @@
    * A short menu over the content: the current value as a button, the options
    * above it, a tick on the one in force. tech.md 9 and 6.15.
    *
-   * It opens upward because it lives in the bottom strip of the island, and a
-   * menu that opens down there is a menu drawn off the shape.
+   * It opens where it fits, on both axes: up for the buttons in the bottom
+   * strip, where a menu opening down is drawn off the shape, and down for the
+   * one in the head band, which has the top edge of the screen above it.
    */
-  import { CodeXml, Hand, ScrollText, Zap } from '@lucide/svelte';
+  import { CodeXml, Folder, Hand, ScrollText, Zap } from '@lucide/svelte';
 
-  import { opensRight } from '$lib/logic/agent';
+  import { opensDown, opensRight } from '$lib/logic/agent';
   import type { PickIcon, PickOption } from '$lib/logic/agent';
 
   /** The signs the rows wear. Names are the icon set's own: a hand drawn by
    * hand comes out a blob. tech.md 9. */
-  const SIGNS = { hand: Hand, code: CodeXml, plan: ScrollText, bolt: Zap };
+  const SIGNS = { hand: Hand, code: CodeXml, plan: ScrollText, bolt: Zap, folder: Folder };
 
   let {
     label,
@@ -40,10 +41,11 @@
 
   let open = $state(false);
   let host = $state<HTMLElement | null>(null);
-  // Which edge the menu holds. Decided from where the button is when it is
+  // Which edges the menu holds. Decided from where the button is when it is
   // pressed, before anything is drawn: a menu that appears on one side and
   // jumps to the other is worse than one that is cut off. tech.md 9.
   let flip = $state(false);
+  let down = $state(false);
 
   const usable = $derived(!disabled && options.length > 0);
 
@@ -55,7 +57,9 @@
   function toggle() {
     if (!usable) return;
     if (!open && host) {
-      flip = opensRight(host.getBoundingClientRect().left, window.innerWidth);
+      const box = host.getBoundingClientRect();
+      flip = opensRight(box.left, window.innerWidth);
+      down = opensDown(box.top);
     }
     open = !open;
   }
@@ -108,7 +112,7 @@
   </button>
 
   {#if open}
-    <span class="menu" class:flip role="menu">
+    <span class="menu" class:flip class:down role="menu">
       {#each options as option, index (option.id)}
         <button
           class="option"
@@ -182,6 +186,17 @@
     left: 0;
     z-index: 3;
     transform-origin: bottom left;
+    animation: grow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    display: flex;
+    flex-direction: column;
+    min-width: 130px;
+    padding: 4px;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    /* Its own ground, and an opaque one: it stands over the conversation.
+       This lived in the `.flip` rule alone until v80.9, so a menu that held
+       its left edge was drawn with no ground at all. */
+    background: var(--notch);
   }
 
   /* Held by its right edge, for a button close enough to the right of the
@@ -191,20 +206,38 @@
     left: auto;
     right: 0;
     transform-origin: bottom right;
-    animation: grow 160ms cubic-bezier(0.22, 1, 0.36, 1);
-    display: flex;
-    flex-direction: column;
-    min-width: 130px;
-    padding: 4px;
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
-    background: var(--notch);
+  }
+
+  /* Hung below, for the button in the head band: above it is the top edge of
+     the screen. tech.md 6.23. */
+  .menu.down {
+    bottom: auto;
+    top: calc(100% + 6px);
+    transform-origin: top left;
+    /* Grown from the button, which is now above it, so it comes down rather
+       than up: motion that contradicts the geometry reads as two menus. */
+    animation-name: grow-down;
+  }
+
+  .menu.down.flip {
+    transform-origin: top right;
   }
 
   @keyframes grow {
     from {
       opacity: 0;
       transform: scale(0.94) translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes grow-down {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(-4px);
     }
     to {
       opacity: 1;

@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                            | Contract             |
 | ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                  | 6.23, 6.5, 9         |
 | v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                            | 6.22, 6.5, 9         |
 | v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                  | 6.5                  |
 | v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows) | 6.21, 9              |
@@ -42,6 +43,38 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.9 — A new chat picks its folder
+
+2026-09-11
+
+An agent works in a folder, and there was no way to say which. **New session**
+opened the chat in the `cwd` of the newest card — the only folder the island
+could name without inventing one — so working in another project meant leaving
+and opening it in a terminal, which is the trip this product exists to save.
+
+`start_session` only aims: the card exists, the process starts with the first
+message. Until then the folder is an intention nobody has read, and that is
+exactly the window the choice lives in. So a chat that has not begun carries
+its folder in the top left of the dialogue, where its name already stood:
+pressing it opens every folder the island knows — the `cwd` of the cards it
+holds, each named once, newest first, the path under the name, a tick on the
+one in force — and **Open folder…** last, which raises the macOS dialog for
+anything else on disk. Say one word and the choice is over: the agent is living
+in that folder, and no `cd` reaches it. Rust refuses on its own too, in its own
+words for each of the three ways it can be asked wrongly.
+
+`choose_folder` is the one place the app takes the front deliberately — a
+system dialog only comes up on the active application — and it gives it back
+the moment the dialog closes.
+
+Two things the menu needed on the way. It opens downward now, decided from
+where its button is, the same way it already decided which side to hold: there
+is no upward for a button under the top edge of the screen. And its ground
+lived in the flipped rule alone, so a menu that held its left edge was drawn
+with no ground at all.
+
+![Choosing the folder a new chat works in](shots/folder-pick.png)
 
 ## v80.8 — A way to the developer
 

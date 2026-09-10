@@ -24,6 +24,7 @@
     type SettingsNote,
   } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
+  import { canPickFolder, CHOOSE, folderOptions } from '$lib/logic/folders';
   import { feedRows } from '$lib/logic/work';
   import {
     barred as isBarred,
@@ -42,6 +43,7 @@
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
   import IconButton from '$lib/ui/IconButton.svelte';
+  import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import SignInPanel from '$lib/ui/SignInPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -301,6 +303,27 @@
   // worse than reusing one. tech.md 6.5.
   const newestCwd = $derived(feed.sessions[0]?.session.cwd ?? null);
   let startError = $state<string | null>(null);
+
+  // The folder of a chat that has not begun. It is the project name in the
+  // head band until the first message, and a name that is still being chosen
+  // is drawn as the choice it is. tech.md 6.23.
+  const aiming = $derived(canPickFolder(current));
+  const folders = $derived(folderOptions(feed.sessions, current?.session.cwd ?? ''));
+
+  async function pickFolder(id: string) {
+    if (!current) return;
+    const sessionId = current.session.session_id;
+    // The last row is not a folder: it is the way to the rest of the disk.
+    const cwd = id === CHOOSE ? await commands.chooseFolder() : id;
+    // A cancel changes nothing and says nothing: the person changed their
+    // mind, and that is not an event. tech.md 6.23.
+    if (!cwd) return;
+    try {
+      await commands.setSessionCwd(sessionId, cwd);
+    } catch (err) {
+      startError = String(err);
+    }
+  }
 
   async function startSession(cwd: string) {
     startError = null;
@@ -761,12 +784,29 @@
           />
         {/if}
         <div class="head">
-          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
-            <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
-              <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-            <span class="project">{current.session.project}</span>
-          </button>
+          <!-- A chat that has not begun is still choosing where to work, and
+               the name in this corner is that choice. Once something has been
+               said the agent lives in that folder and the name goes back to
+               being a name. tech.md 6.23. -->
+          <div class="lead">
+            <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+              <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+                <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+              {#if !aiming}
+                <span class="project">{current.session.project}</span>
+              {/if}
+            </button>
+            {#if aiming}
+              <PickerMenu
+                label={current.session.project}
+                icon="folder"
+                options={folders}
+                value={current.session.cwd}
+                onpick={(id) => pickFolder(id)}
+              />
+            {/if}
+          </div>
           <!-- Everything that says how much is left, in one corner: the two
                windows and the context. The ring is the button that compacts.
                tech.md 6.12 and 6.15. -->
@@ -1073,6 +1113,16 @@
 
   /* Off it reads as an offer, on it reads as a state, because on it is
      costing the user their extension. tech.md 6.5. */
+  /* The left end of the head band: the way out, and what this chat is called.
+     One child, so the corner opposite keeps its own end of the row. */
+  .lead {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
   .back {
     display: flex;
     align-items: center;

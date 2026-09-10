@@ -29,6 +29,7 @@
   import UsageCorner from '$lib/ui/UsageCorner.svelte';
   import UsageDial from '$lib/ui/UsageDial.svelte';
   import { effortOptions, modelOptions } from '$lib/logic/agent';
+  import { folderOptions } from '$lib/logic/folders';
   import { ELSEWHERE_NOTE, FINISHED_NOTE, noteTitle } from '$lib/logic/agent';
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
@@ -198,6 +199,14 @@
   const effortPicks = effortOptions({
     levels: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
   } as AgentSetup);
+  // Built from cards, the way the head band builds it. tech.md 6.23.
+  const folderPicks = folderOptions(
+    [
+      { session: { cwd: '/Users/dev/peekle', project: 'peekle' } },
+      { session: { cwd: '/Users/dev/code/site', project: 'site' } },
+    ] as SessionCard[],
+    '/Users/dev/peekle',
+  );
 
   const opus: AgentSetup = {
     model: 'claude-opus-5',
@@ -512,6 +521,14 @@
       <PickerMenu label="Opus 5" options={modelPicks} value="opus" onpick={() => {}} />
       <PickerMenu label="High" options={effortPicks} value="High" pending onpick={() => {}} />
       <PickerMenu label="Opus 5" options={modelPicks} disabled onpick={() => {}} />
+      <!-- The folder a chat that has not begun works in. tech.md 6.23. -->
+      <PickerMenu
+        label="peekle"
+        icon="folder"
+        options={folderPicks}
+        value="/Users/dev/peekle"
+        onpick={() => {}}
+      />
     </div>
   </section>
 
