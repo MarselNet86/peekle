@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                            | Contract             |
 | ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                  | 6.5                  |
 | v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows) | 6.21, 9              |
 | v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                          | 6.2, 6.7             |
 | v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                | 6.7, 9               |
@@ -40,6 +41,25 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+
+## v80.7 — Stop says which of the three it was
+
+2026-09-10
+
+Pressing Stop on a chat the island cannot reach answered `Nothing is running
+there` — for all three ways it can fail, and only one of them is that.
+
+- Nobody holds the chat: nothing is running, true. The card still said
+  `Working`, which is what put the button there in the first place, so it goes
+  to `Idle` in the same breath. We just looked; there is no reason to leave a
+  button offering to stop a turn that is over until the stale sweep gets to it
+  ten minutes later.
+- A live process holds it and publishes no inbox: **Another app is holding
+  that chat and takes no messages.** Something is plainly running — its own
+  window says so — and telling a person otherwise is how they stop believing
+  the rest of what the island says.
+- The inbox was there and would not take the request: **That chat did not take
+  the stop.**
 
 ## v80.6 — The hop plays twice, and only where it shows
 

@@ -1476,6 +1476,33 @@ pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: 
 /// What `stop_session` says when there is no turn to stop. tech.md 6.5.
 pub const NOTHING_RUNNING: &str = "Nothing is running there";
 
+/// What it says about a chat another app holds and offers no way into.
+///
+/// Not `NOTHING_RUNNING`: something plainly is running there -- the process is
+/// alive and its own window says so -- and telling a person nothing is running
+/// while they watch it work is the kind of answer that makes them stop
+/// believing the rest. tech.md 6.5.
+pub const HELD_ELSEWHERE: &str = "Another app is holding that chat and takes no messages";
+
+/// And when the process does publish an inbox but would not take the request.
+pub const REFUSED_THE_STOP: &str = "That chat did not take the stop";
+
+/// What a press on Stop is answered with when the request cannot be sent.
+///
+/// Three different facts, and until v80.7 all three said the same wrong one.
+/// `Resume` is the only one where nothing is running: no process holds the
+/// chat at all, so the turn the button was offering to stop is already over.
+/// tech.md 6.5.
+fn stop_refusal(route: &peekle_core::registry::Route) -> &'static str {
+    match route {
+        peekle_core::registry::Route::Resume => NOTHING_RUNNING,
+        peekle_core::registry::Route::Busy => HELD_ELSEWHERE,
+        // Reached only when the send itself failed: the inbox was there and
+        // did not take it.
+        peekle_core::registry::Route::Inbox(_) => REFUSED_THE_STOP,
+    }
+}
+
 /// Stops the running turn of a session. tech.md 6.5.
 ///
 /// Our own session takes the key that interrupts a turn in the TUI, `Esc`,
@@ -1524,14 +1551,32 @@ pub fn stop_session(
     let live = sessions_root
         .as_deref()
         .and_then(|root| peekle_core::registry::find_live(root, &session_id));
-    let (Some(root), peekle_core::registry::Route::Inbox(live)) =
-        (sessions_root.as_deref(), peekle_core::registry::route(live))
+    let route = peekle_core::registry::route(live);
+    let refusal = stop_refusal(&route);
+    let over = matches!(route, peekle_core::registry::Route::Resume);
+    let (Some(root), peekle_core::registry::Route::Inbox(live)) = (sessions_root.as_deref(), route)
     else {
-        return Err(NOTHING_RUNNING.to_string());
+        // Nothing holds the chat, so the turn the button offered to stop is
+        // over -- and the card still says `Working`, which is what put the
+        // button there. It is corrected here rather than left for the stale
+        // sweep ten minutes out: we just looked, and we know. tech.md 6.5.
+        if over {
+            if let Some(session) = session_for(state.inner(), &session_id) {
+                let cards = state.set_session_status(
+                    &session,
+                    peekle_core::types::SessionStatus::Idle,
+                    now_ms(),
+                );
+                if let Err(err) = app.emit(events::SESSIONS, &cards) {
+                    tracing::warn!(error = %err, "failed to emit sessions");
+                }
+            }
+        }
+        return Err(refusal.to_string());
     };
     peekle_core::inbox::send(root, &live, peekle_core::inbox::STOP_REQUEST).map_err(|err| {
         tracing::warn!(session = %session_id, pid = live.pid, error = %err, "stop request refused");
-        NOTHING_RUNNING.to_string()
+        REFUSED_THE_STOP.to_string()
     })?;
 
     // The press is answered here and not by the peer's hooks: the request is
@@ -1743,6 +1788,38 @@ mod tests {
                 "{line}"
             );
         }
+    }
+
+    /// Three ways a stop cannot be sent, and three different facts. Saying
+    /// "nothing is running there" about a chat another app is plainly running
+    /// is the kind of answer that makes a person stop believing the rest.
+    /// tech.md 6.5.
+    #[test]
+    fn a_stop_that_cannot_be_sent_says_which_of_the_three_it_was() {
+        use peekle_core::registry::{LiveSession, Route};
+
+        let held = LiveSession {
+            pid: 42,
+            session_id: "s1".to_string(),
+            cwd: "/tmp/peekle".to_string(),
+            proc_start: None,
+            version: "2.1.263".to_string(),
+            entrypoint: Some("claude-vscode".to_string()),
+            peer_protocol: Some(1),
+            inbox: Some(std::path::PathBuf::from("/tmp/cc-socks/42.sock")),
+        };
+
+        assert_eq!(stop_refusal(&Route::Resume), NOTHING_RUNNING);
+        assert_eq!(stop_refusal(&Route::Busy), HELD_ELSEWHERE);
+        assert_eq!(stop_refusal(&Route::Inbox(held)), REFUSED_THE_STOP);
+
+        // And none of the three is the same sentence as another, or the
+        // distinction is only in the code.
+        let said = [NOTHING_RUNNING, HELD_ELSEWHERE, REFUSED_THE_STOP];
+        let mut sorted = said.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), said.len());
     }
 
     /// The newline that answers a dialog goes only to a session at rest.
