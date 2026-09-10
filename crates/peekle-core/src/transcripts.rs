@@ -357,6 +357,11 @@ where
             // row is the summary that follows it. tech.md 6.21.
             Some("system") => {
                 if let Some(run) = compact_run(&record, at) {
+                    // The row goes in here rather than on the summary that
+                    // follows: the two are separate appends, and a read that
+                    // lands between them used to end the compact and show
+                    // nothing for it. tech.md 6.21.
+                    entries.push(entry(next_id(), EntryKind::Notice, compact_label(&run), at));
                     boundary = Some(run);
                 }
             }
@@ -405,15 +410,19 @@ where
                 // to the conversation, said the way the terminal says it.
                 // tech.md 6.11.
                 if is_compact_summary(&record) {
-                    // The boundary just before it says how much was let go
-                    // of, and the terminal prints that number rather than the
-                    // difference. A file too old to carry the numbers leaves
-                    // the row saying the one thing it knows. tech.md 6.21.
-                    let text = boundary
-                        .take()
-                        .map(|run| compact_label(&run))
-                        .unwrap_or_else(|| COMPACTED.to_string());
-                    entries.push(entry(next_id(), EntryKind::Notice, text, at));
+                    // The boundary above already put the row in, with the
+                    // numbers only it carries. A file too old to have one --
+                    // or one whose boundary fell off the tail -- still says
+                    // the compact happened, in the one word it knows.
+                    // tech.md 6.21.
+                    if boundary.take().is_none() {
+                        entries.push(entry(
+                            next_id(),
+                            EntryKind::Notice,
+                            COMPACTED.to_string(),
+                            at,
+                        ));
+                    }
                     continue;
                 }
 

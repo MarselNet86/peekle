@@ -792,6 +792,59 @@ mod compact {
         assert_eq!(compact_label(&run), COMPACTED);
     }
 
+    /// The CLI appends the boundary and the summary separately, and the two
+    /// second poll reads the file whenever it likes -- including in between.
+    /// A read that lands there ends the compact, so it has to carry the row
+    /// too, or the compact ends with nothing said about it. tech.md 6.21.
+    #[test]
+    fn a_read_between_the_two_appends_still_carries_the_row() {
+        let upto = |marker: &str| {
+            let mut kept: Vec<&str> = Vec::new();
+            for line in FIXTURE.lines() {
+                kept.push(line);
+                if line.contains(marker) {
+                    break;
+                }
+            }
+            kept
+        };
+        let half = upto("compact_boundary");
+
+        assert_eq!(
+            compact_state(half.iter(), BEFORE_COMPACT),
+            CompactState::Done(CompactRun {
+                at: BOUNDARY_AT,
+                trigger: Some("manual".to_string()),
+                pre_tokens: Some(32549),
+                post_tokens: Some(1323),
+            }),
+            "the compact is over as soon as the boundary is there"
+        );
+
+        let card = card_from_lines(half.iter(), "s", 0).expect("a dialogue");
+        let notices: Vec<&str> = card
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Notice)
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert_eq!(notices, vec!["Compacted chat · manual · 33k tokens freed"]);
+    }
+
+    /// And the summary that lands a moment later adds nothing: one compact,
+    /// one row, however many times the file is read.
+    #[test]
+    fn the_summary_behind_it_adds_no_second_row() {
+        let card = card_from_lines(FIXTURE.lines(), "s", 0).expect("a dialogue");
+
+        let notices = card
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Notice)
+            .count();
+        assert_eq!(notices, 1);
+    }
+
     /// The row lands in the feed of the session it happened to, once, where
     /// the summary the CLI wrote itself stands.
     #[test]

@@ -325,26 +325,34 @@ fn inherited_session_markers() -> Vec<String> {
 
 /// One live session and the handles that keep it alive.
 struct Owned {
-    writer: Box<dyn Write + Send>,
+    /// Behind its own lock, and not the map's.
+    ///
+    /// A write is a sequence with gaps in it -- text, `ENTER_GAP`, newline,
+    /// and for a command `CONFIRM_GAP` and one more -- and the sequence has
+    /// to be atomic per session or a second reply wedges between a message
+    /// and its own newline. Holding the map for that half second would make
+    /// every other session wait on it too, including one whose turn somebody
+    /// is trying to interrupt. tech.md 6.5.
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     /// Held so the pty is not closed while the reader thread drains it.
     _master: Box<dyn portable_pty::MasterPty + Send>,
 }
+
+/// The writer of one session, with the map released before anything is
+/// written. tech.md 6.5.
+type Writer = Arc<Mutex<Box<dyn Write + Send>>>;
 
 /// One chunk out to a session, flushed on its own.
 ///
 /// Every write is flushed where it is written: two chunks left in the buffer
 /// arrive as one read however long the gap between them was, and the gap is
 /// the whole mechanism. tech.md 6.5.
-fn put(owned: &mut Owned, chunk: &[u8]) -> Result<(), PtyError> {
-    owned
-        .writer
+fn put(writer: &mut (dyn Write + Send), chunk: &[u8]) -> Result<(), PtyError> {
+    writer
         .write_all(chunk)
         .map_err(|err| PtyError::Pty(err.to_string()))?;
-    owned
-        .writer
-        .flush()
-        .map_err(|err| PtyError::Pty(err.to_string()))
+    writer.flush().map_err(|err| PtyError::Pty(err.to_string()))
 }
 
 /// The sessions Peekle started, by `session_id`.
@@ -451,7 +459,7 @@ impl PtyHost {
         self.lock().insert(
             spec.session_id.clone(),
             Owned {
-                writer,
+                writer: Arc::new(Mutex::new(writer)),
                 child,
                 _master: pair.master,
             },
@@ -468,8 +476,8 @@ impl PtyHost {
     /// writes, a second reply would wedge between the first one's text and its
     /// newline, and the agent would receive the two glued together.
     pub fn send(&self, session_id: &str, text: &str) -> Result<(), PtyError> {
-        let mut sessions = self.lock();
-        let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
+        let writer = self.writer_of(session_id)?;
+        let mut writer = lock_writer(&writer);
 
         for (index, chunk) in message_writes(text).into_iter().enumerate() {
             // Each half is flushed on its own, or the gap buys nothing: both
@@ -477,7 +485,7 @@ impl PtyHost {
             if index > 0 {
                 std::thread::sleep(ENTER_GAP);
             }
-            put(owned, &chunk)?;
+            put(writer.as_mut(), &chunk)?;
         }
         Ok(())
     }
@@ -490,8 +498,8 @@ impl PtyHost {
     /// including the next thing the person types. See [`command_writes`].
     /// tech.md 6.15.
     pub fn command(&self, session_id: &str, line: &str) -> Result<(), PtyError> {
-        let mut sessions = self.lock();
-        let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
+        let writer = self.writer_of(session_id)?;
+        let mut writer = lock_writer(&writer);
 
         for (index, chunk) in command_writes(line).into_iter().enumerate() {
             match index {
@@ -499,7 +507,7 @@ impl PtyHost {
                 1 => std::thread::sleep(ENTER_GAP),
                 _ => std::thread::sleep(CONFIRM_GAP),
             }
-            put(owned, &chunk)?;
+            put(writer.as_mut(), &chunk)?;
         }
         Ok(())
     }
@@ -586,14 +594,27 @@ impl PtyHost {
     /// One write, under the same lock as `send`, so nothing lands between a
     /// message's text and its own newline.
     fn write_bytes(&self, session_id: &str, bytes: &[u8]) -> Result<(), PtyError> {
-        let mut sessions = self.lock();
-        let owned = sessions.get_mut(session_id).ok_or(PtyError::NotOwned)?;
-        owned
-            .writer
-            .write_all(bytes)
-            .and_then(|()| owned.writer.flush())
-            .map_err(|err| PtyError::Pty(err.to_string()))
+        let writer = self.writer_of(session_id)?;
+        let mut writer = lock_writer(&writer);
+        put(writer.as_mut(), bytes)
     }
+
+    /// The writer of one session. The map is released as this returns, so a
+    /// write into one session never holds up a write into another -- least of
+    /// all an interrupt. tech.md 6.5.
+    fn writer_of(&self, session_id: &str) -> Result<Writer, PtyError> {
+        let sessions = self.lock();
+        let owned = sessions.get(session_id).ok_or(PtyError::NotOwned)?;
+        Ok(Arc::clone(&owned.writer))
+    }
+}
+
+/// A poisoned writer means a thread panicked mid-write. The stream is still a
+/// stream; refusing to type from then on would be worse than carrying on.
+fn lock_writer(writer: &Writer) -> std::sync::MutexGuard<'_, Box<dyn Write + Send>> {
+    writer
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Shared handle, because commands and the hook sink both reach for it.
@@ -837,6 +858,28 @@ and then stop",
         );
         assert!(id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'));
         assert_ne!(id, new_session_id());
+    }
+
+    /// One session's half-second write must not hold up another's, least of
+    /// all an interrupt: the map is released before anything goes out, and
+    /// only that session's own writer is held. tech.md 6.5.
+    #[test]
+    fn a_write_into_one_session_does_not_hold_the_others() {
+        let host = std::sync::Arc::new(PtyHost::new());
+
+        // Nothing is spawned here, so every call refuses -- and that refusal
+        // is the map lookup itself. If the map were held across the gaps of a
+        // command, this would be the call that blocked on it.
+        let busy = std::sync::Arc::clone(&host);
+        let writer = std::thread::spawn(move || busy.command("a", "/effort ultracode"));
+
+        let started = std::time::Instant::now();
+        assert!(matches!(host.interrupt("b"), Err(PtyError::NotOwned)));
+        assert!(
+            started.elapsed() < CONFIRM_GAP,
+            "an interrupt waited on another session's write"
+        );
+        assert!(matches!(writer.join().unwrap(), Err(PtyError::NotOwned)));
     }
 
     #[test]
