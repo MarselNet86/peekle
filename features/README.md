@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract             |
 | ------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                   | 6.2, 6.7             |
 | v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                         | 6.7, 9               |
 | v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                       | 6.7, 9               |
 | v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                   | 6.12, 9              |
@@ -38,6 +39,29 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9         |
+
+## v80.5 — A question stops closing itself
+
+2026-09-10
+
+Reported from the field: type an answer for longer than twenty seconds or so
+and the question goes off the screen, half-written answer and all.
+
+Not a timer on the question — v76 already made one stand until it is answered,
+and the pointer rules keep it there. A pill. `set_view` does not queue behind
+what is on screen, it replaces it, so any pill raised while a request stands
+takes the request off the screen and then collapses the island on its own
+clock, with the hook still pending.
+
+And the pill that did it was the question's own. `Notification` with
+`agent_needs_input` is what Claude Code fires when an agent asks something,
+and it arrives a beat after the question does: the question closed itself,
+every time, if the person took long enough to answer.
+
+No pill rises now while anything is waiting on the person. What it had to say
+is dropped rather than queued — by the time the request is answered it is
+about a moment that has passed, and the same notification has already rung as
+a system banner.
 
 ## v80.4 — The question lays itself out
 
