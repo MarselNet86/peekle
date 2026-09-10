@@ -646,7 +646,10 @@ fn a_compact_summary_is_a_notice_not_a_turn() {
 
     let notice = &card.entries[0];
     assert_eq!(notice.kind, EntryKind::Notice);
-    assert_eq!(notice.text, COMPACTED);
+    // The boundary beside it carries the numbers, so the row says them the
+    // way the terminal does. tech.md 6.21.
+    assert_eq!(notice.text, "Compacted chat · manual · 614k tokens freed");
+    assert_ne!(notice.text, COMPACTED);
     assert_eq!(card.entries[1].kind, EntryKind::User);
     assert_eq!(card.entries[1].text, "test 3");
     assert_eq!(card.title, "test 3", "the summary is never the title");
@@ -668,4 +671,131 @@ fn a_record_written_twice_is_read_once() {
     assert_eq!(ids, vec!["u1-1", "a1-1", "u2-1"]);
     let texts: Vec<&str> = card.entries.iter().map(|e| e.text.as_str()).collect();
     assert_eq!(texts, vec!["once", "and only once", "after"]);
+}
+
+
+/// The compact of tech.md 6.21, end to end, off a session driven live on
+/// 2026-09-10: five turns, one `/compact` that was refused for being too
+/// short, and one that ran. The fixture is that session's own transcript.
+mod compact {
+    use peekle_core::transcripts::{
+        card_from_lines, compact_label, compact_state, CompactRun, CompactState, COMPACTED,
+    };
+    use peekle_core::types::EntryKind;
+
+    const FIXTURE: &str = include_str!("../../../fixtures/transcripts/compacted.jsonl");
+
+    /// Milliseconds of the records the fixture turns on, from their own
+    /// timestamps: the refused `/compact`, the compact that ran, and its
+    /// boundary.
+    const BEFORE_REFUSAL: i64 = 1_789_031_790_000; // 09:16:30.000Z
+    const BEFORE_COMPACT: i64 = 1_789_031_849_500; // 09:17:29.500Z
+    const BOUNDARY_AT: i64 = 1_789_031_857_205; // 09:17:37.205Z
+    const AFTER_EVERYTHING: i64 = 1_789_031_880_000; // 09:18:00.000Z
+
+    /// The one record that says a compact happened, with the numbers the row
+    /// is built from.
+    #[test]
+    fn the_file_says_a_compact_finished_and_what_it_did() {
+        let CompactState::Done(run) = compact_state(FIXTURE.lines(), BEFORE_COMPACT) else {
+            panic!("the fixture carries a compact that ran");
+        };
+
+        assert_eq!(run.at, BOUNDARY_AT);
+        assert_eq!(run.trigger.as_deref(), Some("manual"));
+        assert_eq!(run.pre_tokens, Some(32549));
+        assert_eq!(run.post_tokens, Some(1323));
+    }
+
+    /// `PreCompact` fires before the CLI decides whether there is anything to
+    /// compact. On this session the hook arrived and eight milliseconds later
+    /// the CLI printed `Not enough messages to compact.` and did nothing. The
+    /// sign has to come back off, and no row is owed: nothing happened.
+    #[test]
+    fn a_compact_that_never_ran_is_refused_not_running() {
+        // The file as it stood at that moment: the compact that ran came
+        // fifty seconds later and had not been written yet.
+        let then = FIXTURE.lines().take_while(|line| !line.contains("compact_boundary"));
+
+        assert_eq!(compact_state(then, BEFORE_REFUSAL), CompactState::Refused);
+    }
+
+    /// And nothing in a compact that does run reads as a refusal while it is
+    /// running: the CLI writes its `/compact` records after the boundary, not
+    /// before it, so the eight seconds in between carry nothing at all.
+    #[test]
+    fn a_compact_that_is_running_is_not_read_as_refused() {
+        let mid = FIXTURE.lines().take_while(|line| !line.contains("compact_boundary"));
+
+        assert_eq!(compact_state(mid, BEFORE_COMPACT), CompactState::Running);
+    }
+
+    /// Nothing in the file has happened since it started, so it is still
+    /// going. This is the state the orange sign stands on, and it has to
+    /// survive a file that is being appended to all the while.
+    #[test]
+    fn a_compact_with_nothing_after_it_yet_is_still_running() {
+        assert_eq!(
+            compact_state(FIXTURE.lines(), AFTER_EVERYTHING),
+            CompactState::Running
+        );
+    }
+
+    /// A boundary from an earlier compact decides nothing. Every read of the
+    /// file sees every compact the session ever had, and the one that matters
+    /// is the one that started after the hook fired.
+    #[test]
+    fn an_older_boundary_does_not_end_this_compact() {
+        assert_eq!(
+            compact_state(FIXTURE.lines(), BOUNDARY_AT + 1),
+            CompactState::Running
+        );
+    }
+
+    /// The row the feed shows, in the terminal's own words and with the
+    /// terminal's own number: `preTokens`, rounded, not the difference.
+    #[test]
+    fn the_row_says_what_the_terminal_says() {
+        let run = CompactRun {
+            at: 1,
+            trigger: Some("manual".to_string()),
+            pre_tokens: Some(465_710),
+            post_tokens: Some(10_116),
+        };
+
+        assert_eq!(
+            compact_label(&run),
+            "Compacted chat · manual · 466k tokens freed"
+        );
+    }
+
+    /// A file too old to carry `compactMetadata` still says a compact
+    /// happened, and that is worth a row on its own.
+    #[test]
+    fn a_compact_with_no_numbers_keeps_the_plain_word() {
+        let run = CompactRun {
+            at: 1,
+            trigger: None,
+            pre_tokens: None,
+            post_tokens: None,
+        };
+
+        assert_eq!(compact_label(&run), COMPACTED);
+    }
+
+    /// The row lands in the feed of the session it happened to, once, where
+    /// the summary the CLI wrote itself stands.
+    #[test]
+    fn the_captured_compact_becomes_one_row_in_the_feed() {
+        let card = card_from_lines(FIXTURE.lines(), "s", 0).expect("a dialogue");
+
+        let notices: Vec<&str> = card
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Notice)
+            .map(|entry| entry.text.as_str())
+            .collect();
+
+        assert_eq!(notices, vec!["Compacted chat · manual · 33k tokens freed"]);
+    }
 }

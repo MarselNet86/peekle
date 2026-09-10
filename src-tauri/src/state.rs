@@ -412,6 +412,36 @@ impl AppState {
         }
     }
 
+    /// A compact started on this session. tech.md 6.21.
+    pub fn start_compact(&self, session: &SessionRef, at: i64, manual: bool) -> Vec<SessionCard> {
+        let mut registry = self.lock(&self.sessions);
+        registry.start_compact(session.clone(), at, manual);
+        registry.cards().to_vec()
+    }
+
+    /// The compact this session is in the middle of, if any. tech.md 6.21.
+    pub fn compacting(&self, session_id: &str) -> Option<peekle_core::types::Compacting> {
+        self.lock(&self.sessions).compacting(session_id)
+    }
+
+    /// The compact is over, however it ended. `None` when there was none to
+    /// end, so nothing is broadcast for a card that was not compacting.
+    /// tech.md 6.21.
+    pub fn end_compact(&self, session_id: &str) -> Option<Vec<SessionCard>> {
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .end_compact(session_id)
+            .then(|| registry.cards().to_vec())
+    }
+
+    /// Drops a compact nothing ever ended. tech.md 6.21.
+    pub fn rest_stale_compacts(&self, now: i64, after: i64) -> Option<Vec<SessionCard>> {
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .rest_stale_compacts(now, after)
+            .then(|| registry.cards().to_vec())
+    }
+
     /// Puts sessions that stopped reporting back to rest. tech.md 6.3.
     pub fn rest_stale_work(&self, now: i64, after: i64) -> Option<Vec<SessionCard>> {
         let mut sessions = self.lock(&self.sessions);

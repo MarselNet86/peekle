@@ -227,6 +227,16 @@ fn turn_took(cards: &[peekle_core::types::SessionCard], session_id: &str, at: i6
     (at > started).then_some(at - started)
 }
 
+/// Whether a `PreCompact` says a person asked for this compact.
+///
+/// Only the word the CLI writes counts. An automatic compact fires mid turn
+/// with nobody waiting on it, and a trigger this version has not seen is not
+/// a reason to open the island over somebody's screen at the end of it.
+/// tech.md 6.21.
+fn asked_for(payload: &Value) -> bool {
+    payload.get("trigger").and_then(Value::as_str) == Some("manual")
+}
+
 /// Whether this feed payload says the standing request has been answered
 /// somewhere else.
 ///
@@ -373,6 +383,17 @@ impl HookSink for AppSink {
         };
 
         match event {
+            // A compact has started, and nothing will say when it ends: the
+            // file will. The card carries it from here so the sign, the line
+            // in the dialogue and the poll all have the same one fact to
+            // stand on. tech.md 6.21.
+            "PreCompact" => {
+                let session = peekle_core::sessions::session_ref_of(payload);
+                let manual = asked_for(payload);
+                tracing::debug!(session = %session_id, manual, "a compact started");
+                let cards = self.state.start_compact(&session, now_ms(), manual);
+                self.emit_sessions(cards);
+            }
             "SessionStart" => self.state.session_started(),
             "SessionEnd" => {
                 self.state.session_ended();
@@ -474,6 +495,49 @@ pub(crate) fn refresh_session(
         if let Err(err) = app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
+
+        // The same text answers the other question a compacting session has:
+        // whether it still is. tech.md 6.21.
+        settle_compact(&app, &state, &session_id, &text);
+    });
+}
+
+/// Ends the compact this session was in the middle of, if the file says it is
+/// over. tech.md 6.21.
+///
+/// No hook fires when a compact ends, so this is the only place it can end at
+/// all. Three ways out and all of them clear the card: the boundary record the
+/// CLI writes, a refusal it prints instead, and -- elsewhere, on the sweep --
+/// a ceiling for the compact that ends in neither.
+fn settle_compact(app: &AppHandle, state: &Arc<AppState>, session_id: &str, text: &str) {
+    use peekle_core::transcripts::CompactState;
+
+    let Some(run) = state.compacting(session_id) else {
+        return;
+    };
+    let outcome = peekle_core::transcripts::compact_state(text.lines(), run.since);
+    if outcome == CompactState::Running {
+        return;
+    }
+    let Some(cards) = state.end_compact(session_id) else {
+        return;
+    };
+    tracing::debug!(session = %session_id, done = ?outcome, "the compact is over");
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+
+    // A compact somebody asked for ends with the island open on the row that
+    // answers them: they typed the command and waited out the minutes, and
+    // the answer is one line in that feed. An automatic one opens nothing --
+    // nobody asked for it, it happened in the middle of a turn, and a panel
+    // over half the screen at that moment is in the way. tech.md 6.21.
+    if !matches!(outcome, CompactState::Done(_)) || !run.manual {
+        return;
+    }
+    let (app, session_id) = (app.clone(), session_id.to_string());
+    tauri::async_runtime::spawn(async move {
+        windows::reveal_turn(&app, &session_id).await;
     });
 }
 
@@ -554,6 +618,18 @@ mod tests {
         serde_json::from_str(line).expect("json")
     }
 
+    /// Every line of a capture, for a fixture that carries more than one run.
+    fn captured_all(name: &str) -> Vec<Value> {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../fixtures/hooks")
+            .join(format!("{name}.jsonl"));
+        let raw = std::fs::read_to_string(&path).expect("fixture");
+        raw.lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| serde_json::from_str(line).expect("json"))
+            .collect()
+    }
+
     fn standing(session: &str, tool: Option<&str>) -> PromptRequest {
         PromptRequest {
             id: "p".into(),
@@ -605,6 +681,7 @@ mod tests {
             agent: None,
             mode: None,
             thinking: None,
+            compacting: None,
             updated_at: 0,
         }
     }
@@ -728,5 +805,19 @@ mod tests {
     fn unknown_status_falls_back_to_pending() {
         assert_eq!(status_of(Some("something_new")), TaskStatus::Pending);
         assert_eq!(status_of(None), TaskStatus::Pending);
+    }
+
+    /// The captured `PreCompact` of a `/compact` somebody typed. What turns
+    /// on it is whether the island opens itself when the compact is over,
+    /// which is exactly the kind of thing that must not be guessed.
+    /// tech.md 6.21.
+    #[test]
+    fn a_compact_a_person_asked_for_is_told_from_one_the_window_forced() {
+        for payload in captured_all("pre_compact") {
+            assert!(asked_for(&payload), "the capture is of a typed /compact");
+        }
+
+        assert!(!asked_for(&json!({"trigger": "auto"})));
+        assert!(!asked_for(&json!({})), "no trigger is not a person asking");
     }
 }
