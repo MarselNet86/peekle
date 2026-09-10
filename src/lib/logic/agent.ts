@@ -11,7 +11,7 @@ import type { PermissionMode } from '$lib/types/generated/PermissionMode';
 /** One row of a menu. */
 /** Which sign a row wears, when it wears one. The names are the icon set's,
  * not ours: a hand drawn by hand comes out a blob. tech.md 9. */
-export type PickIcon = 'hand' | 'code' | 'plan' | 'bolt';
+export type PickIcon = 'hand' | 'code' | 'plan' | 'bolt' | 'folder';
 
 export type PickOption = {
   /** What goes back to the caller when the row is picked. */
@@ -203,6 +203,28 @@ export const MENU_WIDTH = 300;
 export function opensRight(hostLeft: number, viewport: number, width = MENU_WIDTH): boolean {
   const margin = 8;
   return hostLeft + width > viewport - margin;
+}
+
+/**
+ * The room a menu is assumed to want above the button that opens it.
+ *
+ * Three rows and their descriptions. Not the tallest menu there is -- the
+ * folders are as many as the projects -- because a menu that is too tall for
+ * either side has to pick one, and up is where they have always opened.
+ */
+export const MENU_ROOM = 200;
+
+/**
+ * Whether a menu opening from this button has to hang below it instead.
+ * tech.md 9 and 6.23.
+ *
+ * The same question as `opensRight`, on the other axis, answered the same way:
+ * from where the button is, before anything is drawn. A button in the head
+ * band stands under the top edge of the screen, and there is no upward for it
+ * to open into.
+ */
+export function opensDown(hostTop: number, room = MENU_ROOM): boolean {
+  return hostTop < room;
 }
 
 /**
