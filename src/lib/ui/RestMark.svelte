@@ -250,27 +250,27 @@
     animation: breathe 1600ms ease-in-out infinite;
   }
 
-  /* One stroke goes up and comes back down, then the other: a walk, not a
-     jitter. The two halves of the cycle are the two strokes, so the sign is
-     never still and never leaves its own footprint. */
+  /* A wave running through the two strokes rather than two hops: each rides
+     one smooth cycle up and back down, and the second is half a period behind
+     the first, so one is always rising while the other falls. Nothing stops
+     and nothing snaps, which is what tells a wave from a jitter. */
   .mark[data-status='waiting'] .stroke {
     transform-box: fill-box;
     transform-origin: center;
-    animation: hop 1400ms ease-in-out infinite;
+    animation: wave 1600ms ease-in-out infinite;
   }
 
   .mark[data-status='waiting'] .second {
-    animation-delay: 700ms;
+    animation-delay: 800ms;
   }
 
-  @keyframes hop {
+  @keyframes wave {
     0%,
-    30%,
     100% {
-      transform: translateY(0);
+      transform: translateY(1.1px);
     }
-    15% {
-      transform: translateY(-2.2px);
+    50% {
+      transform: translateY(-1.1px);
     }
   }
 
