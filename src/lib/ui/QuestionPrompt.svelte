@@ -117,15 +117,12 @@
   </div>
   <!-- Open only once the row above it is picked: a field standing under every
        question would read as the thing to do, when picking one of Claude's
-       answers is. Enter sends it, which is the whole gesture. tech.md 6.14. -->
+       answers is. Enter sends it, and it sends the whole answer -- the boxes
+       that are checked included -- because the field is the last thing being
+       filled in and Enter in a field means done everywhere else in the
+       product. tech.md 6.14. -->
   {#if writing}
-    <PromptInput
-      bind:value={own}
-      placeholder="Your answer"
-      onsubmit={() => {
-        if (!question.multi_select) advance();
-      }}
-    />
+    <PromptInput bind:value={own} placeholder="Your answer" onsubmit={() => advance()} />
   {/if}
   <!-- Checked boxes need an explicit confirm: unlike a click, nothing about
        checking one says the user is done choosing. tech.md 6.14. -->
