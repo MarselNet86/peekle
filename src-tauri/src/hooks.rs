@@ -391,7 +391,16 @@ impl HookSink for AppSink {
                 let session = peekle_core::sessions::session_ref_of(payload);
                 let manual = asked_for(payload);
                 tracing::debug!(session = %session_id, manual, "a compact started");
-                let cards = self.state.start_compact(&session, now_ms(), manual);
+                let at = now_ms();
+                // `/compact` typed into the field is a message like any
+                // other, and it is the one kind of message no
+                // `UserPromptSubmit` ever confirms. Unconfirmed, it sat grey
+                // and then went red: the island called it undelivered while
+                // the CLI was compacting on it. This hook is the delivery
+                // note. tech.md 6.5 and 6.21.
+                self.state
+                    .confirm_command(session_id, peekle_core::agent::COMPACT_COMMAND, at);
+                let cards = self.state.start_compact(&session, at, manual);
                 self.emit_sessions(cards);
             }
             "SessionStart" => self.state.session_started(),

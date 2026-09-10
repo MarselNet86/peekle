@@ -1615,6 +1615,46 @@ mod compacting {
         assert!(!registry.end_compact("nobody"));
     }
 
+    /// `/compact` typed into the island's field is the one message no
+    /// `UserPromptSubmit` ever confirms: the CLI takes the slash command and
+    /// raises `PreCompact` instead. Unconfirmed, the bubble waited and then
+    /// went red -- the island calling a message undelivered while the CLI was
+    /// compacting on it. tech.md 6.5 and 6.21.
+    #[test]
+    fn a_compact_typed_into_the_field_is_confirmed_by_its_own_hook() {
+        use peekle_core::types::{EntryState, SessionRef};
+
+        let payload = pre_compact();
+        let session = session_ref_of(&payload);
+        let mut registry = SessionRegistry::new();
+        registry.claim(&session.session_id);
+        registry.open_owned(session.clone(), 1);
+        registry.user_turn(session.clone(), "/compact", EntryState::Running, 2);
+
+        registry.confirm_spoken(&session.session_id, "/compact", 3);
+
+        let card = &registry.cards()[0];
+        assert_eq!(card.entries[0].text, "/compact");
+        assert_eq!(card.entries[0].state, EntryState::Ok);
+
+        // And it confirms that message and no other: a reply still in flight
+        // when somebody presses the compact ring is still in flight.
+        let other = SessionRef {
+            session_id: "other".to_string(),
+            ..session.clone()
+        };
+        registry.claim(&other.session_id);
+        registry.open_owned(other.clone(), 1);
+        registry.user_turn(other.clone(), "still going", EntryState::Running, 2);
+        assert!(!registry.confirm_spoken(&other.session_id, "/compact", 3));
+        let waiting = registry
+            .cards()
+            .into_iter()
+            .find(|card| card.session.session_id == "other")
+            .expect("the other card");
+        assert_eq!(waiting.entries[0].state, EntryState::Running);
+    }
+
     /// `PreCompact` fires before the CLI decides there is anything to
     /// compact, and a compact killed with its process ends with no record at
     /// all. Either way the orange sign has to come off by itself.
