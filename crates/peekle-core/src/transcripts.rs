@@ -95,7 +95,30 @@ pub fn spoken(text: &str) -> Option<String> {
     if is_synthetic(text) {
         return None;
     }
-    Some(unwrap_peer(text).unwrap_or(text).to_string())
+    let body = unwrap_peer(text).unwrap_or(text);
+    // The one turn in this product whose words are the product's own: the
+    // island wrote them into a live process's inbox when somebody pressed
+    // Stop, and 6.11's rule about a `user` record nobody typed applies to it
+    // exactly. Dropped here, so none of the three consequences it names can
+    // follow: no bubble in the person's colour, no title taken from it, no
+    // reply confirmed by it. The row it deserves is put in by the file, as a
+    // notice. tech.md 6.5 and 6.11.
+    if is_stop_request(body) {
+        return None;
+    }
+    Some(body.to_string())
+}
+
+/// Whether this turn is the island's own stop request coming back.
+///
+/// By the words, because there is nothing else to go on: the live hook of
+/// 2.1.263 carries the text bare, with no wrapper and no marker of where it
+/// came from, so a rule that reads the file's own `origin.kind` would leave
+/// the hook path unfixed. The wrapper is stripped first, so all three shapes
+/// the same sentence arrives in are one case. tech.md 6.5.
+pub fn is_stop_request(text: &str) -> bool {
+    let body = unwrap_peer(text).unwrap_or(text);
+    body.trim() == crate::inbox::STOP_REQUEST
 }
 
 fn unwrap_peer(text: &str) -> Option<&str> {
@@ -394,6 +417,20 @@ where
                     continue;
                 }
 
+                // The island asked this chat to stop, and the file is where
+                // that is written down. Not a turn: nobody typed it, and the
+                // words are the island's own. tech.md 6.5.
+                for text in texts_of(&record) {
+                    if is_stop_request(&text) {
+                        entries.push(entry(
+                            next_id(),
+                            EntryKind::Notice,
+                            ASKED_TO_STOP.to_string(),
+                            at,
+                        ));
+                    }
+                }
+
                 // A model change is not a turn and not synthetic noise: it is
                 // a thing that happened to this conversation, and the file is
                 // where it is written down. tech.md 6.15.
@@ -518,6 +555,7 @@ where
         // Whether a compact is running is a fact about a live process too,
         // and `PreCompact` is what carries it. tech.md 6.21.
         compacting: None,
+        stopping: None,
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }
@@ -676,6 +714,9 @@ fn is_synthetic_model(record: &Value) -> bool {
 /// What the feed says where the CLI put its compact summary, and all it can
 /// say about a compact whose numbers the file never recorded. tech.md 6.11.
 pub const COMPACTED: &str = "Compacted";
+
+/// What the feed says where the island's stop request stands. tech.md 6.5.
+pub const ASKED_TO_STOP: &str = "Asked Claude to stop";
 
 /// A compact that happened, as its own record in the transcript describes it.
 ///

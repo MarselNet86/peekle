@@ -23,6 +23,7 @@ const card = (status: SessionStatus, over: Partial<SessionCard> = {}): SessionCa
   mode: null,
   thinking: null,
   compacting: null,
+  stopping: null,
   updated_at: 0,
   ...over,
 });

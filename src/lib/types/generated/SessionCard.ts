@@ -40,6 +40,16 @@ thinking: boolean | null,
  */
 compacting: Compacting | null, 
 /**
+ * When the island asked this chat to stop, `None` when it has not.
+ *
+ * Only a chat reached through an inbox: an owned one is interrupted with
+ * a key and there is nothing to wait for. A request, not an interrupt --
+ * the agent may finish its tool call first, or ignore it -- so what this
+ * says is that it was asked, and that stays true either way.
+ * tech.md 6.5.
+ */
+stopping: number | null, 
+/**
  * unix ms
  */
 updated_at: number, };

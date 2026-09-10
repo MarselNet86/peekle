@@ -508,6 +508,7 @@ fn spoken_keeps_a_plain_turn_and_drops_a_synthetic_one() {
 }
 
 mod spoken_properties {
+    use peekle_core::inbox::STOP_REQUEST;
     use peekle_core::transcripts::{is_synthetic, spoken};
     use proptest::prelude::*;
 
@@ -530,6 +531,9 @@ mod spoken_properties {
         fn any_wrapped_text_unwraps_to_itself(text in "[^<]{0,200}") {
             let typed = text.trim();
             prop_assume!(!typed.is_empty());
+            // Except the island's own stop request, which is nobody's words
+            // and has a line of its own. tech.md 6.5.
+            prop_assume!(typed != STOP_REQUEST);
             let out = spoken(&wrap(&text));
             prop_assert_eq!(out.as_deref(), Some(typed));
         }
@@ -540,6 +544,7 @@ mod spoken_properties {
             let typed = text.trim();
             prop_assume!(!typed.is_empty());
             prop_assume!(!typed.contains("This came from another Claude session"));
+            prop_assume!(typed != STOP_REQUEST);
             let out = spoken(&wrap_prose(&text));
             prop_assert_eq!(out.as_deref(), Some(typed));
         }
@@ -551,6 +556,7 @@ mod spoken_properties {
             prop_assume!(!text.contains("<cross-session-message"));
             prop_assume!(!text.starts_with("Another Claude session sent a message"));
             prop_assume!(!text.starts_with("A peer session sent a message"));
+            prop_assume!(text.trim() != STOP_REQUEST);
             let out = spoken(&text);
             if is_synthetic(&text) {
                 prop_assert_eq!(out, None);

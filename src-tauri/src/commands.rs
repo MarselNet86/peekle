@@ -1466,7 +1466,18 @@ pub fn stop_session(
     peekle_core::inbox::send(root, &live, peekle_core::inbox::STOP_REQUEST).map_err(|err| {
         tracing::warn!(session = %session_id, pid = live.pid, error = %err, "stop request refused");
         NOTHING_RUNNING.to_string()
-    })
+    })?;
+
+    // The press is answered here and not by the peer's hooks: the request is
+    // gone, and until the turn ends the feed says so and the button takes no
+    // second press. A second press is a second message and a second turn in
+    // somebody's chat. tech.md 6.5.
+    if let Some(cards) = state.start_stop(&session_id, now_ms()) {
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+    }
+    Ok(())
 }
 
 /// The cards as they stand, for a webview that has just come up.

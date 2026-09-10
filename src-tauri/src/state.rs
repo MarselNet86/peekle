@@ -423,6 +423,28 @@ impl AppState {
             .confirm_spoken(session_id, line, at)
     }
 
+    /// The island asked this chat to stop. tech.md 6.5.
+    pub fn start_stop(&self, session_id: &str, at: i64) -> Option<Vec<SessionCard>> {
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .start_stop(session_id, at)
+            .then(|| registry.cards().to_vec())
+    }
+
+    /// The request is over, however it ended. tech.md 6.5.
+    pub fn end_stop(&self, session_id: &str) -> bool {
+        self.lock(&self.sessions).end_stop(session_id)
+    }
+
+    /// Drops a stop request nothing answered, so the button comes back.
+    /// tech.md 6.5.
+    pub fn rest_stale_stops(&self, now: i64, after: i64) -> Option<Vec<SessionCard>> {
+        let mut registry = self.lock(&self.sessions);
+        registry
+            .rest_stale_stops(now, after)
+            .then(|| registry.cards().to_vec())
+    }
+
     /// A compact started on this session. tech.md 6.21.
     pub fn start_compact(&self, session: &SessionRef, at: i64, manual: bool) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);

@@ -34,6 +34,8 @@
     stopAvailable,
     searchSessions,
     steadyOrder,
+    ASKED_TO_STOP,
+    STOP_ASKED_NOTE,
   } from '$lib/logic/sessions';
   import { shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
@@ -95,6 +97,9 @@
   // stays, as the finished line it is. tech.md 6.14.
   // The compact this dialogue is in the middle of, or null. tech.md 6.21.
   const compacting = $derived(current?.compacting ?? null);
+  /** When the island asked this chat to stop and the turn has not ended yet.
+   * tech.md 6.5. */
+  const askedToStop = $derived(current?.stopping ?? null);
   const rows = $derived(
     feedRows(
       current?.entries ?? [],
@@ -104,6 +109,10 @@
       current?.status === 'Working' && !asking && compacting === null,
     ),
   );
+  // The word the work line says while a stop request stands. One word rather
+  // than the cycle: what is happening is known, and inventing `Reading` over
+  // it says less than the truth does. tech.md 6.5.
+  const words = $derived(askedToStop === null ? undefined : [ASKED_TO_STOP]);
   // A view naming a session the feed does not have falls back to the list.
   // The alternative is what it used to do: render none of the branches and
   // leave an empty black shape on screen, which reads as a crash.
@@ -246,6 +255,7 @@
       hasPrompt: island.prompt !== null,
       owned,
       canContinue,
+      asked: askedToStop,
     }),
   );
   // Why the row only reads, said out loud because it was pressed. A tooltip
@@ -764,7 +774,7 @@
             {:else}
               <!-- A whole run of calls, as the one thing asked of it: whether
                    the agent is out, and for how long. tech.md 6.12. -->
-              <WorkLine running={row.to === null} from={row.from} to={row.to} />
+              <WorkLine running={row.to === null} from={row.from} to={row.to} {words} />
             {/if}
           {/each}
           <!-- The one line about the one pause the CLI takes on its own: it
@@ -825,9 +835,9 @@
               bind:value={reply}
               placeholder={replyHint}
               disabled={!reachable}
-              working={canStop && !stopping}
+              working={(canStop || askedToStop !== null) && !stopping}
               onsubmit={send}
-              onstop={stop}
+              onstop={() => (askedToStop === null ? stop() : (rowNote = STOP_ASKED_NOTE))}
               onescape={() => island.dismiss()}
               onpasteimage={() => current && shots.paste(current.session.session_id)}
             >

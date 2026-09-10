@@ -45,6 +45,7 @@ function observed(entries: unknown[] = [], id = 's1'): Card {
     mode: null,
     thinking: null,
     compacting: null,
+    stopping: null,
     updated_at: 0,
   };
 }
@@ -186,6 +187,7 @@ test.describe('the island route', () => {
           mode: null,
           thinking: null,
           compacting: null,
+          stopping: null,
           updated_at: 2,
         },
       ]);

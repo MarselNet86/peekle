@@ -24,6 +24,7 @@ const card = (
   mode: null,
   thinking: null,
   compacting: null,
+  stopping: null,
   updated_at: 0,
 });
 

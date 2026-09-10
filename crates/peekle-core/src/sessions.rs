@@ -28,6 +28,14 @@ pub const ENTRY_CAP: usize = 200;
 /// what normally ends a compact is the record the CLI writes. tech.md 6.21.
 pub const COMPACT_LIMIT_MS: i64 = 10 * 60 * 1000;
 
+/// How long a stop request holds the button before the island stops waiting
+/// on it.
+///
+/// A request read at the next tool boundary, so seconds normally. A minute is
+/// the point at which the chat plainly did not take it -- and a button that
+/// never comes back is worse than one that lets you ask twice. tech.md 6.5.
+pub const STOP_WAIT_MS: i64 = 60 * 1000;
+
 /// First user turn becomes the title. tech.md 6.3.
 const TITLE_LIMIT: usize = 80;
 /// Tool input preview, same budget as `PromptRequest::detail`. tech.md 6.3.
@@ -287,6 +295,7 @@ impl SessionRegistry {
                 mode: None,
                 thinking: None,
                 compacting: None,
+                stopping: None,
                 updated_at: at,
             },
         );
@@ -770,6 +779,48 @@ impl SessionRegistry {
         }
     }
 
+    /// The island asked this chat to stop. tech.md 6.5.
+    ///
+    /// `false` when there is no card to ask about: a chat nobody has seen an
+    /// event from cannot be the one on screen with a button on it.
+    pub fn start_stop(&mut self, session_id: &str, at: i64) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.stopping = Some(at);
+        true
+    }
+
+    /// The request is over, however it ended: the turn finished, or nothing
+    /// ever came of it. `true` when there was one standing. tech.md 6.5.
+    pub fn end_stop(&mut self, session_id: &str) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.stopping.take().is_some()
+    }
+
+    /// Drops a stop request nothing ever answered, so the button comes back.
+    /// The same sweep that gives up on a compact. tech.md 6.5.
+    pub fn rest_stale_stops(&mut self, now: i64, after: i64) -> bool {
+        let mut changed = false;
+        for card in self.cards.iter_mut() {
+            if card.stopping.is_some_and(|since| now - since >= after) {
+                card.stopping = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     /// What compact this session is in the middle of, if any. tech.md 6.21.
     pub fn compacting(&self, session_id: &str) -> Option<Compacting> {
         self.cards
@@ -866,6 +917,15 @@ impl SessionRegistry {
             return false;
         };
         card.status = status;
+        // A session that is over is running nothing: a compact died with its
+        // process, and a stop request has nobody left to read it. Neither may
+        // outlive the card's own life -- the sign is painted from every card
+        // there is, so one that ended holding a compact keeps the whole
+        // island orange. tech.md 6.5 and 6.21.
+        if status == SessionStatus::Ended {
+            card.compacting = None;
+            card.stopping = None;
+        }
         card.updated_at = at;
         self.touch(session_id);
         true
@@ -942,6 +1002,7 @@ impl SessionRegistry {
                     mode: None,
                     thinking: None,
                     compacting: None,
+                    stopping: None,
                     updated_at: at,
                 },
             );

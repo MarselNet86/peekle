@@ -13,6 +13,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { restStatus } from '$lib/logic/rest';
+import { ASKED_TO_STOP } from '$lib/logic/sessions';
 import { feedRows } from '$lib/logic/work';
 import RestMark from '$lib/ui/RestMark.svelte';
 import WorkLine from '$lib/ui/WorkLine.svelte';
@@ -34,6 +35,7 @@ const card = (
   mode: null,
   thinking: null,
   compacting,
+  stopping: null,
   updated_at: 0,
 });
 
@@ -135,6 +137,21 @@ describe('the line in the dialogue', () => {
     });
 
     expect(container.querySelector('.work')).toHaveClass('compact');
+  });
+
+  /// The other one-word line: while a stop request stands, the work line says
+  /// what is true -- that it was asked -- rather than cycling through invented
+  /// words. Not `Stopping`: the agent may finish its call first, or ignore the
+  /// request. tech.md 6.5.
+  it('says one word about a stop that was asked for', async () => {
+    render(WorkLine, {
+      props: { running: true, words: [ASKED_TO_STOP], from: Date.now() - 12_000 },
+    });
+
+    expect(screen.getByText('12s')).toBeInTheDocument();
+    // The line types rather than blinks, so the word arrives a letter at a
+    // time -- and it arrives whole, rather than cycling on to another.
+    await screen.findByText(ASKED_TO_STOP, {}, { timeout: 4000 });
   });
 
   it('is an ordinary work line without the tone', () => {
