@@ -62,7 +62,11 @@
     padding: 4px 9px 4px 4px;
     border: 1px solid var(--hairline);
     border-radius: 8px;
-    background: var(--bubble);
+    /* Dark, and nearly opaque, because the ground under it is not one ground:
+       the same block stands on the green of a reply and on the dark of an
+       answer. `--bubble` is a lightening, so on green it came out pale green
+       and read as part of the bubble rather than as a thing in it. */
+    background: rgba(12, 12, 14, 0.92);
     color: var(--text);
     font: inherit;
     font-size: 11px;
@@ -83,6 +87,10 @@
     height: 18px;
     border-radius: 5px;
     object-fit: cover;
+    /* A screenshot of this product is mostly black, so on a dark block the
+       tile would be a hole in it. The outline is what says a picture is
+       there at all. */
+    border: 1px solid var(--hairline);
     background: var(--surface);
   }
 
