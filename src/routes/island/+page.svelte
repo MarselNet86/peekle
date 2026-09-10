@@ -542,7 +542,13 @@
 <div class="island" bind:this={host}>
   <!-- A question outgrows the dialogue, so the shape takes the window while
        one stands. tech.md 6.14. -->
-  <Shape view={island.view} notch={island.notch} badge={badge.wide} {asking}>
+  <Shape
+    view={island.view}
+    notch={island.notch}
+    badge={badge.wide}
+    {asking}
+    deep={island.toast?.detail != null}
+  >
     {#snippet rest()}
       <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />
     {/snippet}
@@ -562,7 +568,13 @@
     {:else if island.view === 'Pill' && shots.offer}
       <ShotPrompt project={shots.offer.project} left={shots.left} secs={shots.secs} />
     {:else if island.view === 'Pill' && island.toast}
-      <Toast text={island.toast.text} tone={island.toast.tone} badge={island.toast.badge} />
+      <Toast
+        text={island.toast.text}
+        detail={island.toast.detail}
+        tookMs={island.toast.took_ms}
+        tone={island.toast.tone}
+        badge={island.toast.badge}
+      />
     {:else if listing}
       <div class="feed">
         {#if usage.gateSessions}

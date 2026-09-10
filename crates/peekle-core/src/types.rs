@@ -572,6 +572,15 @@ pub enum ToastTone {
 #[ts(export)]
 pub struct ToastRequest {
     pub text: String,
+    /// The quiet second line under it: what was said, where the line above is
+    /// who said it. `None` leaves the pill one line tall, which is what a
+    /// switch flipping has to say for itself. tech.md 6.2 and 9.
+    pub detail: Option<String>,
+    /// How long the turn took, in milliseconds, for a pill that is reporting
+    /// one. The answer to "how long was I away", and the only number a
+    /// finished turn has. tech.md 6.2.
+    #[ts(type = "number | null")]
+    pub took_ms: Option<i64>,
     pub tone: ToastTone,
     pub ttl_ms: u32,
     pub badge: Option<u32>,

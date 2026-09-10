@@ -177,3 +177,29 @@ describe('a question standing in the dialogue', () => {
     }
   });
 });
+
+/**
+ * The end of a turn says who finished and what they said, and one line cannot
+ * hold both. The pill grows to the height of the panel that already carries
+ * two. tech.md 6.2 and 6.7.
+ */
+describe('a pill with a second line', () => {
+  const notch = { width: 185, height: 34 };
+
+  it('is as tall as the panel that carries two lines', () => {
+    const deep = shapeBounds('Pill', notch, false, false, true);
+    const flat = shapeBounds('Pill', notch, false, false, false);
+    const ask = shapeBounds('Ask', notch);
+
+    expect(deep.height).toBeGreaterThan(flat.height);
+    expect(deep.height).toBe(ask.height);
+    // A switch flipping still gets the pill it always had.
+    expect(flat).toEqual(shapeBounds('Pill', notch));
+  });
+
+  it('changes no other view', () => {
+    for (const view of ['Collapsed', 'Ask', 'Sessions', { Session: 'a' }] as IslandView[]) {
+      expect(shapeBounds(view, notch, false, false, true)).toEqual(shapeBounds(view, notch));
+    }
+  });
+});

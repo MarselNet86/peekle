@@ -695,6 +695,16 @@
     <div class="pill"><Toast text="Peekle is OFF" tone="Off" /></div>
     <div class="pill"><Toast text="Hotkey is taken" tone="Warn" /></div>
     <div class="pill"><Toast text="Claude needs your input" tone="Neutral" badge={3} /></div>
+    <!-- The end of a turn: who finished, what they said, how long it took.
+         The pill grows to two lines for it. tech.md 6.2. -->
+    <div class="pill deep">
+      <Toast
+        text="peekle"
+        detail="Готово: шапка переехала в полосу рядом с вырезом, лента получила её высоту."
+        tookMs={72_000}
+        tone="Neutral"
+      />
+    </div>
   </section>
 
   <section>
@@ -741,6 +751,12 @@
     width: 340px;
     background: var(--notch);
     border-radius: 0 0 20px 20px;
+  }
+
+  /* The height Shape gives a pill that carries a second line. tech.md 6.7. */
+  .pill.deep {
+    height: 62px;
+    width: 420px;
   }
 
   /* Dev-only framing so each primitive has an edge to be seen against. The

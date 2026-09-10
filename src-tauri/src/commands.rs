@@ -159,6 +159,8 @@ fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
             } else {
                 "Peekle is OFF".to_string()
             },
+            detail: None,
+            took_ms: None,
             tone: if enabled {
                 ToastTone::On
             } else {

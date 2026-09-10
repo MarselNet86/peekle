@@ -11,24 +11,67 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                                | Contract            |
-| ------- | -------------------------------------------------------------------------------------- | ------------------- |
-| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out) | 6.3, 6.7, 6.14, 9   |
-| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)         | 6.7, 6.12, 9        |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)             | 6.15, 6.20, 9       |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                      | 6.5, 6.11           |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)                        | 6.5, 6.11           |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                               | 6.5, 9              |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                    | 6.12, 6.15, 6.20, 9 |
-| v64     | [Live mode switching](#v64--live-mode-switching)                                       | 6.19, 9             |
-| v63     | [Permission mode](#v63--permission-mode)                                               | 6.3, 6.5, 6.19, 9   |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)          | 6.4                 |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                     | 6.3, 6.12, 6.16, 9  |
-| v60     | [Composer layout](#v60--composer-layout)                                               | 6.12, 6.15, 9       |
-| v59     | [Permission panel](#v59--permission-panel)                                             | 6.3, 6.7, 9         |
-| v58     | [Usage badge](#v58--usage-badge)                                                       | 6.8, 6.10, 6.18, 9  |
-| v57     | [Work line](#v57--work-line)                                                           | 6.12, 9             |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                             | 6.5, 6.15, 9        |
+| Version | Feature                                                                                     | Contract            |
+| ------- | ------------------------------------------------------------------------------------------- | ------------------- |
+| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9    |
+| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                  | 6.7, 6.14, 9        |
+| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)      | 6.3, 6.7, 6.14, 9   |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)              | 6.7, 6.12, 9        |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                  | 6.15, 6.20, 9       |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                           | 6.5, 6.11           |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                             | 6.5, 6.11           |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                                    | 6.5, 9              |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                         | 6.12, 6.15, 6.20, 9 |
+| v64     | [Live mode switching](#v64--live-mode-switching)                                            | 6.19, 9             |
+| v63     | [Permission mode](#v63--permission-mode)                                                    | 6.3, 6.5, 6.19, 9   |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)               | 6.4                 |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                          | 6.3, 6.12, 6.16, 9  |
+| v60     | [Composer layout](#v60--composer-layout)                                                    | 6.12, 6.15, 9       |
+| v59     | [Permission panel](#v59--permission-panel)                                                  | 6.3, 6.7, 9         |
+| v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9  |
+| v57     | [Work line](#v57--work-line)                                                                | 6.12, 9             |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9        |
+
+## v77 — The turn notice, as the system writes one
+
+2026-09-10
+
+![The pill at the end of a turn](shots/turn-pill.png)
+
+The pill was one 13px line — `peekle · Готово: шапка переехала…` — with the
+project and the words run into a single sentence and clipped wherever the room
+ran out, which was always in the words.
+
+It is folded the way the permission panel is now: who finished on top, what
+they said under it in the quiet colour, and how long the turn took at the end
+of that line. The clock runs from the last thing the person said in that chat,
+the way the work line counts: they started waiting when they sent. Nothing of
+theirs to count from means no number at all rather than an invented one. The
+shape grows to the panel's height for the second line, and only for it — a
+switch flipping is still one line.
+
+## v76 — A question waits for you
+
+2026-09-10
+
+![The question, standing](shots/question-standing.png)
+
+A question is not one more thing the island shows: it is the agent parked and
+waiting for one person. So the island stops putting it away — the pointer
+leaving no longer collapses it and the 45 second hold does not apply — while a
+click beside the shape still does, because that is a decision rather than a
+hand wandering off.
+
+The cross refuses it. An empty answer used to mean "ask them yourself", so
+Claude Code put the same question in the terminal: there was no way out of a
+question, only a way to move it. Now the tool is denied with a line saying
+what happened, and the agent goes on.
+
+Nothing else moves while it stands: the feed is folded as a session that is
+not working, so the clock and the spinner go and the run that led up to the
+question closes as the line it is. And once it is put away by hand, the
+resting sign says who is waiting — it turns violet and a wave runs through the
+two strokes, one rising while the other falls.
 
 ## v75 — A question gets the room and a way out
 
