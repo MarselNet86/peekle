@@ -28,6 +28,9 @@ pub fn run() {
         // first banner, and the first banner is the toggle's own.
         // tech.md 6.17.
         .plugin(tauri_plugin_notification::init())
+        // The one system dialog the product raises: the folder a new chat
+        // works in. Registering it opens nothing. tech.md 6.23.
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -203,6 +206,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::compact_session,
             commands::paste_shot,
             commands::open_bug_report,
+            commands::choose_folder,
+            commands::set_session_cwd,
             commands::dev_emit_prompt,
         ]
     }
@@ -246,6 +251,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::compact_session,
             commands::paste_shot,
             commands::open_bug_report,
+            commands::choose_folder,
+            commands::set_session_cwd,
         ]
     }
 }
