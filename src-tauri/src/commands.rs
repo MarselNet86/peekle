@@ -1729,6 +1729,28 @@ pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
     }
 }
 
+/// Where a bug goes. tech.md 6.22.
+///
+/// The address is here rather than in the webview for the reason
+/// `open_sign_in_page` gives: a command that takes a URL from the page is a
+/// command the page can point anywhere. A link in the markup is out for a
+/// second reason -- an anchor in an overlay webview navigates the overlay.
+pub const BUG_REPORT_URL: &str = "https://t.me/marselnet";
+
+/// Opens the developer's Telegram. tech.md 6.22.
+#[tauri::command]
+pub fn open_bug_report() -> Result<(), String> {
+    tracing::debug!("opening the bug report chat");
+    std::process::Command::new("/usr/bin/open")
+        .arg(BUG_REPORT_URL)
+        .spawn()
+        .map_err(|err| {
+            tracing::warn!(error = %err, "could not open the bug report chat");
+            "could not open Telegram".to_string()
+        })?;
+    Ok(())
+}
+
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
 #[tauri::command]
 pub fn window_ready(state: State<'_, Arc<AppState>>, label: String) {
@@ -2159,5 +2181,14 @@ mod tests {
             ),
             Err("There is nothing to compact yet".to_string())
         );
+    }
+
+    /// tech.md 6.22. The button goes to the developer and to nobody else, and
+    /// the page it is pressed on has no say in that: the address is a constant
+    /// here, and the command takes no argument that could carry another one.
+    #[test]
+    fn the_bug_button_carries_its_own_address() {
+        assert_eq!(BUG_REPORT_URL, "https://t.me/marselnet");
+        let _: fn() -> Result<(), String> = open_bug_report;
     }
 }
