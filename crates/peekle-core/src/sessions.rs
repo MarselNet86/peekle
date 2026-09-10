@@ -675,6 +675,39 @@ impl SessionRegistry {
     /// waiting is the one this event belongs to. Returns whether it found one,
     /// because the caller then knows not to add a row of its own. tech.md 6.3.
     pub fn confirm_reply(&mut self, session_id: &str, text: &str, at: i64) -> bool {
+        if self.confirm_spoken(session_id, text, at) {
+            return true;
+        }
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|c| c.session.session_id == session_id)
+        else {
+            return false;
+        };
+        let Some(index) = card
+            .entries
+            .iter()
+            .position(|e| e.kind == EntryKind::User && e.state == EntryState::Running)
+        else {
+            return false;
+        };
+        card.entries[index].state = EntryState::Ok;
+        card.updated_at = at;
+        true
+    }
+
+    /// Confirms the reply that says these exact words, and no other one.
+    ///
+    /// `confirm_reply` falls back to the oldest reply still waiting, and for
+    /// `UserPromptSubmit` that is right: the hook *is* that reply, whatever
+    /// the CLI did to its text on the way in. A local command is not. No
+    /// `UserPromptSubmit` fires for `/compact` at all -- measured on a live
+    /// 2.1.263 -- so what confirms it is the CLI acting on it, and that says
+    /// nothing whatever about another message still in flight. Confirming the
+    /// wrong one would call a reply delivered while it sits in a box.
+    /// tech.md 6.5 and 6.21.
+    pub fn confirm_spoken(&mut self, session_id: &str, text: &str, at: i64) -> bool {
         let Some(card) = self
             .cards
             .iter_mut()
@@ -683,17 +716,11 @@ impl SessionRegistry {
             return false;
         };
         let spoken = truncate(text, ASSISTANT_LIMIT);
-        let by_words = card.entries.iter().position(|e| {
+        let Some(index) = card.entries.iter().position(|e| {
             e.kind == EntryKind::User
                 && matches!(e.state, EntryState::Running | EntryState::Failed)
                 && e.text == spoken
-        });
-        let by_order = || {
-            card.entries
-                .iter()
-                .position(|e| e.kind == EntryKind::User && e.state == EntryState::Running)
-        };
-        let Some(index) = by_words.or_else(by_order) else {
+        }) else {
             return false;
         };
         card.entries[index].state = EntryState::Ok;

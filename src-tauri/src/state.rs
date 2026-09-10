@@ -412,6 +412,17 @@ impl AppState {
         }
     }
 
+    /// Marks a local command the island typed as delivered. tech.md 6.21.
+    ///
+    /// Nothing else can: no `UserPromptSubmit` fires for a slash command, so
+    /// the bubble would sit waiting and then go red on the delivery window
+    /// while the CLI was already doing what it asked. The evidence is the
+    /// hook the command itself raises.
+    pub fn confirm_command(&self, session_id: &str, line: &str, at: i64) -> bool {
+        self.lock(&self.sessions)
+            .confirm_spoken(session_id, line, at)
+    }
+
     /// A compact started on this session. tech.md 6.21.
     pub fn start_compact(&self, session: &SessionRef, at: i64, manual: bool) -> Vec<SessionCard> {
         let mut registry = self.lock(&self.sessions);

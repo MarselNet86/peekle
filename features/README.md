@@ -13,7 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract            |
 | ------- | ------------------------------------------------------------------------------------------- | ------------------- |
-| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.21, 9   |
+| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                        | 6.1, 6.3, 6.5, 6.21 |
 | v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one) | 6.2, 6.3, 6.7, 9    |
 | v76     | [A question waits for you](#v76--a-question-waits-for-you)                                  | 6.7, 6.14, 9        |
 | v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)      | 6.3, 6.7, 6.14, 9   |
@@ -75,6 +75,12 @@ is the chat being folded up.
 Every change of state hops both strokes, the second behind the first, so a
 compact ending while nobody is watching the notch is seen ending rather than
 found already ended.
+
+One more thing the same hook fixed. `/compact` typed into the island's own
+field is a message like any other, and it is the one message nothing ever
+confirms: no `UserPromptSubmit` fires for a slash command. The bubble sat grey
+and then went red — the island calling it undelivered while the CLI was
+compacting on it. `PreCompact` is the delivery note now.
 
 Two edges, both real. `PreCompact` fires **before** the CLI decides whether
 there is anything to compact — a chat of two replies gave the hook and then
