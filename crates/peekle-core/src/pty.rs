@@ -198,6 +198,32 @@ pub fn command_writes(line: &str) -> Vec<Vec<u8>> {
     vec![line.as_bytes().to_vec(), b"\r".to_vec(), b"\r".to_vec()]
 }
 
+/// Whether this text is a slash command rather than something to say.
+///
+/// One line, a leading slash, and a first word that reads like a command
+/// name: letters, digits and the punctuation a command name uses. A path is
+/// not one -- `/Users/dev/peekle` carries slashes and dots and is an ordinary
+/// thing to send an agent. The answer decides one thing only, whether the
+/// write carries the newline that answers a dialog, and that newline is
+/// harmless on an empty box, so a wrong guess here costs nothing either way.
+/// tech.md 6.15.
+pub fn is_slash_command(text: &str) -> bool {
+    let line = text.trim();
+    if line.lines().count() != 1 {
+        return false;
+    }
+    let Some(rest) = line.strip_prefix('/') else {
+        return false;
+    };
+    let Some(name) = rest.split_whitespace().next() else {
+        return false;
+    };
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
+}
+
 /// How long the answering newline waits behind a slash command.
 ///
 /// The TUI has to run the command and draw what it asks before there is
@@ -734,6 +760,26 @@ mod tests {
         assert_eq!(writes[0], b"/effort ultracode");
         assert_eq!(writes[1], b"\r");
         assert_eq!(writes[2], NUDGE, "and the answer is one plain newline");
+    }
+
+    /// What takes the answering newline and what does not. A path is a thing
+    /// people send agents, and it starts with a slash.
+    #[test]
+    fn a_slash_command_is_told_from_a_message_that_starts_with_one() {
+        for line in ["/compact", "/model opus", "/effort ultracode", "/status"] {
+            assert!(is_slash_command(line), "{line}");
+        }
+        for text in [
+            "/Users/dev/peekle/src/lib.rs",
+            "/tmp/shot.png look at this",
+            "read /etc/hosts",
+            "/model opus
+and then stop",
+            "",
+            "/",
+        ] {
+            assert!(!is_slash_command(text), "{text:?}");
+        }
     }
 
     /// It is a message plus one newline, and nothing else: a dialog that is

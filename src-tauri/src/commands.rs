@@ -1084,10 +1084,17 @@ pub async fn send_message(
         for line in held.lines() {
             // Each pick answers its own question before the next one goes, or
             // the line after it lands in a dialog. tech.md 6.15.
-            owner.pty().command(&id, &line)?;
+            write_command(&owner, &id, &line)?;
             std::thread::sleep(peekle_core::pty::SETTING_GAP);
         }
-        owner.pty().send(&id, &body)
+        // And a slash command typed into the field is a slash command: it
+        // raises the same dialogs the row does, and until v80 it was the one
+        // way left to fall into the bug the row was fixed for. tech.md 6.15.
+        if peekle_core::pty::is_slash_command(&body) {
+            write_command(&owner, &id, &body)
+        } else {
+            owner.pty().send(&id, &body)
+        }
     })
     .await;
 
@@ -1133,7 +1140,7 @@ pub fn get_defaults() -> peekle_core::types::AgentSetup {
 /// into the transcript as a `<command-name>` record, which the synthetic
 /// filter of 6.11 already drops.
 #[tauri::command]
-pub fn set_model(
+pub async fn set_model(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -1141,13 +1148,14 @@ pub fn set_model(
 ) -> Result<(), String> {
     let line = peekle_core::agent::model_command(&model)
         .map_err(|_| "That is not a model name".to_string())?;
-    command_session(
-        Some(&app),
-        state.inner(),
-        &session_id,
+    command_off_thread(
+        app,
+        state.inner().clone(),
+        session_id,
         Some((HeldKind::Model, model.trim().to_string())),
-        &line,
+        line,
     )
+    .await
 }
 
 /// Sets the permission mode of a session Peekle owns. tech.md 6.19.
@@ -1232,52 +1240,55 @@ pub fn set_thinking(
 /// `/effort ultracode` does, and says why: it holds for this session only.
 /// tech.md 6.15.
 #[tauri::command]
-pub fn set_ultracode(
+pub async fn set_ultracode(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<(), String> {
-    command_session(
-        Some(&app),
-        state.inner(),
-        &session_id,
+    command_off_thread(
+        app,
+        state.inner().clone(),
+        session_id,
         None,
-        "/effort ultracode",
+        "/effort ultracode".to_string(),
     )
+    .await
 }
 
 /// Changes how hard the session is asked to think. tech.md 6.15.
 #[tauri::command]
-pub fn set_effort(
+pub async fn set_effort(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     effort: peekle_core::types::Effort,
 ) -> Result<(), String> {
-    command_session(
-        Some(&app),
-        state.inner(),
-        &session_id,
+    command_off_thread(
+        app,
+        state.inner().clone(),
+        session_id,
         Some((HeldKind::Effort, effort.flag().to_string())),
-        &peekle_core::agent::effort_command(effort),
+        peekle_core::agent::effort_command(effort),
     )
+    .await
 }
 
 /// Frees up context by summarising the conversation. The ring is the button.
 /// tech.md 6.15.
 #[tauri::command]
-pub fn compact_session(
+pub async fn compact_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<(), String> {
-    command_session(
-        Some(&app),
-        state.inner(),
-        &session_id,
+    command_off_thread(
+        app,
+        state.inner().clone(),
+        session_id,
         None,
-        peekle_core::agent::COMPACT_COMMAND,
+        peekle_core::agent::COMPACT_COMMAND.to_string(),
     )
+    .await
 }
 
 /// Writes one slash command into a session's pty.
@@ -1320,7 +1331,7 @@ fn command_session(
     // `command`, not `send`: a setting the CLI cannot apply silently asks
     // about it first, and until that dialog is answered it eats whatever is
     // written next -- the message the person types after picking. tech.md 6.15.
-    state.pty().command(session_id, line).map_err(|err| {
+    write_command(state, session_id, line).map_err(|err| {
         tracing::warn!(error = %err, session_id, "the pty refused the setting");
         "That session is no longer listening".to_string()
     })?;
@@ -1333,6 +1344,61 @@ fn command_session(
         reread_soon(app, state, session_id);
     }
     Ok(())
+}
+
+/// `command_session` off the main thread. tech.md 6.15.
+///
+/// A sync Tauri command runs on the main thread, and this one sleeps: a
+/// slash command is three writes over half a second, and a held setting
+/// ahead of a message is another `SETTING_GAP` on top. Half a second of a
+/// blocked main thread is half a second in which the island's own pointer
+/// monitor -- the thing that opens and closes it -- receives nothing.
+async fn command_off_thread(
+    app: AppHandle,
+    state: Arc<AppState>,
+    session_id: String,
+    held: Option<(HeldKind, String)>,
+    line: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        command_session(Some(&app), &state, &session_id, held, &line)
+    })
+    .await
+    .map_err(|err| {
+        tracing::warn!(error = %err, "the setting never ran");
+        "That session is no longer listening".to_string()
+    })?
+}
+
+/// Whether a slash command written into this session may carry the newline
+/// that answers a dialog. tech.md 6.15.
+///
+/// Only while no turn is running. The newline takes whatever option is under
+/// the cursor, and while an agent works the cursor can be on a question the
+/// CLI raised itself -- a permission prompt, drawn in the 400ms between the
+/// command and its answer. Answering that on somebody's behalf is the one
+/// thing this product must never do (rule 10), and a compact that has to be
+/// confirmed by hand is a far smaller price. With the session at rest there
+/// is no such question to hit: nothing is running that could ask one.
+fn may_answer(state: &Arc<AppState>, session_id: &str) -> bool {
+    state
+        .sessions()
+        .into_iter()
+        .find(|card| card.session.session_id == session_id)
+        .is_some_and(|card| card.status != peekle_core::types::SessionStatus::Working)
+}
+
+/// One line into a session's pty, answering its own dialog when it is safe to.
+fn write_command(
+    state: &Arc<AppState>,
+    session_id: &str,
+    line: &str,
+) -> Result<(), peekle_core::pty::PtyError> {
+    if may_answer(state, session_id) {
+        state.pty().command(session_id, line)
+    } else {
+        state.pty().send(session_id, line)
+    }
 }
 
 /// The card's own `SessionRef`, for the paths that hold only an id.
@@ -1677,6 +1743,35 @@ mod tests {
                 "{line}"
             );
         }
+    }
+
+    /// The newline that answers a dialog goes only to a session at rest.
+    ///
+    /// While a turn runs, the cursor can be on a question the CLI raised
+    /// itself, and taking the option under it would be this product allowing
+    /// a tool on somebody's behalf -- the one thing rule 10 exists to stop.
+    /// tech.md 6.15.
+    #[test]
+    fn a_dialog_is_answered_only_where_no_other_question_can_stand() {
+        let state = fresh();
+        let session = peekle_core::types::SessionRef {
+            session_id: "mine".to_string(),
+            cwd: "/tmp/peekle".to_string(),
+            project: "peekle".to_string(),
+            pid: None,
+            tty: None,
+        };
+        state.claim_session(&session.session_id);
+        state.open_owned_session(session.clone(), 1);
+
+        state.set_session_status(&session, peekle_core::types::SessionStatus::Idle, 2);
+        assert!(may_answer(&state, &session.session_id));
+
+        state.set_session_status(&session, peekle_core::types::SessionStatus::Working, 3);
+        assert!(!may_answer(&state, &session.session_id));
+
+        // And a session nobody has a card for is not one to write into at all.
+        assert!(!may_answer(&state, "nobody"));
     }
 
     /// A press asks again only while the answer is Offline, and only inside
