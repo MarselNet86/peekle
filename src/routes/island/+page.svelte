@@ -59,6 +59,7 @@
   import ShotPreview from '$lib/ui/ShotPreview.svelte';
   import ShotPrompt from '$lib/ui/ShotPrompt.svelte';
   import Shape from '$lib/ui/Shape.svelte';
+  import Sign from '$lib/ui/Sign.svelte';
   import Toast from '$lib/ui/Toast.svelte';
 
   // Rust measures the notch and hands both dimensions over in the query
@@ -768,6 +769,14 @@
           </div>
         {/if}
         <div class="rows" bind:this={scroller} onscroll={readScroll}>
+          <!-- A chat that has nothing in it yet carries the sign instead of
+               half a window of black. Nothing has been said and nothing is
+               going: `feedRows` puts a work line in from the first second of
+               a turn (6.12), so an empty list of rows means exactly that.
+               tech.md 6.12 and 9. -->
+          {#if rows.length === 0 && compacting === null}
+            <div class="blank"><Sign caption="Let's begin" /></div>
+          {/if}
           {#each rows as row (row.id)}
             {#if row.kind === 'said'}
               <FeedRow entry={row.entry} shotSrc={fileSrc} onopenshot={(path) => (opened = path)} />
@@ -945,6 +954,19 @@
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;
+  }
+
+  /* The sign, in the room an empty dialogue has nothing else to put in it.
+     It takes the whole scroller so it stands in the middle of the feed rather
+     than at the top of it, and sits a little above centre -- optical centre,
+     because the composer below weighs the bottom of the shape down. */
+  .blank {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding-bottom: 22px;
+    box-sizing: border-box;
   }
 
   /* The bars sit under the session list, where the eye lands after reading

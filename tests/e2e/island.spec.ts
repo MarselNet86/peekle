@@ -50,6 +50,12 @@ function observed(entries: unknown[] = [], id = 's1'): Card {
   };
 }
 
+/** A chat Peekle has just started: nothing said in it, nothing running.
+ * tech.md 6.12. */
+function fresh(status = 'Idle', entries: unknown[] = []): Card {
+  return { ...observed(entries), status, agent: null };
+}
+
 function say(id: string, text: string, at: number) {
   return { id, kind: 'User', text, tool: null, detail: null, state: 'Ok', at };
 }
@@ -219,5 +225,68 @@ test.describe('the island route', () => {
 
     await expect(page.getByText('over here')).toBeVisible();
     await expect(note).toHaveCount(0);
+  });
+  /// A chat with nothing in it stands under the sign rather than over half a
+  /// window of black: an empty dialogue that says nothing at all reads as a
+  /// screen that did not finish drawing. tech.md 6.12 and 9.
+  test('an empty chat carries the sign, and the first line takes it away', async ({ page }) => {
+    await stub(page, [fresh()]);
+    await page.goto(ROUTE);
+
+    const sign = page.getByRole('img', { name: 'Nothing said in this chat yet' });
+    await expect(sign).toBeVisible();
+    // The strokes say whose window this is; the line says what it waits for.
+    const start = page.getByText("Let's begin");
+    await expect(start).toBeVisible();
+
+    // The first thing said arrives on a hook, the way everything does.
+    await page.evaluate(() => {
+      (window as unknown as { __sessions: (cards: unknown) => void }).__sessions([
+        {
+          session: {
+            session_id: 's1',
+            cwd: '/Users/dev/peekle',
+            project: 'peekle',
+            pid: null,
+            tty: null,
+          },
+          title: 'Refactor the panel',
+          status: 'Idle',
+          origin: 'Observed',
+          entries: [
+            {
+              id: 'u1',
+              kind: 'User',
+              text: 'the first word',
+              tool: null,
+              detail: null,
+              state: 'Ok',
+              at: 1_789_000_000_000,
+            },
+          ],
+          agent: null,
+          mode: null,
+          thinking: null,
+          compacting: null,
+          stopping: null,
+          updated_at: 2,
+        },
+      ]);
+    });
+
+    await expect(page.getByText('the first word')).toBeVisible();
+    await expect(sign).toHaveCount(0);
+    await expect(start).toHaveCount(0);
+  });
+
+  /// A turn that has called nothing yet is not an empty chat: the work line
+  /// is in the feed from its first second, and two answers to "is anything
+  /// happening" is one too many. tech.md 6.12.
+  test('a chat that is working carries the work line instead', async ({ page }) => {
+    await stub(page, [fresh('Working')]);
+    await page.goto(ROUTE);
+
+    await expect(page.locator('.work').first()).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Nothing said in this chat yet' })).toHaveCount(0);
   });
 });
