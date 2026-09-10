@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                     | Contract             |
 | ------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                       | 6.7, 9               |
 | v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                   | 6.12, 9              |
 | v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                 | 9                    |
 | v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                       | 6.3, 6.5, 6.11, 6.21 |
@@ -36,6 +37,28 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                            | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                  | 6.5, 6.15, 9         |
+
+## v80.3 — A question wears its own mark
+
+2026-09-10
+
+![The island while a question stands](shots/asking-mark.png)
+
+While the agent waited on a person the island wore the product's own sign, `//`
+painted purple with a wave running through it. That made the sign say something
+it does not mean: `//` is Peekle, and what the island had to say was that
+somebody is being waited on. Purple and a wave were the only things telling the
+two apart, and both are read after the shape, not before it.
+
+The sign steps aside for the wait now, and a pixel question mark stands in its
+place — eight by twelve, whole pixels on whole units, in the same box the
+strokes are drawn in, so the glyph changes where it stood rather than beside it.
+The colour is the same `--waiting` purple it always was.
+
+The breath stays, and it is all the movement there is: the wave went with the
+strokes it ran through, and a pixel glyph that slides or scales is a pixel glyph
+with soft edges. The bitmap lives in `src/lib/logic/ask-sign.ts`, next to the
+sign's own geometry, because neither of the two is drawn by hand twice.
 
 ## v80.2 — The empty chat carries the sign
 
