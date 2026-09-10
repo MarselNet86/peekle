@@ -410,6 +410,8 @@ pub fn warn_hotkey(app: &AppHandle, text: &str) {
         app,
         ToastRequest {
             text: text.to_string(),
+            detail: None,
+            took_ms: None,
             tone: ToastTone::Warn,
             ttl_ms: 3200,
             badge: None,

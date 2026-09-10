@@ -10,6 +10,7 @@
     notch,
     badge = false,
     asking = false,
+    deep = false,
     rest,
     children,
   }: {
@@ -20,6 +21,9 @@
     /** A question is standing in the dialogue, so the shape takes the whole
      * window until it is answered. tech.md 6.14. */
     asking?: boolean;
+    /** The pill carries a second line, so it stands as tall as the panel that
+     * carries two. tech.md 6.2. */
+    deep?: boolean;
     rest?: Snippet;
     children?: Snippet;
   } = $props();
@@ -27,7 +31,7 @@
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
 
-  const target = $derived(shapeBounds(view, notch, badge, asking));
+  const target = $derived(shapeBounds(view, notch, badge, asking, deep));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
 

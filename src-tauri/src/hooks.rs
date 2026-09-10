@@ -131,9 +131,12 @@ impl AppSink {
         windows::toast(
             &self.app,
             ToastRequest {
-                // Which project said it, because more than one runs at a time
-                // and the badge on a toast is a count rather than a name.
-                text: format!("{} · {said}", session.project),
+                // Who, then what, on two lines rather than one run-on: more
+                // than one project runs at a time, and the badge on a toast
+                // is a count rather than a name. tech.md 6.2.
+                text: session.project.clone(),
+                detail: Some(said),
+                took_ms: turn_took(&self.state.sessions(), &session.session_id, now_ms()),
                 tone: ToastTone::Neutral,
                 ttl_ms: TURN_NOTICE_MS,
                 badge: None,
@@ -141,6 +144,15 @@ impl AppSink {
         );
     }
 
+    /// How long the turn took: from the last thing the person said in this
+    /// chat to now.
+    ///
+    /// The only number a finished turn has, and the one question a notice for
+    /// it answers -- how long was I away. Counted from their words rather
+    /// than from the agent's first call, the same way the work line counts
+    /// (6.12): they started waiting when they sent. Nothing said in this chat
+    /// yet means nothing to count from, and then the pill carries no number
+    /// rather than a made up one. tech.md 6.2.
     fn emit_sessions(&self, cards: Vec<peekle_core::types::SessionCard>) {
         tracing::debug!(
             sessions = cards.len(),
@@ -190,6 +202,29 @@ impl AppSink {
             PromptOutcome::AnsweredElsewhere,
         );
     }
+}
+
+/// How long the turn took: from the last thing the person said in this chat
+/// to now.
+///
+/// The only number a finished turn has, and the one question a notice about it
+/// answers -- how long was I away. Counted from their words rather than from
+/// the agent's first call, the same way the work line counts (6.12): they
+/// started waiting when they sent. A chat with nothing of theirs in it has
+/// nothing to count from, and then the pill carries no number rather than an
+/// invented one. tech.md 6.2.
+fn turn_took(cards: &[peekle_core::types::SessionCard], session_id: &str, at: i64) -> Option<i64> {
+    let card = cards
+        .iter()
+        .find(|card| card.session.session_id == session_id)?;
+    let started = card
+        .entries
+        .iter()
+        .rev()
+        .find(|entry| entry.kind == peekle_core::types::EntryKind::User)?
+        .at;
+
+    (at > started).then_some(at - started)
 }
 
 /// Whether this feed payload says the standing request has been answered
@@ -374,6 +409,8 @@ impl HookSink for AppSink {
             &self.app,
             ToastRequest {
                 text,
+                detail: None,
+                took_ms: None,
                 tone: ToastTone::Neutral,
                 ttl_ms: 2600,
                 badge: None,
@@ -538,6 +575,75 @@ mod tests {
             created_at: 0,
             expires_at: 0,
         }
+    }
+
+    fn said(kind: peekle_core::types::EntryKind, at: i64) -> peekle_core::types::FeedEntry {
+        peekle_core::types::FeedEntry {
+            id: format!("e{at}"),
+            kind,
+            text: "x".into(),
+            tool: None,
+            detail: None,
+            state: peekle_core::types::EntryState::Ok,
+            at,
+        }
+    }
+
+    fn chat(entries: Vec<peekle_core::types::FeedEntry>) -> peekle_core::types::SessionCard {
+        peekle_core::types::SessionCard {
+            session: peekle_core::types::SessionRef {
+                session_id: "s".into(),
+                cwd: "/tmp/peekle".into(),
+                project: "peekle".into(),
+                pid: None,
+                tty: None,
+            },
+            title: "t".into(),
+            status: peekle_core::types::SessionStatus::Idle,
+            origin: peekle_core::types::SessionOrigin::Owned,
+            entries,
+            agent: None,
+            mode: None,
+            thinking: None,
+            updated_at: 0,
+        }
+    }
+
+    /// The clock the pill shows starts when the person sent, not when the
+    /// agent made its first call: that whole first thought is time they
+    /// waited through. tech.md 6.2 and 6.12.
+    #[test]
+    fn a_turn_is_timed_from_the_words_that_started_it() {
+        use peekle_core::types::EntryKind;
+        let cards = vec![chat(vec![
+            said(EntryKind::User, 1_000),
+            said(EntryKind::Assistant, 2_000),
+            said(EntryKind::User, 10_000),
+            said(EntryKind::Tool, 11_000),
+            said(EntryKind::Assistant, 40_000),
+        ])];
+
+        assert_eq!(turn_took(&cards, "s", 42_000), Some(32_000));
+    }
+
+    /// Nothing of theirs to count from, no chat by that name, or a clock that
+    /// went backwards: no number at all rather than an invented one. R-3.
+    #[test]
+    fn a_turn_with_nothing_to_count_from_carries_no_number() {
+        use peekle_core::types::EntryKind;
+        let only_agent = vec![chat(vec![said(EntryKind::Assistant, 5_000)])];
+
+        assert_eq!(turn_took(&only_agent, "s", 9_000), None);
+        assert_eq!(turn_took(&[], "s", 9_000), None);
+        assert_eq!(
+            turn_took(&[chat(vec![said(EntryKind::User, 9_000)])], "nobody", 9_000),
+            None
+        );
+        // Sent in the future, by a clock that disagrees with ours.
+        assert_eq!(
+            turn_took(&[chat(vec![said(EntryKind::User, 9_000)])], "s", 9_000),
+            None
+        );
     }
 
     /// The bug: Claude Code shows its own question without waiting for the

@@ -76,6 +76,9 @@ function sane(value: number, fallback: number): number {
  * spring has to grow out of the bezel, and a shape that starts at nothing
  * reads as a window appearing rather than as the notch opening.
  *
+ * `deep` is a pill with a second line under its first: the end of a turn says
+ * who finished and what they said, and one line cannot hold both. tech.md 6.2.
+ *
  * `asking` is a question standing in the dialogue. Four options with their
  * descriptions are taller than the 420 a dialogue stands at, and the last of
  * them was cut off by the bottom edge -- an option nobody can see is an option
@@ -89,6 +92,7 @@ export function shapeBounds(
   notch: Notch,
   badge = false,
   asking = false,
+  deep = false,
 ): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
@@ -111,7 +115,10 @@ export function shapeBounds(
             radius: REST_PILL.height / 2,
           }
       : view === 'Pill'
-        ? { width: 420, height: height + 44, radius: 20 }
+        ? // A pill carrying a second line is the height of the panel that
+          // carries two: one shape for two lines, whatever is on them.
+          // tech.md 6.2 and 6.7.
+          { width: 420, height: height + (deep ? 62 : 44), radius: 20 }
         : // Two lines and two buttons, and nothing else: the answer to a
           // permission needs no feed. tech.md 6.7.
           view === 'Ask'
