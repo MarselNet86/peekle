@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9 |
 | v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9               |
 | v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9    |
 | v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9         |
@@ -55,6 +56,26 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v82 — The island floats where there is no notch
+
+2026-09-11 · `f61ba54`
+
+![The resting capsule](shots/float-rest.png)
+
+![The list, floating](shots/float-list.png)
+
+On a display without a notch — Windows, Linux, an external Mac monitor — the
+island rests as the capsule of the iPhone island: 132 by 36, ten pixels off
+the top edge, round at every corner, the sign on the left and the ring on the
+right. Every open view sits on the same inset with the same full rounding, so
+the shape expands out of the capsule rather than growing out of a cutout that
+is not there. The notch path is unchanged.
+
+The click rectangle follows the shape: the webview reports where it drew,
+offset included, and Rust no longer pins it to the top edge. Peekle also runs
+as one instance everywhere — a second launch opens the list of the first — and
+on Windows and Linux the log goes to `peekle.log` in the cache directory.
 
 ## v80.23 — The waiting mark wears the sign again
 
