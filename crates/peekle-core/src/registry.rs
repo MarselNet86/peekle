@@ -347,11 +347,16 @@ mod tests {
         };
         assert!(process_alive(&me));
         // A start time nobody has: the pid exists, but it is not that process.
-        let reused = LiveSession {
-            proc_start: Some("Mon Jan  1 00:00:00 1990".into()),
-            ..me.clone()
-        };
-        assert!(!process_alive(&reused));
+        // Only unix can tell: there is no `ps` on Windows, and there an
+        // existing pid counts as alive. tech.md 6.27 and R-22.
+        #[cfg(unix)]
+        {
+            let reused = LiveSession {
+                proc_start: Some("Mon Jan  1 00:00:00 1990".into()),
+                ..me.clone()
+            };
+            assert!(!process_alive(&reused));
+        }
         let gone = LiveSession {
             pid: u32::MAX - 1,
             ..me
@@ -361,7 +366,9 @@ mod tests {
 
     /// The record's clock is UTC and `ps` answers in the local one. A start
     /// written the way Claude Code writes it has to read as this process,
-    /// whatever zone the machine is in. Seen live 2026-09-09.
+    /// whatever zone the machine is in. Seen live 2026-09-09. Unix only:
+    /// the clock being compared is `ps`. tech.md 6.27.
+    #[cfg(unix)]
     #[test]
     fn a_start_written_in_utc_names_this_process() {
         let Some(start) = utc_start_of(std::process::id()) else {

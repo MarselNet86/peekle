@@ -14,8 +14,10 @@ use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+#[cfg(unix)]
 use std::time::Duration;
 
+#[cfg(unix)]
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -23,6 +25,7 @@ use crate::registry::LiveSession;
 
 /// How long a connect, a write or the final drain may take. The socket is
 /// local; anything slower than this is a process that is not answering.
+#[cfg(unix)]
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What `Stop` says to a process that is not ours. A request, not an
@@ -64,12 +67,16 @@ pub fn key_name(pid: u32, inbox: &Path) -> String {
 }
 
 /// The key file's shape. No `Debug`: it holds the token.
+#[cfg(unix)]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct KeyFile {
     peer_token: String,
 }
 
+/// The shape of a peer token. The rule holds on every platform, and its test
+/// runs on every platform; only the caller is unix-only. tech.md 6.27.
+#[cfg_attr(not(unix), allow(dead_code))]
 fn is_token(token: &str) -> bool {
     token.len() == 32 && token.bytes().all(|b| b.is_ascii_hexdigit())
 }
