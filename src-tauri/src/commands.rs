@@ -12,9 +12,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::events;
 use crate::notify::Notifier;
-use crate::panel;
+use crate::platform;
 use crate::state::{AppState, HeldKind, HeldSettings};
-use crate::trash;
 use crate::windows;
 
 #[tauri::command]
@@ -858,7 +857,7 @@ pub fn paste_shot(
     // The same event the attach key raises, so the attachment arrives in the
     // field by one route however it got here.
     let payload = serde_json::json!({ "session_id": session_id, "path": path });
-    if let Err(err) = app.emit_to(crate::panel::ISLAND, events::SHOT_ATTACHED, payload) {
+    if let Err(err) = app.emit_to(crate::platform::ISLAND, events::SHOT_ATTACHED, payload) {
         tracing::warn!(error = %err, "failed to emit shot-attached");
     }
     Ok(Some(path))
@@ -1805,7 +1804,7 @@ pub fn delete_session(
 
     if let Some(path) = transcript_of(card.as_ref()) {
         if path.exists() {
-            trash::to_trash(&path)?;
+            platform::to_trash(&path)?;
             tracing::info!(session_id, "the transcript went to the Trash");
         } else {
             tracing::debug!(session_id, "no transcript on disk to delete");
@@ -1871,7 +1870,7 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     let state = app.state::<Arc<AppState>>().inner().clone();
     state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
-    let _ = app.run_on_main_thread(panel::take_front);
+    let _ = app.run_on_main_thread(platform::take_front);
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -1882,7 +1881,7 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
 
     let picked = rx.await;
     state.set_dialog(false);
-    let _ = app.run_on_main_thread(panel::give_front_back);
+    let _ = app.run_on_main_thread(platform::give_front_back);
     let picked = picked.map_err(|_| "the folder dialog went away".to_string())?;
 
     let Some(folder) = picked else {
@@ -1913,7 +1912,7 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
     let state = app.state::<Arc<AppState>>().inner().clone();
     state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
-    let _ = app.run_on_main_thread(panel::take_front);
+    let _ = app.run_on_main_thread(platform::take_front);
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -1924,7 +1923,7 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
 
     let picked = rx.await;
     state.set_dialog(false);
-    let _ = app.run_on_main_thread(panel::give_front_back);
+    let _ = app.run_on_main_thread(platform::give_front_back);
     let picked = picked.map_err(|_| "the file dialog went away".to_string())?;
 
     let Some(files) = picked else {

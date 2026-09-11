@@ -380,6 +380,12 @@ const PATH_FALLBACK: &[&str] = &[
 pub(crate) fn session_path() -> String {
     static PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     PATH.get_or_init(|| {
+        // No login shell to ask on Windows, and the fallback below is a list
+        // of unix directories: the process's own PATH is the honest answer.
+        // tech.md 6.27.
+        if cfg!(windows) {
+            return std::env::var("PATH").unwrap_or_default();
+        }
         let fallback = || PATH_FALLBACK.join(":");
         let Ok(shell) = std::env::var("SHELL") else {
             return fallback();

@@ -5,7 +5,8 @@
 //! offers to attach it, and on agreement turns the image into a file and the
 //! file into a line of the next reply.
 //!
-//! AppKit lives here and in `panel.rs`, and nowhere else. tech.md 12.
+//! The pasteboard itself is the platform's (`platform/`); this is the watch
+//! over it, and the same on every platform. tech.md 12 and 6.27.
 //!
 //! Two halves, deliberately unequal. Detection reads the change count and the
 //! type names, which raises nothing and copies nothing, and it runs on a
@@ -16,54 +17,15 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use peekle_core::shots::{self, Pasteboard};
+use peekle_core::shots;
 use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
 use crate::hotkey;
-use crate::panel;
+use crate::platform;
 use crate::state::AppState;
 use crate::windows;
-
-/// The real pasteboard.
-pub struct SystemPasteboard;
-
-impl Pasteboard for SystemPasteboard {
-    fn change_count(&self) -> i64 {
-        use objc2_app_kit::NSPasteboard;
-
-        let pasteboard = NSPasteboard::generalPasteboard();
-        pasteboard.changeCount() as i64
-    }
-
-    fn item_types(&self) -> Vec<Vec<String>> {
-        use objc2_app_kit::NSPasteboard;
-
-        let pasteboard = NSPasteboard::generalPasteboard();
-        // The item and not the pasteboard: NSPasteboard synthesises TIFF from
-        // a PNG, so its declared list calls every screenshot an image and
-        // every image a screenshot. tech.md 6.13.
-        let Some(items) = pasteboard.pasteboardItems() else {
-            return Vec::new();
-        };
-        items
-            .iter()
-            .map(|item| item.types().iter().map(|t| t.to_string()).collect())
-            .collect()
-    }
-
-    fn read_png(&self) -> Option<Vec<u8>> {
-        use objc2_app_kit::{NSPasteboard, NSPasteboardTypePNG};
-
-        let pasteboard = NSPasteboard::generalPasteboard();
-        // The extern static is the type name itself, and reading one is what
-        // `unsafe` covers here. Nothing about the read is fallible otherwise.
-        let png = unsafe { NSPasteboardTypePNG };
-        let data = pasteboard.dataForType(png)?;
-        Some(data.to_vec())
-    }
-}
 
 /// Starts the watch. Silent and cheap: one counter read per tick, and the
 /// contents are never touched here. tech.md 6.13.
@@ -229,7 +191,7 @@ pub fn attach(app: &AppHandle) {
 
     tracing::info!(session = %offer.session_id, bytes = png.len(), "attached a screenshot");
     let payload = serde_json::json!({ "session_id": offer.session_id, "path": path });
-    if let Err(err) = app.emit_to(panel::ISLAND, events::SHOT_ATTACHED, payload) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::SHOT_ATTACHED, payload) {
         tracing::warn!(error = %err, "failed to emit shot-attached");
     }
 
@@ -264,7 +226,7 @@ fn put_away(app: &AppHandle, state: &Arc<AppState>) {
 
 fn emit_offer(app: &AppHandle, offer: Option<&ShotOffer>) {
     let payload = serde_json::json!({ "offer": offer });
-    if let Err(err) = app.emit_to(panel::ISLAND, events::SHOT, payload) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::SHOT, payload) {
         tracing::warn!(error = %err, "failed to emit the screenshot offer");
     }
 }

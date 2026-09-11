@@ -161,6 +161,7 @@ pub fn process_alive(live: &LiveSession) -> bool {
     starts.iter().any(|actual| same_start(actual, expected))
 }
 
+#[cfg(unix)]
 fn pid_exists(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return false;
@@ -175,8 +176,36 @@ fn pid_exists(pid: u32) -> bool {
     rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
+/// Windows: a handle to the process, or nothing. `OpenProcess` with the
+/// least it can ask for, so a process of another user still answers "exists"
+/// with an access error rather than "gone". tech.md 6.27.
+#[cfg(windows)]
+fn pid_exists(pid: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    // SAFETY: a query handle that is closed on the spot; no memory is shared.
+    match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
+        Ok(handle) => {
+            // SAFETY: the handle came from the call above and is used once.
+            let _ = unsafe { CloseHandle(handle) };
+            true
+        }
+        Err(err) => err.code() == ERROR_ACCESS_DENIED.to_hresult(),
+    }
+}
+
+/// The start of `pid` as `ps` prints it, once under `TZ=UTC` and once in the
+/// local clock. Empty when `ps` could not be asked at all -- which on Windows
+/// is always, so an existing pid there counts as alive. tech.md 6.27, R-22.
+#[cfg(not(unix))]
+fn proc_starts_of(_pid: u32) -> Vec<String> {
+    Vec::new()
+}
+
 /// The start of `pid` as `ps` prints it, once under `TZ=UTC` and once in the
 /// local clock. Empty when `ps` could not be asked at all.
+#[cfg(unix)]
 fn proc_starts_of(pid: u32) -> Vec<String> {
     [Some("UTC"), None]
         .into_iter()
@@ -195,6 +224,7 @@ fn proc_starts_of(pid: u32) -> Vec<String> {
 
 /// `ps` under `TZ=UTC`, which is the clock the registry record keeps. Public
 /// so a test can name the process it runs in the way Claude Code would.
+#[cfg(unix)]
 pub fn utc_start_of(pid: u32) -> Option<String> {
     let output = std::process::Command::new("ps")
         .args(["-o", "lstart=", "-p", &pid.to_string()])

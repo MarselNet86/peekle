@@ -9,7 +9,9 @@
 //!
 //! Nothing here logs, formats or returns the token. Rule 11.
 
+#[cfg(unix)]
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
@@ -44,6 +46,12 @@ pub enum InboxError {
     WrongPeer { expected: u32, found: u32 },
     #[error("the inbox did not take the message: {0}")]
     Write(String),
+    /// This platform has no inbox transport Peekle knows. Windows: Claude
+    /// Code cannot open a unix socket there, and what it opens instead has
+    /// not been captured, so nothing is faked. The ladder of 6.5 goes on to
+    /// `--resume`. tech.md 6.27 and R-21.
+    #[error("no inbox transport on this platform")]
+    Unsupported,
 }
 
 /// The name of the key file for `pid`'s inbox at `inbox`: the pid, the
@@ -85,6 +93,7 @@ pub fn frames(token: &str, session_id: &str, text: &str, msg_id: &str) -> [Strin
 /// `~/.claude/sessions`. The connected end is checked to be `live.pid`
 /// before anything is written: a socket path outlives the process that
 /// bound it, and the next process to bind there is not the chat.
+#[cfg(unix)]
 pub fn send(sessions_root: &Path, live: &LiveSession, text: &str) -> Result<(), InboxError> {
     let Some(inbox) = live.inbox.as_deref() else {
         return Err(InboxError::NoInbox);
@@ -134,6 +143,12 @@ pub fn send(sessions_root: &Path, live: &LiveSession, text: &str) -> Result<(), 
     Ok(())
 }
 
+/// Windows: no unix socket, no known transport. tech.md 6.27 and R-21.
+#[cfg(not(unix))]
+pub fn send(_sessions_root: &Path, _live: &LiveSession, _text: &str) -> Result<(), InboxError> {
+    Err(InboxError::Unsupported)
+}
+
 /// The pid on the other end of a connected unix socket, where the platform
 /// tells. macOS does, through `LOCAL_PEERPID`; elsewhere the check is skipped
 /// rather than faked.
@@ -160,7 +175,7 @@ fn peer_pid(stream: &UnixStream) -> Option<u32> {
     u32::try_from(pid).ok()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn peer_pid(_stream: &UnixStream) -> Option<u32> {
     None
 }

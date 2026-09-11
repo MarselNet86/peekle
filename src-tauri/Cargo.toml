@@ -27,7 +27,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2.10", features = ["macos-private-api", "protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
 peekle-core = { version = "0.1.0", path = "../crates/peekle-core" }
 thiserror = "2.0.20"
 peekle-server = { version = "0.1.0", path = "../crates/peekle-server" }
@@ -36,13 +35,28 @@ axum = "0.8.9"
 tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-block2 = "0.6.2"
-objc2-app-kit = "0.3.2"
-objc2-foundation = { version = "0.3.2", features = ["NSFileManager", "NSURL", "NSError", "NSString"] }
 tauri-plugin-global-shortcut = "2.3.2"
 peekle-hotkey = { version = "0.1.0", path = "../crates/peekle-hotkey" }
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-dialog = "2.7.3"
+
+# macOS only: the panel and everything AppKit. tech.md 6.27.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
+block2 = "0.6.2"
+objc2-app-kit = "0.3.2"
+objc2-foundation = { version = "0.3.2", features = ["NSFileManager", "NSURL", "NSError", "NSString"] }
+
+# Windows and Linux: the system trash, the clipboard picture, and PNG to write
+# it as a file. tech.md 6.27.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+trash = "5"
+arboard = { version = "3", default-features = false }
+png = "0.17"
+
+# Windows alone: the clipboard change counter and a process query. tech.md 6.27.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Ole"] }
 
 [lints]
 workspace = true

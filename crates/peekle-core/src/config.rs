@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,7 @@ pub const CONFIG_FILE: &str = "config.toml";
 /// without parsing the config.
 pub const PORT_FILE: &str = ".peekle/port";
 
+#[cfg(unix)]
 const OWNER_ONLY: u32 = 0o600;
 const MAX_FEED_VISIBLE_ROWS: u8 = 6;
 const MIN_SHOT_POLL_MS: u64 = 100;
@@ -251,13 +253,16 @@ impl Config {
     }
 
     /// Writes the config with owner-only permissions. The token lives here, so
-    /// the mode is part of the contract, not hygiene.
+    /// the mode is part of the contract, not hygiene. On Windows there is no
+    /// mode to set: the file lives under the user's profile, whose ACL already
+    /// admits that user alone, and that is the same promise. tech.md 6.27.
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let text = toml::to_string_pretty(self)?;
         fs::write(path, text)?;
+        #[cfg(unix)]
         fs::set_permissions(path, fs::Permissions::from_mode(OWNER_ONLY))?;
         Ok(())
     }
@@ -431,6 +436,7 @@ mod tests {
         assert_ne!(token, generate_token());
     }
 
+    #[cfg(unix)]
     #[test]
     fn saved_config_is_owner_only() {
         let dir = std::env::temp_dir().join(format!("peekle-cfg-{}", Ulid::generate()));
