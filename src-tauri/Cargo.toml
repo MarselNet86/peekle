@@ -51,7 +51,7 @@ objc2-foundation = { version = "0.3.2", features = ["NSFileManager", "NSURL", "N
 # it as a file. tech.md 6.27.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 trash = "5"
-arboard = { version = "3", default-features = false }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
 png = "0.17"
 
 # Windows alone: the clipboard change counter and a process query. tech.md 6.27.
