@@ -447,7 +447,10 @@ struct Owned {
     /// every other session wait on it too, including one whose turn somebody
     /// is trying to interrupt. tech.md 6.5.
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// The killer rather than the child: the child itself is waited on by a
+    /// thread of its own, and a `wait` holding this map would be a session
+    /// nobody else could reach. tech.md 6.5 and 6.27.
+    killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
     /// Held so the pty is not closed while the reader thread drains it.
     _master: Box<dyn portable_pty::MasterPty + Send>,
 }
@@ -545,10 +548,11 @@ impl PtyHost {
             command.env_remove(key);
         }
 
-        let child = pair
+        let mut child = pair
             .slave
             .spawn_command(command)
             .map_err(|err| PtyError::Pty(err.to_string()))?;
+        let killer = child.clone_killer();
         // The slave end is done once the child holds it; keeping it open here
         // would stop us ever seeing EOF on the master.
         drop(pair.slave);
@@ -568,6 +572,17 @@ impl PtyHost {
         // never from the TUI -- this is not feed, it is the one question that
         // stops every hook from ever arriving, so nothing but the screen can
         // report it. tech.md 6.5 and 6.24.
+        // The exit is learned by waiting on the process, not by the reader
+        // reaching EOF. A unix master reports EOF when the slave closes, and
+        // a Windows pseudoconsole does not: it stays open as long as the
+        // handle does, so a session that ended would read as running forever
+        // and the island would wait on an agent that is gone. tech.md 6.27.
+        let id = spec.session_id.clone();
+        std::thread::spawn(move || {
+            let _ = child.wait();
+            on_exit(id);
+        });
+
         let id = spec.session_id.clone();
         std::thread::spawn(move || {
             let mut buffer = [0u8; 8192];
@@ -592,14 +607,13 @@ impl PtyHost {
                     trim_scan_window(&mut tail);
                 }
             }
-            on_exit(id);
         });
 
         self.lock().insert(
             spec.session_id.clone(),
             Owned {
                 writer: Arc::new(Mutex::new(writer)),
-                child,
+                killer,
                 _master: pair.master,
             },
         );
@@ -672,7 +686,7 @@ impl PtyHost {
 
     pub fn end(&self, session_id: &str) {
         if let Some(mut owned) = self.lock().remove(session_id) {
-            let _ = owned.child.kill();
+            let _ = owned.killer.kill();
         }
     }
 
