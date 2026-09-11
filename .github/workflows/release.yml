@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
 
+# Every job renames its bundle to a name that carries no version, so the
+# README can link to `releases/latest/download/<name>` once and never again.
 jobs:
   dmg:
     name: ad-hoc signed dmg
@@ -42,10 +44,12 @@ jobs:
           codesign --force --deep --sign - "$APP"
           codesign --verify --verbose "$APP"
 
-      - name: Report the artifact
+      - name: Name the artifact
         id: artifact
         run: |
-          DMG=$(find target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -1)
+          SRC=$(find target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -1)
+          DMG="dist/Peekle-mac-universal.dmg"
+          mkdir -p dist && cp "$SRC" "$DMG"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           shasum -a 256 "$DMG"
 
@@ -60,3 +64,101 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.artifact.outputs.dmg }}
+
+  windows:
+    name: windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-workspaces: .
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Both Windows bundles: the NSIS setup is what a person downloads, the
+      # msi is what an admin deploys. tech.md 6.27.
+      - name: Build installers
+        run: pnpm tauri build
+
+      # Unsigned: there is no code-signing certificate, so SmartScreen shows
+      # "unknown publisher" and the person clicks More info, Run anyway.
+      - name: Name the artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "$(find target/release/bundle/nsis -name '*-setup.exe' | head -1)" dist/Peekle-win-x64-setup.exe
+          cp "$(find target/release/bundle/msi -name '*.msi' | head -1)" dist/Peekle-win-x64.msi
+          sha256sum dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peekle-windows
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+
+  linux:
+    name: linux installers
+    # 22.04 on purpose: a binary links the glibc of the machine that built it,
+    # and one built on 24.04 refuses to start on a distro that is one release
+    # behind. The oldest runner GitHub offers reaches the most machines.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install webkit2gtk and friends
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-workspaces: .
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build installers
+        run: pnpm tauri build
+
+      - name: Name the artifacts
+        run: |
+          mkdir -p dist
+          cp "$(find target/release/bundle/appimage -name '*.AppImage' | head -1)" dist/Peekle-linux-x86_64.AppImage
+          cp "$(find target/release/bundle/deb -name '*.deb' | head -1)" dist/Peekle-linux-amd64.deb
+          chmod +x dist/Peekle-linux-x86_64.AppImage
+          sha256sum dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peekle-linux
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
