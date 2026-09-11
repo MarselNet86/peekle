@@ -732,13 +732,19 @@
     {:else if island.view === 'Pill' && shots.offer}
       <ShotPrompt project={shots.offer.project} left={shots.left} secs={shots.secs} />
     {:else if island.view === 'Pill' && island.toast}
-      <Toast
-        text={island.toast.text}
-        detail={island.toast.detail}
-        tookMs={island.toast.took_ms}
-        tone={island.toast.tone}
-        badge={island.toast.badge}
-      />
+      <!-- Keyed on the notice itself, so a second one restarts the hairline
+           under it rather than inheriting however much the first had left.
+           Every notice arrives as its own object. tech.md 6.2. -->
+      {#key island.toast}
+        <Toast
+          text={island.toast.text}
+          detail={island.toast.detail}
+          tookMs={island.toast.took_ms}
+          tone={island.toast.tone}
+          badge={island.toast.badge}
+          ttlMs={island.toast.ttl_ms}
+        />
+      {/key}
     {:else if listing}
       <div class="feed">
         {#if usage.gateSessions}

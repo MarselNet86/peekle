@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9               |
 | v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9              |
 | v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9   |
 | v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13  |
@@ -51,6 +52,27 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.19 — The notice is the panel's own band
+
+2026-09-11
+
+The pill that says a turn finished was already the permission panel by
+meaning: a band with a sign at its head, two lines of words in the middle and
+one thing at its tail. It was not drawn like one. An eight pixel dot stood
+where the sign goes, nothing stood at the tail, and three quarters of a 420
+pixel band was empty black beside a sentence.
+
+The head of the band is now a round `//` badge, the way a notification on this
+system wears the icon of whatever raised it. The tone colours the strokes
+rather than the disc, so the head is the same object every time. The turn's
+elapsed time moved to the tail as a chip of its own -- it is the one number a
+finished turn has, and it used to be the last thing on a line that was already
+being clipped. Underneath, a hairline leaks for as long as the pill stands,
+the same one the panel uses for its twenty seconds.
+
+A finished turn: [toast-turn.png](shots/toast-turn.png)
+The switch: [toast-switch.png](shots/toast-switch.png)
 
 ## v80.18 — An answer is drawn the way it was written
 
