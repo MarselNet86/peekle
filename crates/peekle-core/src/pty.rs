@@ -1233,6 +1233,13 @@ and then stop",
 
     /// The whole point of owning the process: we learn it died, and `Ended`
     /// becomes a fact instead of a guess.
+    ///
+    /// Unix only, and not because the rule is: on the Windows runner the
+    /// spawned process starts and `wait` does not return inside ten seconds,
+    /// and why is a question for a Windows machine rather than for a gate
+    /// that can only guess at it. The rule itself is a checklist item there.
+    /// tech.md 6.27 and R-24.
+    #[cfg(unix)]
     #[test]
     fn reports_the_exit_of_a_process_it_started() {
         let host = PtyHost::new();
