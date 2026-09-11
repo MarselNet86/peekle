@@ -123,8 +123,16 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # The app's test binary links the WebView2 loader, and cargo puts that
+      # DLL beside the app rather than beside the test, so the test exits
+      # 0xc0000139 before a single test runs. Build the tests, put the loader
+      # where a binary looks for it first -- its own directory -- then run.
       - name: cargo test
-        run: cargo test --workspace
+        shell: bash
+        run: |
+          cargo test --workspace --no-run
+          find target/debug -maxdepth 1 -name 'WebView2Loader.dll' -exec cp {} target/debug/deps/ \;
+          cargo test --workspace
       - name: tauri build
         run: pnpm tauri build --debug
 
