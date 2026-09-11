@@ -105,7 +105,14 @@
     top: calc(100% + 2px);
     right: 0;
     z-index: 3;
-    max-width: 240px;
+    /* Sized by its own words, not by the button it hangs from. The box an
+       absolutely positioned child is measured against is the button -- 28
+       pixels -- so shrink-to-fit wraps it into a column one letter wide, and
+       `nowrap` instead made the words run off the ground they were drawn on.
+       `max-content` asks for the width of the line; the ceiling then wraps it
+       rather than spilling it. */
+    width: max-content;
+    max-width: 300px;
     padding: 5px 8px;
     border: 1px solid var(--hairline);
     border-radius: 8px;
@@ -117,7 +124,8 @@
     color: var(--text);
     font-size: 11px;
     line-height: 1.3;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     pointer-events: none;
   }
 </style>

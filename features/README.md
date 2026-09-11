@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                    |
 | v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5       |
 | v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9              |
 | v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)                             | 6.13, 9              |
@@ -46,6 +47,21 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.13 — The hint fits its own ground
+
+2026-09-11
+
+The line under the bug button ran off the dark box it was drawn on. A layer
+positioned against its button is measured against that button — 28 pixels — so
+shrink-to-fit collapsed it into a column one letter wide, and the `nowrap` that
+prevented that let the words spill past their own ground instead.
+
+Its width now comes from the line itself, and the ceiling wraps it rather than
+letting it out. The test measures what the eye saw: the scroll width of the
+hint never exceeds the width it is drawn at.
+
+![The bug button and its line](shots/bug-button.png)
 
 ## v80.12 — A chat in a folder Claude Code has not been trusted in
 
