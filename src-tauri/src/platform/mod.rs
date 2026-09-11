@@ -147,7 +147,11 @@ pub fn focusable_for(view: &IslandView) -> bool {
 /// change counter of their own: its size and a hash of its first and last
 /// bytes. Two different screenshots of the same size that agree on both ends
 /// are the one collision this accepts. tech.md 6.27.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+///
+/// Linux is the only caller: macOS and Windows each have a clipboard counter
+/// of their own. The rule lives here anyway, with the tests, because it is a
+/// rule and not a platform call.
+#[cfg_attr(any(target_os = "macos", target_os = "windows"), allow(dead_code))]
 pub fn image_signature(width: usize, height: usize, bytes: &[u8]) -> u64 {
     use std::hash::{Hash, Hasher};
 

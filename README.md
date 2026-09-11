@@ -16,10 +16,10 @@ this file only explains how to run what exists today.
 
 ## Installation
 
-| Platform          | Download                                                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS (universal) | [Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg)                                                              |
-| Windows           | [Peekle-win-x64-setup.exe](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-win-x64-setup.exe)                                                              |
+| Platform          | Download                                                                                                                                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS (universal) | [Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg)                                                                                                                           |
+| Windows           | [Peekle-win-x64-setup.exe](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-win-x64-setup.exe)                                                                                                                           |
 | Linux             | [Peekle-linux-x86_64.AppImage](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-linux-x86_64.AppImage) · [Peekle-linux-amd64.deb](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-linux-amd64.deb) |
 
 Every link points at the newest release, and the names carry no version, so a
@@ -49,18 +49,18 @@ checklist of tech.md 15.
 
 Stage 1 is in and most of stage 2 with it.
 
-| Surface              | State                                                          |
-| -------------------- | -------------------------------------------------------------- |
-| Island               | Working, and it reaches another app's full screen space        |
-| Feed and sessions    | Working, fed by the hooks                                      |
-| Stop and permission  | Working, answers reach the agent without touching the terminal |
-| Hook server          | Every endpoint of tech.md 6.2 answers                          |
-| Hotkey               | Working, ⌥⇧Q toggles the bypass                                |
-| CLI                  | init, uninstall, doctor, status. `off` is not built            |
-| Usage bars           | Working from the account, dashes with a reason when it cannot  |
-| Screenshots          | ⌃⇧⌘4 offers to attach the shot to a session Peekle started     |
-| Packaging            | Installers for all three platforms, built by CI on a tag        |
-| First run            | Not started, S11                                                |
+| Surface             | State                                                          |
+| ------------------- | -------------------------------------------------------------- |
+| Island              | Working, and it reaches another app's full screen space        |
+| Feed and sessions   | Working, fed by the hooks                                      |
+| Stop and permission | Working, answers reach the agent without touching the terminal |
+| Hook server         | Every endpoint of tech.md 6.2 answers                          |
+| Hotkey              | Working, ⌥⇧Q toggles the bypass                                |
+| CLI                 | init, uninstall, doctor, status. `off` is not built            |
+| Usage bars          | Working from the account, dashes with a reason when it cannot  |
+| Screenshots         | ⌃⇧⌘4 offers to attach the shot to a session Peekle started     |
+| Packaging           | Installers for all three platforms, built by CI on a tag       |
+| First run           | Not started, S11                                               |
 
 ## Requirements
 
