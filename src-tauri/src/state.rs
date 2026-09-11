@@ -852,6 +852,16 @@ impl AppState {
     /// Ownership and not recency alone: an observed session has no input field
     /// by 6.5, so a screenshot has nowhere to go there, and an offer that
     /// cannot be honoured is worse than silence. tech.md 6.13.
+    /// One card by id, or `None` when the island does not know it. Used by
+    /// deletion, which needs the folder the chat runs in to find its
+    /// transcript. tech.md 6.26.
+    pub fn card(&self, session_id: &str) -> Option<SessionCard> {
+        self.lock(&self.sessions)
+            .cards()
+            .into_iter()
+            .find(|card| card.session.session_id == session_id)
+    }
+
     pub fn newest_owned_session(&self) -> Option<SessionCard> {
         let sessions = self.lock(&self.sessions);
         sessions

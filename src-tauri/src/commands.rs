@@ -14,6 +14,7 @@ use crate::events;
 use crate::notify::Notifier;
 use crate::panel;
 use crate::state::{AppState, HeldKind, HeldSettings};
+use crate::trash;
 use crate::windows;
 
 #[tauri::command]
@@ -1777,19 +1778,61 @@ pub fn rename_session(
     }
 }
 
-/// Puts a session away for good.
+/// Deletes a chat: the process, the transcript and the row.
 ///
-/// Hides, never deletes: the transcript belongs to Claude Code, Peekle only
-/// reads it, and the session stays where the user can still find it there.
-/// tech.md 11.
+/// It used to hide the row and do nothing else, and every consequence of that
+/// was invisible on purpose: the chat went on being offered by
+/// `claude --resume`, and a chat of ours went on running with no row for it,
+/// its hooks dropped by the registry, nothing left to stop it with. So the
+/// three go together now, in this order -- the process first, so that nothing
+/// is still writing to the file that goes next. tech.md 6.26.
 #[tauri::command]
-pub fn hide_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String) {
-    let cards = state.hide_session(&session_id);
-    tracing::debug!(session_id, "session hidden from the island");
+pub fn delete_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+) -> Result<(), String> {
+    let card = state.card(&session_id);
 
+    // Ours to end. Somebody else's process is not ours to kill and we have no
+    // handle on it either; the row goes, the process is theirs.
+    if state.owns_session(&session_id) {
+        state.pty().end(&session_id);
+        state.disown_session(&session_id);
+        tracing::info!(session_id, "ended the process of a chat being deleted");
+    }
+
+    if let Some(path) = transcript_of(card.as_ref()) {
+        if path.exists() {
+            trash::to_trash(&path)?;
+            tracing::info!(session_id, "the transcript went to the Trash");
+        } else {
+            tracing::debug!(session_id, "no transcript on disk to delete");
+        }
+    }
+
+    // The id stays remembered: a straggling hook from a process somebody else
+    // is running would otherwise raise the row again a second later.
+    let cards = state.hide_session(&session_id);
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }
+    Ok(())
+}
+
+/// Where Claude Code keeps this chat, or `None` when there is no telling.
+///
+/// Derived from the cwd the way `transcripts::scan` derives it, rather than
+/// taken from the hook payload: a card can come from the backfill, which never
+/// saw a payload, and the two answer the same path. tech.md 6.11.
+fn transcript_of(card: Option<&peekle_core::types::SessionCard>) -> Option<std::path::PathBuf> {
+    let card = card?;
+    let root = peekle_core::transcripts::default_root()?;
+    Some(peekle_core::transcripts::transcript_path(
+        &root,
+        &card.session.cwd,
+        &card.session.session_id,
+    ))
 }
 
 /// The webview reports the size of the shape it drew. Rust never resizes the
@@ -1982,6 +2025,42 @@ mod tests {
     use super::*;
     use peekle_core::config::Config;
     use peekle_usage::FakeUsage;
+
+    /// Deletion has to find the file Claude Code writes, and it finds it the
+    /// way the backfill does -- from the folder the chat runs in -- because a
+    /// card can arrive from the backfill, which never saw a hook payload.
+    /// tech.md 6.26 and 6.11.
+    #[test]
+    fn a_chat_is_deleted_from_the_path_its_folder_gives() {
+        let card = peekle_core::types::SessionCard {
+            session: peekle_core::types::SessionRef {
+                session_id: "01JABC".into(),
+                cwd: "/Users/dev/peekle".into(),
+                project: "peekle".into(),
+                pid: None,
+                tty: None,
+            },
+            title: String::new(),
+            status: peekle_core::types::SessionStatus::Idle,
+            origin: peekle_core::types::SessionOrigin::Owned,
+            entries: Vec::new(),
+            agent: None,
+            mode: None,
+            thinking: None,
+            compacting: None,
+            stopping: None,
+            asking_trust: None,
+            updated_at: 0,
+        };
+
+        let path = transcript_of(Some(&card)).expect("a home to look under");
+        assert!(
+            path.ends_with("-Users-dev-peekle/01JABC.jsonl"),
+            "{}",
+            path.display()
+        );
+        assert_eq!(transcript_of(None), None, "a chat nobody knows has no file");
+    }
 
     fn fresh() -> Arc<AppState> {
         Arc::new(AppState::new(

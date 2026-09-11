@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9         |
 | v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9               |
 | v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9              |
 | v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9   |
@@ -52,6 +53,31 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.20 — The bin deletes the chat
+
+2026-09-11
+
+The bin in the session list hid the row and did nothing else. Everything that
+followed from that was invisible by design: the chat went on being offered by
+`claude --resume` under its own name -- of 23 chats hidden this way, 21 still
+had their transcript on disk -- and a chat Peekle was running went on running
+with no row for it, its hooks dropped by the registry, nothing left on screen
+to stop it with.
+
+The bin now deletes, in this order: it ends the process if the chat is ours,
+puts the transcript in the macOS Trash, and drops the row for good. The Trash
+and not `unlink`, because a transcript is a person's own conversation and
+"this chat is gone" has to be a decision they can take back in Finder, the way
+they take back every other deletion on this machine. A process somebody else
+runs is not ended: Peekle has no handle on it and no right to it.
+
+It asks once first. The button turns red and the row says what is about to
+happen; a second press does it, and four seconds of being left alone put the
+question away. No dialog: the island has one shape, and a modal window for one
+row would be a second one.
+
+[delete-asking.png](shots/delete-asking.png)
 
 ## v80.19 — The notice is the panel's own band
 

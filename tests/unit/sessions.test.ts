@@ -108,11 +108,41 @@ describe('a row as a picker row', () => {
     expect(onrename).toHaveBeenCalledOnce();
   });
 
-  it('puts the session away on the bin', async () => {
-    const onhide = vi.fn();
-    render(SessionRow, { props: { card: card('Idle'), onhide } });
+  /// The bin ends a live process and takes a transcript with it, so it asks
+  /// first -- with itself, because the island has one shape and a dialog for
+  /// one row would be a second one. tech.md 6.26.
+  it('asks before it deletes, and deletes on the second press', async () => {
+    const ondelete = vi.fn();
+    render(SessionRow, { props: { card: card('Idle'), ondelete } });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove this session' }));
-    expect(onhide).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this chat' }));
+    expect(ondelete).not.toHaveBeenCalled();
+    // The row says what is about to happen, in place of what it usually says.
+    expect(screen.getByText('Delete this chat and its transcript?')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this chat for good' }));
+    expect(ondelete).toHaveBeenCalledOnce();
+  });
+
+  /// A hand that went somewhere else has answered the question.
+  it('forgets the question when the pointer leaves the row', async () => {
+    const ondelete = vi.fn();
+    const { container } = render(SessionRow, { props: { card: card('Idle'), ondelete } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this chat' }));
+    await userEvent.unhover(container.querySelector('.row') as HTMLElement);
+
+    expect(screen.queryByText('Delete this chat and its transcript?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete this chat' })).toBeInTheDocument();
+    expect(ondelete).not.toHaveBeenCalled();
+  });
+
+  /// The one thing a delete may never do is look like it happened.
+  it('keeps the row and says why when the deletion did not happen', () => {
+    render(SessionRow, {
+      props: { card: card('Idle'), fault: 'That file cannot be moved to the Trash' },
+    });
+
+    expect(screen.getByText('That file cannot be moved to the Trash')).toBeInTheDocument();
   });
 });

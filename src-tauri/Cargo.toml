@@ -38,7 +38,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 block2 = "0.6.2"
 objc2-app-kit = "0.3.2"
-objc2-foundation = "0.3.2"
+objc2-foundation = { version = "0.3.2", features = ["NSFileManager", "NSURL", "NSError", "NSString"] }
 tauri-plugin-global-shortcut = "2.3.2"
 peekle-hotkey = { version = "0.1.0", path = "../crates/peekle-hotkey" }
 tauri-plugin-notification = "2.4.0"
