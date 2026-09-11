@@ -1222,15 +1222,6 @@ and then stop",
         assert!(matches!(result, Err(PtyError::NoCwd)));
     }
 
-    /// A program that is on every machine of its platform and ends by
-    /// itself: the test wants an exit, not output.
-    fn a_program_that_exits() -> &'static Path {
-        #[cfg(unix)]
-        return Path::new("/bin/echo");
-        #[cfg(windows)]
-        return Path::new("C:\\Windows\\System32\\whoami.exe");
-    }
-
     /// The whole point of owning the process: we learn it died, and `Ended`
     /// becomes a fact instead of a guess.
     ///
@@ -1258,7 +1249,9 @@ and then stop",
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(
-            a_program_that_exits(),
+            // A program every unix carries, and one that ends by itself:
+            // the test wants an exit, not output.
+            Path::new("/bin/echo"),
             &spec,
             move |id| {
                 let _ = tx.send(id);
