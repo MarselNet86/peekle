@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used)]
+//! The transport under test is a unix socket, so the whole file is unix-only.
+//! What Windows does instead is `InboxError::Unsupported` and the ladder of
+//! 6.5. tech.md 6.27.
+#![cfg(unix)]
 //! S21 acceptance: the two lines that put a reply into a live process, sent
 //! to an inbox stood up in this process, and every way that can fail short
 //! of the words arriving. tech.md 6.5 and R-17.
