@@ -156,6 +156,7 @@ fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
     windows::toast(
         app,
         ToastRequest {
+            session: None,
             text: if enabled {
                 "Peekle is ON".to_string()
             } else {

@@ -741,7 +741,12 @@
         onopen={() => openSession(permission.session.session_id)}
       />
     {:else if island.view === 'Pill' && shots.offer}
-      <ShotPrompt project={shots.offer.project} left={shots.left} secs={shots.secs} />
+      <ShotPrompt
+        project={shots.offer.project}
+        left={shots.left}
+        secs={shots.secs}
+        onopen={() => shots.offer && openSession(shots.offer.session_id)}
+      />
     {:else if island.view === 'Pill' && island.toast}
       <!-- Keyed on the notice itself, so a second one restarts the hairline
            under it rather than inheriting however much the first had left.
@@ -754,6 +759,7 @@
           tone={island.toast.tone}
           badge={island.toast.badge}
           ttlMs={island.toast.ttl_ms}
+          onopen={island.toast.session ? () => openSession(island.toast!.session!) : null}
         />
       {/key}
     {:else if listing}

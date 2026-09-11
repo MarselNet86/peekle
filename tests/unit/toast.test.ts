@@ -6,7 +6,8 @@
  */
 
 import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import Toast from '$lib/ui/Toast.svelte';
 
@@ -109,5 +110,27 @@ describe('the band it is drawn as', () => {
       expect(container.querySelector('.leak'), `${ttlMs}`).toBeNull();
       unmount();
     }
+  });
+});
+
+describe('the way into the chat it is about', () => {
+  /// A notice names a place, and getting there has to cost one press rather
+  /// than a walk through the list. The permission panel's body has always
+  /// worked this way. tech.md 6.2 and 6.7.
+  it('opens the chat when it is pressed', async () => {
+    const onopen = vi.fn();
+    render(Toast, { props: { text: 'work', detail: 'Hi', onopen } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open work' }));
+    expect(onopen).toHaveBeenCalledOnce();
+  });
+
+  /// A pill about the product itself leads nowhere, and a control that leads
+  /// nowhere lies about being one.
+  it('is not a control at all when there is nowhere to go', () => {
+    const { container } = render(Toast, { props: { text: 'Peekle is ON', tone: 'On' } });
+
+    expect(container.querySelector('[role="button"]')).toBeNull();
+    expect(container.querySelector('.band')).not.toHaveClass('pressable');
   });
 });

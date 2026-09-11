@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9    |
 | v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9         |
 | v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9               |
 | v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9              |
@@ -53,6 +54,34 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.21 — The pill is a way in
+
+2026-09-11
+
+Three fixes to one thing.
+
+⌃⇧⌘4 offered the screenshot only to a chat Peekle had started itself. Someone
+who keeps Claude Code in a terminal owns no such chat, so the offer never
+appeared for them -- the log said so on every screenshot: "no session of ours
+to take it". The rule was right exactly as long as an observed chat had no
+input field, which stopped being true in v66. The shot now goes to the
+freshest chat that has not ended, whoever started it.
+
+The offer pill is laid out as the band the other pills are: a camera in a disc
+at its head, where the shot is going on the first line, what to press on the
+second, and the up arrow at its tail drawn as a key the size of a key. Both at
+once on purpose -- a key is seen without being read, a line is read by whoever
+is already reading.
+
+And a pill is now a way into the chat it is about. Pressing the notice of a
+finished turn, of a question, or of a waiting screenshot opens that chat, the
+way pressing the permission panel always has. The pill takes the mouse only
+over the rectangle it drew, so a click beside it still goes through to
+whatever is underneath.
+
+The offer: [shot-offer.png](shots/shot-offer.png)
+A finished turn: [toast-turn.png](shots/toast-turn.png)
 
 ## v80.20 — The bin deletes the chat
 

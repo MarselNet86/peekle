@@ -145,10 +145,10 @@ fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
         return;
     }
 
-    let Some(card) = state.newest_owned_session() else {
-        // A screenshot with nowhere to go. An observed session has no input
-        // field, so there is nothing to attach it to. tech.md 6.5 and 6.13.
-        tracing::debug!("a screenshot arrived with no session of ours to take it");
+    let Some(card) = state.newest_live_session() else {
+        // A screenshot with nowhere to go: no chat at all, or every one of
+        // them ended. tech.md 6.13.
+        tracing::debug!("a screenshot arrived with no chat to take it");
         return;
     };
 
@@ -301,6 +301,7 @@ fn say(app: &AppHandle, text: &str) {
     windows::toast(
         app,
         ToastRequest {
+            session: None,
             text: text.to_string(),
             detail: None,
             took_ms: None,

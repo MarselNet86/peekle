@@ -623,6 +623,12 @@ pub struct ToastRequest {
     pub tone: ToastTone,
     pub ttl_ms: u32,
     pub badge: Option<u32>,
+    /// The chat this is about, when it is about one. Pressing the pill opens
+    /// it: a notice names a place, and getting there has to cost one press
+    /// rather than a walk through the list. `None` for a pill that is about
+    /// the product itself -- a switch flipping, a screenshot that could not be
+    /// saved -- and such a pill is not pressable at all. tech.md 6.2 and 6.7.
+    pub session: Option<String>,
 }
 
 /// A screenshot sitting on the pasteboard, offered to a session.

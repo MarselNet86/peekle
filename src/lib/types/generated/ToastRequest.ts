@@ -13,4 +13,12 @@ detail: string | null,
  * one. The answer to "how long was I away", and the only number a
  * finished turn has. tech.md 6.2.
  */
-took_ms: number | null, tone: ToastTone, ttl_ms: number, badge: number | null, };
+took_ms: number | null, tone: ToastTone, ttl_ms: number, badge: number | null, 
+/**
+ * The chat this is about, when it is about one. Pressing the pill opens
+ * it: a notice names a place, and getting there has to cost one press
+ * rather than a walk through the list. `None` for a pill that is about
+ * the product itself -- a switch flipping, a screenshot that could not be
+ * saved -- and such a pill is not pressable at all. tech.md 6.2 and 6.7.
+ */
+session: string | null, };
