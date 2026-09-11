@@ -438,6 +438,73 @@ test.describe('the island route', () => {
     await expect(page.locator('.head .project')).toContainText('peekle');
   });
 
+  /// A page of one's own words pushes the answer to them off the island, and
+  /// it is the answer the person is waiting for. So a long message of one's
+  /// own folds: six lines, faded rather than cut, and the whole of it one
+  /// press away. Layout decides whether it folds at all, so it is read here.
+  /// tech.md 6.12.
+  test('a long message of your own is folded, and opens on a press', async ({ page }) => {
+    const long = Array.from(
+      { length: 12 },
+      (_, line) => `строка ${line + 1} этой длинной реплики`,
+    ).join('\n');
+    await stub(page, [observed([say('u1', long, 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    const body = page.locator(".line[data-kind='User'] .body");
+    await expect(body).toHaveClass(/folded/);
+    // Folded means some of it is out of view, and the fade is what says so.
+    const folded = await body.evaluate((node) => ({
+      hidden: node.scrollHeight > node.clientHeight + 4,
+      faded: getComputedStyle(node).webkitMaskImage !== 'none',
+    }));
+    expect(folded).toEqual({ hidden: true, faded: true });
+
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await expect(body).not.toHaveClass(/folded/);
+    const whole = await body.evaluate((node) => node.scrollHeight <= node.clientHeight + 4);
+    expect(whole).toBe(true);
+
+    // And it folds back, so one long message cannot own the window.
+    await page.getByRole('button', { name: 'Show less' }).click();
+    await expect(body).toHaveClass(/folded/);
+  });
+
+  /// Short of that, nothing is folded and nothing is offered: a control that
+  /// does nothing is worse than no control.
+  test('a message that fits carries no control', async ({ page }) => {
+    await stub(page, [observed([say('u1', 'go on', 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    await expect(page.getByText('go on')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  });
+
+  /// An answer is never folded, however long: reading it is what the window
+  /// is for. tech.md 6.12.
+  test('an answer is never folded', async ({ page }) => {
+    const long = Array.from({ length: 14 }, (_, line) => `строка ${line + 1} длинного ответа`).join(
+      '\n',
+    );
+    await stub(page, [
+      observed([
+        {
+          id: 'a1',
+          kind: 'Assistant',
+          text: long,
+          tool: null,
+          detail: null,
+          state: 'Ok',
+          at: 1_789_000_000_000,
+        },
+      ]),
+    ]);
+    await page.goto(ROUTE);
+
+    await expect(page.locator(".line[data-kind='Assistant'] .body")).not.toHaveClass(/folded/);
+    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  });
+
   /// The CLI asks whether a folder is trusted on its own screen, before it
   /// runs anything -- no hook, no transcript, nothing. The island puts the
   /// question where the person is, and answers it only as they answer it.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { blocks } from '$lib/logic/markdown';
+  import { FOLD_AT } from '$lib/logic/feed';
   import { shotLines, shotName } from '$lib/logic/shots';
   import ShotBlock from './ShotBlock.svelte';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
@@ -41,6 +42,25 @@
   // Parsed into segments and rendered as elements. Never `{@html}`: this text
   // comes out of an agent turn into a window over the whole screen.
   const parts = $derived(spoken ? blocks(said) : []);
+
+  // Long messages of one's own are folded. What the person wrote they have
+  // already read, and a page of it pushes the answer they are waiting for off
+  // the island; an answer is never folded, because reading it is what the
+  // island is for. tech.md 6.12.
+  const foldable = $derived(entry.kind === 'User');
+  let body = $state<HTMLElement | null>(null);
+  let folds = $state(false);
+  let unfolded = $state(false);
+  $effect(() => {
+    // Read once the words are on screen, and re-read when they change: a fold
+    // is a fact about what was drawn, not a guess from the length of a string.
+    void said;
+    if (!body || !foldable) {
+      folds = false;
+      return;
+    }
+    folds = body.scrollHeight > FOLD_AT + 4;
+  });
 </script>
 
 <!-- What a person said and what the agent answered are messages: they wrap,
@@ -54,35 +74,44 @@
 {:else if spoken}
   <div class="line" data-kind={entry.kind} data-state={entry.state}>
     <div class="bubble">
-      {#if shown.length > 0}
-        <div class="shots">
-          {#each shown as path (path)}
-            <ShotBlock
-              name={shotName(path)}
-              src={shotSrc?.(path)}
-              onopen={() => onopenshot?.(path)}
-              onbroken={() => (broken = [...broken, path])}
-            />
-          {/each}
-        </div>
-      {/if}
-      {#each parts as block, index (index)}
-        {#if block.kind === 'code'}
-          <pre class="code"><code>{block.value}</code></pre>
-        {:else}
-          <p class="prose">
-            {#each block.pieces as piece, at (at)}
-              {#if piece.kind === 'code'}
-                <code class="inline">{piece.value}</code>
-              {:else if piece.kind === 'bold'}
-                <strong>{piece.value}</strong>
-              {:else}
-                {piece.value}
-              {/if}
+      <div class="body" class:folded={folds && !unfolded} style:--fold={FOLD_AT} bind:this={body}>
+        {#if shown.length > 0}
+          <div class="shots">
+            {#each shown as path (path)}
+              <ShotBlock
+                name={shotName(path)}
+                src={shotSrc?.(path)}
+                onopen={() => onopenshot?.(path)}
+                onbroken={() => (broken = [...broken, path])}
+              />
             {/each}
-          </p>
+          </div>
         {/if}
-      {/each}
+        {#each parts as block, index (index)}
+          {#if block.kind === 'code'}
+            <pre class="code"><code>{block.value}</code></pre>
+          {:else}
+            <p class="prose">
+              {#each block.pieces as piece, at (at)}
+                {#if piece.kind === 'code'}
+                  <code class="inline">{piece.value}</code>
+                {:else if piece.kind === 'bold'}
+                  <strong>{piece.value}</strong>
+                {:else}
+                  {piece.value}
+                {/if}
+              {/each}
+            </p>
+          {/if}
+        {/each}
+      </div>
+      <!-- The whole of it is one press away, and the press says which way it
+           goes rather than only that it can be pressed. tech.md 6.12. -->
+      {#if folds}
+        <button class="unfold" type="button" onclick={() => (unfolded = !unfolded)}>
+          {unfolded ? 'Show less' : 'Show more'}
+        </button>
+      {/if}
     </div>
   </div>
 {:else}
@@ -128,6 +157,34 @@
   .line {
     display: flex;
     padding: 3px 2px;
+  }
+
+  /* Folded, it fades out rather than stopping: a message cut on a hard edge
+     reads as one that lost its end, and the fade says there is more. The mask
+     works on any ground, which matters because this bubble is green and the
+     one under it is not. tech.md 6.12. */
+  .body.folded {
+    max-height: calc(var(--fold) * 1px);
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 42px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 42px), transparent);
+  }
+
+  .unfold {
+    display: block;
+    margin-top: 5px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.7;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .unfold:hover {
+    opacity: 1;
   }
 
   .bubble {

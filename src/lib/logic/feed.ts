@@ -3,6 +3,17 @@
 /** tech.md 6.8 caps this at 6 no matter what the config says. */
 export const MAX_VISIBLE_ROWS = 6;
 
+/**
+ * How tall a message of one's own may stand before it is folded, in pixels.
+ *
+ * Six lines at the bubble's own line height. Enough to recognise what was
+ * asked -- which is all a person needs from words they wrote themselves -- and
+ * little enough that a long ask does not push the answer to it off the island.
+ * An answer is never folded: reading it is what this window is for.
+ * tech.md 6.12.
+ */
+export const FOLD_AT = 114;
+
 export interface ScrollState {
   /** Nothing below the fold, so a new message may follow the view down. */
   atBottom: boolean;
