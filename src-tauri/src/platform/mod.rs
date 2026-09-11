@@ -19,8 +19,8 @@ mod macos;
 use macos::active_screen;
 #[cfg(target_os = "macos")]
 pub use macos::{
-    apply_view, convert_all, give_front_back, notch_for, show, take_front, to_trash, watch_pointer,
-    SystemPasteboard,
+    apply_view, convert_all, give_front_back, notch_for, open_url, show, take_front, to_trash,
+    watch_pointer, SystemPasteboard,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -29,8 +29,8 @@ mod desktop;
 use desktop::active_screen;
 #[cfg(not(target_os = "macos"))]
 pub use desktop::{
-    apply_view, convert_all, give_front_back, notch_for, show, take_front, to_trash, watch_pointer,
-    SystemPasteboard,
+    apply_view, convert_all, give_front_back, notch_for, open_url, show, take_front, to_trash,
+    watch_pointer, SystemPasteboard,
 };
 
 pub const ISLAND: &str = "island";

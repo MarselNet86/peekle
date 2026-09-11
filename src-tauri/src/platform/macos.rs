@@ -333,6 +333,15 @@ pub fn to_trash(path: &Path) -> Result<(), String> {
         .map_err(|err| err.localizedDescription().to_string())
 }
 
+/// Hands a URL to the browser the person chose. tech.md 6.16 and 6.22.
+pub fn open_url(url: &str) -> Result<(), String> {
+    std::process::Command::new("/usr/bin/open")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

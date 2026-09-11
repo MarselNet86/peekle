@@ -599,13 +599,10 @@ pub fn open_sign_in_page(state: State<'_, Arc<AppState>>) -> Result<(), String> 
     };
     // The length, never the address: it carries `code_challenge` and `state`.
     tracing::debug!(url_len = url.len(), "opening the authorize page");
-    std::process::Command::new("/usr/bin/open")
-        .arg(&url)
-        .spawn()
-        .map_err(|err| {
-            tracing::warn!(error = %err, "could not open the authorize page");
-            "could not open your browser".to_string()
-        })?;
+    platform::open_url(&url).map_err(|err| {
+        tracing::warn!(error = %err, "could not open the authorize page");
+        "could not open your browser".to_string()
+    })?;
     Ok(())
 }
 
@@ -1990,13 +1987,10 @@ pub const BUG_REPORT_URL: &str = "https://t.me/marselnet";
 #[tauri::command]
 pub fn open_bug_report() -> Result<(), String> {
     tracing::debug!("opening the bug report chat");
-    std::process::Command::new("/usr/bin/open")
-        .arg(BUG_REPORT_URL)
-        .spawn()
-        .map_err(|err| {
-            tracing::warn!(error = %err, "could not open the bug report chat");
-            "could not open Telegram".to_string()
-        })?;
+    platform::open_url(BUG_REPORT_URL).map_err(|err| {
+        tracing::warn!(error = %err, "could not open the bug report chat");
+        "could not open Telegram".to_string()
+    })?;
     Ok(())
 }
 
