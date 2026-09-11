@@ -4,14 +4,25 @@
   let {
     name,
     src = '',
+    kind = 'shot',
     onopen,
     onremove,
-  }: { name: string; src?: string; onopen?: () => void; onremove?: () => void } = $props();
+  }: {
+    name: string;
+    src?: string;
+    /** A file attached from disk has no thumbnail and never will: the asset
+     * scope is the shots cache alone, and widening it to the whole disk for a
+     * forty pixel preview hands the webview every file the user owns. So it
+     * wears a document sign and its own name. tech.md 6.25. */
+    kind?: 'shot' | 'file';
+    onopen?: () => void;
+    onremove?: () => void;
+  } = $props();
 
   // No src outside the app shell, and a cache the user may empty at any
   // moment. Either way the attachment stays visible and stays removable.
   let broken = $state(false);
-  const thumb = $derived(src !== '' && !broken);
+  const thumb = $derived(kind === 'shot' && src !== '' && !broken);
 </script>
 
 <span class="chip" class:thumb>
@@ -27,6 +38,18 @@
     >
       <img {src} alt={name} title={name} onerror={() => (broken = true)} />
     </button>
+  {:else if kind === 'file'}
+    <!-- A page with its corner turned: what a file is, at eleven pixels. -->
+    <svg viewBox="0 0 10 12" width="10" height="12" aria-hidden="true">
+      <path
+        d="M1 1.6a1 1 0 011-1h3.4L9 4.2v6.2a1 1 0 01-1 1H2a1 1 0 01-1-1z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1"
+      />
+      <path d="M5.4 0.8v3.2H8.8" fill="none" stroke="currentColor" stroke-width="1" />
+    </svg>
+    <span class="name" title={name}>{name}</span>
   {:else}
     <svg viewBox="0 0 12 10" width="12" height="10" aria-hidden="true">
       <rect

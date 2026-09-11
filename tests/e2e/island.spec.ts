@@ -76,9 +76,14 @@ function say(id: string, text: string, at: number) {
 /** Everything the route asks for on mount, plus a way to push events at it.
  * Every call the route makes is kept on `window.__calls`, because what a
  * button sends is as much the contract as what it looks like. */
-async function stub(page: Page, cards: Card[], view: unknown = { Session: 's1' }) {
+async function stub(
+  page: Page,
+  cards: Card[],
+  view: unknown = { Session: 's1' },
+  extra: Record<string, unknown> = {},
+) {
   await page.addInitScript(
-    ({ cards, view }: { cards: Card[]; view: unknown }) => {
+    ({ cards, view, extra }: { cards: Card[]; view: unknown; extra: Record<string, unknown> }) => {
       const handlers: Record<string, number> = {};
       const calls: { command: string; args: unknown }[] = [];
       (window as unknown as Record<string, unknown>).__calls = calls;
@@ -110,6 +115,10 @@ async function stub(page: Page, cards: Card[], view: unknown = { Session: 's1' }
         get_models: [],
         get_defaults: null,
         refresh_usage: usage,
+        // What a dialog would have answered with. A test that needs one says
+        // so; everything else gets the cancel, which is an empty list.
+        choose_files: [],
+        ...extra,
       };
 
       // The shape @tauri-apps/api talks to. `transformCallback` hands the
@@ -152,7 +161,7 @@ async function stub(page: Page, cards: Card[], view: unknown = { Session: 's1' }
       (window as unknown as Record<string, unknown>).__view = (next: unknown) =>
         push('peekle://view', next);
     },
-    { cards, view },
+    { cards, view, extra },
   );
 }
 
@@ -492,7 +501,10 @@ test.describe('the island route', () => {
     await expect(body).toHaveClass(/folded/);
 
     // A drag across the first line, which ends in a click on the message.
-    const first = (await body.boundingBox())!;
+    // Measured once the opening spring has stopped: a box read mid-flight
+    // describes a place the words have already left, and the press lands
+    // above them.
+    const first = await settled(body);
     await page.mouse.move(first.x + 12, first.y + 8);
     await page.mouse.down();
     await page.mouse.move(first.x + 140, first.y + 8, { steps: 8 });
@@ -734,6 +746,131 @@ test.describe('the island route', () => {
     // A click that begins beside the shape still puts it away.
     await page.mouse.click(700, 540);
     await expect.poll(collapses).toBe(1);
+  });
+
+  /// The plus is the one control in the row that adds to the message rather
+  /// than setting how it is answered, so it stands first; the ring and the
+  /// mode are what the next turn starts on, so they stand last, beside the
+  /// button that starts it. tech.md 6.15 and 6.25.
+  test('the row puts the plus first and the compact beside the mode', async ({ page }) => {
+    await stub(page, [observed()]);
+    await page.goto(ROUTE);
+
+    const plus = page.getByRole('button', { name: 'Attach files' });
+    const model = page.getByRole('button', { name: /Opus 5/ }).first();
+    const ring = page.getByRole('button', { name: /% of context used/ });
+    const mode = page.getByRole('button', { name: /Manual|Plan|Auto|Edit automatically/ }).last();
+    const send = page.getByRole('button', { name: /Send|Stop/ });
+
+    const at = async (locator: ReturnType<Page['locator']>) => (await settled(locator)).x;
+    const [plusX, modelX, ringX, modeX, sendX] = [
+      await at(plus),
+      await at(model),
+      await at(ring),
+      await at(mode),
+      await at(send),
+    ];
+
+    expect(plusX).toBeLessThan(modelX);
+    expect(modelX).toBeLessThan(ringX);
+    expect(ringX).toBeLessThan(modeX);
+    expect(modeX).toBeLessThan(sendX);
+  });
+
+  /// Nothing is copied and nothing is read: the path is the whole of what the
+  /// message carries, and the agent opens the file itself. tech.md 6.25.
+  test('a file is attached by its path and travels with the message', async ({ page }) => {
+    await stub(
+      page,
+      [aimed('/Users/dev/peekle')],
+      { Session: 's1' },
+      {
+        choose_files: ['/Users/dev/peekle/report.pdf', '/Users/dev/peekle/notes.md'],
+      },
+    );
+    await page.goto(ROUTE);
+
+    await page.getByRole('button', { name: 'Attach files' }).click();
+
+    // Named, because a name is the one thing that says which file this is.
+    await expect(page.getByText('report.pdf')).toBeVisible();
+    await expect(page.getByText('notes.md')).toBeVisible();
+
+    // The same file twice is one attachment.
+    await page.getByRole('button', { name: 'Attach files' }).click();
+    await expect(page.getByText('report.pdf')).toHaveCount(1);
+
+    const field = page.locator('.reply textarea');
+    await field.fill('what do you make of these');
+    await field.press('Enter');
+
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const sent = calls.filter((call) => call.command === 'send_message');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args).toEqual({
+      sessionId: 's1',
+      text: 'what do you make of these',
+      shots: ['/Users/dev/peekle/report.pdf', '/Users/dev/peekle/notes.md'],
+    });
+
+    // Sent is gone: the field is empty again and so is the row above it.
+    await expect(page.getByText('report.pdf')).toHaveCount(0);
+  });
+
+  /// One line per path is the whole delivery protocol (6.13), so a name that
+  /// breaks across two lines cannot travel, and silence about that would read
+  /// as a plus that does nothing. tech.md 6.25.
+  test('a file whose name runs onto a second line is refused out loud', async ({ page }) => {
+    await stub(
+      page,
+      [aimed('/Users/dev/peekle')],
+      { Session: 's1' },
+      {
+        choose_files: ['/Users/dev/peekle/two\nlines.txt'],
+      },
+    );
+    await page.goto(ROUTE);
+
+    await page.getByRole('button', { name: 'Attach files' }).click();
+
+    await expect(page.getByText(/cannot be attached/)).toBeVisible();
+    await expect(page.getByText('lines.txt')).toHaveCount(0);
+  });
+
+  /// A path line is the file it names, not a line of prose that happens to be
+  /// long. tech.md 6.25.
+  test('a file that was sent stands in the message as itself', async ({ page }) => {
+    const said = '/Users/dev/peekle/report.pdf\nwhat do you make of it';
+    await stub(page, [observed([say('u1', said, 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    const bubble = page.locator(".line[data-kind='User'] .bubble");
+    await expect(bubble.getByText('report.pdf')).toBeVisible();
+    await expect(bubble).toContainText('what do you make of it');
+    // The whole path is one hover away rather than in the bubble.
+    await expect(bubble.getByTitle('/Users/dev/peekle/report.pdf')).toHaveCount(1);
+    await expect(bubble).not.toContainText('/Users/dev/peekle/report.pdf');
+  });
+
+  /// An agent puts bare paths on lines all the time -- the list of what it
+  /// changed -- and naming a file is not attaching one. tech.md 6.25.
+  test('an answer that names a file keeps the path it named', async ({ page }) => {
+    const answered = {
+      id: 'a1',
+      kind: 'Assistant',
+      text: 'Changed one file:\n/Users/dev/peekle/src/lib/ui/FileBlock.svelte',
+      tool: null,
+      detail: null,
+      state: 'Ok',
+      at: 1_789_000_000_000,
+    };
+    await stub(page, [observed([answered])]);
+    await page.goto(ROUTE);
+
+    const bubble = page.locator(".line[data-kind='Assistant'] .bubble");
+    await expect(bubble).toContainText('/Users/dev/peekle/src/lib/ui/FileBlock.svelte');
   });
 
   /// One field for all chats was the rule until v80.16, and a reply begun in

@@ -79,6 +79,16 @@ export function createShots() {
     of(sessionId: string): string[] {
       return attached[sessionId] ?? [];
     },
+    /**
+     * A file chosen from disk. Nothing is written and nothing is read: the
+     * file is already there, and the path is the whole of what the message
+     * carries. The same path twice is one attachment. tech.md 6.25.
+     */
+    attach(sessionId: string, path: string) {
+      const have = attached[sessionId] ?? [];
+      if (have.includes(path)) return;
+      attached = { ...attached, [sessionId]: [...have, path] };
+    },
     /** The user took one back off the message before sending it. */
     remove(sessionId: string, path: string) {
       attached = {

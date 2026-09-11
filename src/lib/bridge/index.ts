@@ -78,6 +78,9 @@ export const commands = {
   // The macOS folder dialog. `null` is a cancel, which is not an error and not
   // an event. tech.md 6.23.
   chooseFolder: () => call<string | null>('choose_folder'),
+  // The files to attach to the message being written. An empty list is a
+  // cancel. Nothing is copied: the paths travel as they are. tech.md 6.25.
+  chooseFiles: () => call<string[]>('choose_files'),
   setSessionCwd: (sessionId: string, cwd: string) =>
     call<void>('set_session_cwd', { sessionId, cwd }),
   // The CLI's own question about the folder, answered by the person in the

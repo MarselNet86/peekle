@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
 
   import { looksLikeImagePaste } from '$lib/logic/shots';
+  import IconButton from './IconButton.svelte';
 
   let {
     value = $bindable(''),
@@ -15,6 +16,7 @@
     onescape,
     onpasteimage,
     onfocuschange,
+    onattach,
   }: {
     value?: string;
     placeholder?: string;
@@ -44,6 +46,10 @@
      * island is being written in. Said to be gone when the field goes.
      * tech.md 6.7. */
     onfocuschange?: (focused: boolean) => void;
+    /** Attach files from disk. First in the row, because it is the one
+     * control that adds to the message rather than setting how it is
+     * answered. Absent where there is nothing to attach to. tech.md 6.25. */
+    onattach?: () => void;
   } = $props();
 
   let field: HTMLTextAreaElement | undefined = $state();
@@ -113,6 +119,11 @@
   {:else}
     <div class="tools">
       <div class="left">
+        <!-- The start of the row belongs to what adds to the message. The
+             original puts its plus here for the same reason. tech.md 6.25. -->
+        {#if onattach && !disabled}
+          <IconButton name="plus" title="Attach files" onclick={() => onattach?.()} />
+        {/if}
         {#if tools}{@render tools()}{/if}
       </div>
       {@render sendButton()}

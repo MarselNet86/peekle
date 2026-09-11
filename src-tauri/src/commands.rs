@@ -1853,6 +1853,49 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path))
 }
 
+/// Raises the macOS file dialog and answers with what was chosen.
+///
+/// Files rather than a folder, and more than one of them: people attach a set.
+/// Nothing is copied anywhere -- the file is already on disk and its path is
+/// all the agent needs, so the path goes straight into the message the way a
+/// screenshot's does. An empty list is a cancel, which is not an event.
+/// tech.md 6.25.
+#[tauri::command]
+pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    // The pointer goes into the dialog, and that is not leaving the island.
+    // tech.md 6.7 and 6.25.
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    state.set_dialog(true);
+    // AppKit only from the main thread, and this command is not on it.
+    let _ = app.run_on_main_thread(panel::take_front);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Attach files to this message")
+        .pick_files(move |picked| {
+            let _ = tx.send(picked);
+        });
+
+    let picked = rx.await;
+    state.set_dialog(false);
+    let _ = app.run_on_main_thread(panel::give_front_back);
+    let picked = picked.map_err(|_| "the file dialog went away".to_string())?;
+
+    let Some(files) = picked else {
+        tracing::debug!("the file dialog was cancelled");
+        return Ok(Vec::new());
+    };
+    let paths: Vec<String> = files
+        .into_iter()
+        .filter_map(|file| file.into_path().ok())
+        .map(|path| path.to_string_lossy().to_string())
+        .collect();
+    tracing::info!(files = paths.len(), "files were chosen");
+    Ok(paths)
+}
+
 /// Every refusal names what is so, because each is a different thing: the
 /// folder is gone, the chat is somebody else's, or the chat has already begun
 /// and no `cd` reaches a running agent. tech.md 6.23.

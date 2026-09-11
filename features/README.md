@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9   |
 | v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13  |
 | v80.15  | [A long message of your own folds](#v8015--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
 | v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                    |
@@ -49,6 +50,30 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.17 — A file goes with the message
+
+2026-09-11
+
+⌃⇧⌘4 and ⌘V hand over a picture that is in the clipboard. A file that is on
+disk could only be handed over by typing its path into the field.
+
+The row under the text now starts with a plus. It opens the macOS file dialog,
+takes as many files as you pick, and each one waits above the field as an
+attachment beside any screenshots. Nothing is copied anywhere: the path is what
+the message carries, and Claude Code opens the file itself once it is named.
+The chip wears a document sign and the file's own name, because a file from
+disk has no thumbnail to show and the asset scope stays the shots cache alone.
+In the conversation, the path the message carried stands as a block naming the
+file, with the whole path one hover away.
+
+The row was reordered to make room, and the order now says something. The
+start belongs to what adds to the message, which is the plus. The right edge
+belongs to what decides the next turn: the context ring that compacts, the mode
+that says what the press may do, and the button that sends.
+
+The composer: [attach-row.png](shots/attach-row.png)
+A message that carried one: [file-in-message.png](shots/file-in-message.png)
 
 ## v80.16 — The island stays in your hands
 
