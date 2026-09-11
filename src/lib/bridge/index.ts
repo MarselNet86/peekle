@@ -91,6 +91,10 @@ export const commands = {
   // A shot opened at full size. No view change: all it buys is the island
   // staying up while the picture is on screen. tech.md 6.13.
   setPreview: (open: boolean) => call<void>('set_preview', { open }),
+  // The field is being written in, or holds something unsent: the island
+  // is in the person's hands and nothing puts it away or writes over it
+  // but them. tech.md 6.7.
+  setComposing: (active: boolean) => call<void>('set_composing', { active }),
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
   // Forks an observed chat into an owned one, the way Desktop opens an
   // existing chat: claude --resume=<id> in a pty of our own. tech.md 6.5.

@@ -45,15 +45,33 @@ export function restStatus(cards: SessionCard[], awaitingPermission = false): Re
  * 10 holds. Keeping a window over the whole screen after the user asked for it
  * to go is arguing with them. tech.md 6.7.
  */
-export function clickPutsAway(view: IslandView, target: EventTarget | null): boolean {
+export function clickPutsAway(
+  view: IslandView,
+  target: EventTarget | null,
+  pressed: EventTarget | null = null,
+): boolean {
   if (view === 'Collapsed') return false;
-  // A target the island removed on this very click. Svelte applies state
-  // synchronously after a delegated handler, so a button that deletes itself
-  // -- the cross on an attachment -- reaches the window already detached, and
-  // a detached node has no ancestors at all, `.shape` among them. That is a
-  // click on the island's own content, not beside it. tech.md 6.7.
-  if (target instanceof Element && !target.isConnected) return false;
-  return !(target instanceof Element && target.closest('.shape'));
+  // A press that began on the shape is not a click beside it, wherever it was
+  // let go. That is how text ending at the edge gets selected, and the
+  // `click` for it lands on the common ancestor -- the document -- which has
+  // no `.shape` above it. tech.md 6.7.
+  if (onIsland(pressed)) return false;
+  return !onIsland(target);
+}
+
+/**
+ * Whether a node is the island's own content.
+ *
+ * A node the island removed on this very click counts. Svelte applies state
+ * synchronously after a delegated handler, so a button that deletes itself --
+ * the cross on an attachment -- reaches the window already detached, and a
+ * detached node has no ancestors at all, `.shape` among them. That is a click
+ * on the island's own content, not beside it. tech.md 6.7.
+ */
+function onIsland(node: EventTarget | null): boolean {
+  if (!(node instanceof Element)) return false;
+  if (!node.isConnected) return true;
+  return node.closest('.shape') !== null;
 }
 
 /**
@@ -68,7 +86,8 @@ export function clickSettles(
   view: IslandView,
   target: EventTarget | null,
   previewOpen: boolean,
+  pressed: EventTarget | null = null,
 ): 'nothing' | 'preview' | 'island' {
-  if (!clickPutsAway(view, target)) return 'nothing';
+  if (!clickPutsAway(view, target, pressed)) return 'nothing';
   return previewOpen ? 'preview' : 'island';
 }

@@ -317,8 +317,20 @@ impl HookSink for AppSink {
         if self.state.owns_session(&session.session_id) {
             let app = self.app.clone();
             let session_id = session.session_id.clone();
+            // If the island is engaged on something else, the answer does not
+            // take it away; the banner says the turn ended, the way it does
+            // for a chat read elsewhere. tech.md 6.2 and 6.17.
+            let notify_on = self.state.lock_config().notify.enabled;
+            let project = session.project.clone();
+            let said = payload
+                .get("last_assistant_message")
+                .and_then(Value::as_str)
+                .map(first_line)
+                .unwrap_or_default();
             tauri::async_runtime::spawn(async move {
-                windows::reveal_turn(&app, &session_id).await;
+                if !windows::reveal_turn(&app, &session_id).await {
+                    notify::say(&app, notify_on, false, &project, &said);
+                }
             });
         } else {
             // An observed one is read in the editor, so a panel over half the
@@ -551,6 +563,7 @@ fn settle_compact(app: &AppHandle, state: &Arc<AppState>, session_id: &str, text
     }
     let (app, session_id) = (app.clone(), session_id.to_string());
     tauri::async_runtime::spawn(async move {
+        // Engaged elsewhere means the row waits in its own feed. tech.md 6.7.
         windows::reveal_turn(&app, &session_id).await;
     });
 }

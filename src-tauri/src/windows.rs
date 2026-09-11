@@ -154,6 +154,16 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
+    // An island in the user's hands is not one they are walking away from: a
+    // picture open, the cursor in the field or a draft in it, a dialog up, the
+    // CLI asking about the folder. The screenshot frame of ⌃⇧⌘4 takes the
+    // pointer off the shape and the key window with it, and this is what used
+    // to put the island away under a person in the middle of a sentence.
+    // tech.md 6.7, 6.13, 6.23 and 6.24.
+    if state.in_hand() {
+        state.pointer_returned();
+        return;
+    }
 
     if inside {
         // Engaged, so the opening hold has done its job and ordinary leave
@@ -170,14 +180,6 @@ fn update_hover(app: &AppHandle) {
     // Still on that point: the island shrank, the hand did not walk away, and
     // there is nothing to charge to the leave clock. tech.md 6.7.
     if state.pointer_pinned((pointer.x, pointer.y), POINTER_MOVED) {
-        state.pointer_returned();
-        return;
-    }
-    // A screenshot open at full size holds the island. The user opened the
-    // picture by hand and closes it by hand, and reaching for the click that
-    // closes it takes the pointer off the shape first: without this the island
-    // was gone before the click landed. tech.md 6.13.
-    if state.preview_open() {
         state.pointer_returned();
         return;
     }
@@ -380,18 +382,37 @@ const NOTICE_HOLD: Duration = Duration::from_secs(10);
 /// Passive in exactly the way a request is: the panel takes the mouse and
 /// never the keyboard, and a pointer that never arrives puts it away again.
 /// An open request outranks this and keeps the view it already has.
-pub async fn reveal_turn(app: &AppHandle, session_id: &str) {
+///
+/// Says whether it opened. An engaged island showing something else is left
+/// with what it shows: the person is reading or writing there, and another
+/// chat's answer put over it takes that away. The caller rings the banner
+/// instead (6.17). The chat already on screen counts as shown. tech.md 6.2
+/// and 6.7.
+pub async fn reveal_turn(app: &AppHandle, session_id: &str) -> bool {
     let state = app.state::<Arc<AppState>>().inner().clone();
 
     if state.active_prompt().is_some() {
         tracing::debug!(session = %session_id, "a request already holds the view");
-        return;
+        return false;
+    }
+    if !reveal_takes(&state.view(), session_id, state.engaged(Instant::now())) {
+        tracing::debug!(session = %session_id, "the island is engaged elsewhere, so no reveal");
+        return false;
     }
 
     let gate = state.ready_gate(panel::ISLAND);
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(session_id.to_string()));
     state.hold_open(Instant::now() + NOTICE_HOLD);
+    true
+}
+
+/// Whether a turn ending in `session_id` may take the view. tech.md 6.2.
+fn reveal_takes(current: &IslandView, session_id: &str, engaged: bool) -> bool {
+    if matches!(current, IslandView::Session(open) if open == session_id) {
+        return true;
+    }
+    !engaged
 }
 
 /// Tells the webview which outcome settled the request and collapses the
@@ -409,10 +430,25 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(COLLAPSE_AFTER).await;
         let state = handle.state::<Arc<AppState>>().inner().clone();
-        if state.active_prompt().is_none() {
+        if state.active_prompt().is_some() {
+            return;
+        }
+        if collapses_after_answer(&state.view(), state.engaged(Instant::now())) {
             set_view(&handle, IslandView::Collapsed);
         }
     });
+}
+
+/// Whether a settled request takes the island down with it.
+///
+/// The compact panel existed for the answer and goes with it. A dialogue does
+/// not: the person answered from the row inside the feed, which means they
+/// came to it and are reading the chat the request stood in, and taking the
+/// chat away is not what an answer means. An open dialogue nobody came to --
+/// answered from the terminal, say, or timed out -- goes as it did. tech.md
+/// 6.7.
+fn collapses_after_answer(view: &IslandView, engaged: bool) -> bool {
+    !(matches!(view, IslandView::Session(_)) && engaged)
 }
 
 /// One warning on startup when the combination could not be taken. Swallowing
@@ -446,6 +482,13 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
         tracing::debug!("a request is standing, so the pill stays down");
         return;
     }
+    // The same for an island somebody is using. A pill over a dialogue being
+    // written in wiped the dialogue and, on its own ttl, put the island away
+    // under the person. What it had to say is dropped, not queued. tech.md 6.7.
+    if state.engaged(Instant::now()) {
+        tracing::debug!("the island is engaged, so the pill stays down");
+        return;
+    }
 
     let ttl = Duration::from_millis(u64::from(request.ttl_ms));
 
@@ -471,8 +514,8 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 #[cfg(test)]
 mod tests {
     use super::{
-        pill_holds_off, stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD,
-        PROMPT_HOLD,
+        collapses_after_answer, pill_holds_off, reveal_takes, stands_until_answered, view_for,
+        ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
 
@@ -601,5 +644,39 @@ mod tests {
     #[test]
     fn the_hold_outlasts_the_leave_clock() {
         assert!(NOTICE_HOLD > DISMISS_AFTER);
+    }
+
+    /// A turn ending in another chat used to take the view from a person
+    /// reading or writing in this one. It may still take a view nobody has
+    /// come to, and the chat already on screen is shown either way. tech.md
+    /// 6.2 and 6.7.
+    #[test]
+    fn another_turn_does_not_take_an_engaged_island() {
+        let reading = IslandView::Session("b".into());
+        assert!(!reveal_takes(&reading, "a", true));
+        assert!(!reveal_takes(&IslandView::Sessions, "a", true));
+        assert!(reveal_takes(&reading, "a", false), "nobody came to it");
+        assert!(
+            reveal_takes(&reading, "b", true),
+            "it is the chat on screen"
+        );
+        assert!(reveal_takes(&IslandView::Collapsed, "a", false));
+    }
+
+    /// The compact panel goes with its answer. The dialogue the person came to
+    /// stays: they are reading it, and the row they answered from was in it.
+    /// tech.md 6.7.
+    #[test]
+    fn an_answer_from_the_dialogue_keeps_the_dialogue() {
+        assert!(collapses_after_answer(&IslandView::Ask, true));
+        assert!(collapses_after_answer(&IslandView::Ask, false));
+        assert!(!collapses_after_answer(
+            &IslandView::Session("s".into()),
+            true
+        ));
+        assert!(
+            collapses_after_answer(&IslandView::Session("s".into()), false),
+            "a dialogue nobody came to goes as it did"
+        );
     }
 }

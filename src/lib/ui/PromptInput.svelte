@@ -14,6 +14,7 @@
     onstop,
     onescape,
     onpasteimage,
+    onfocuschange,
   }: {
     value?: string;
     placeholder?: string;
@@ -39,6 +40,10 @@
      * the clipboard itself: it says a picture was pasted and the page turns
      * it into an attachment. tech.md 6.13. */
     onpasteimage?: () => void;
+    /** The cursor came into the text or left it. The route tells Rust the
+     * island is being written in. Said to be gone when the field goes.
+     * tech.md 6.7. */
+    onfocuschange?: (focused: boolean) => void;
   } = $props();
 
   let field: HTMLTextAreaElement | undefined = $state();
@@ -46,6 +51,9 @@
   $effect(() => {
     field?.focus();
   });
+
+  // A field that is gone has no cursor in it, and nothing else would say so.
+  $effect(() => () => onfocuschange?.(false));
 
   // Nothing to send is nothing to press. A button that does nothing when
   // clicked lies about its own state. tech.md 9.
@@ -96,7 +104,9 @@
     rows="1"
     spellcheck="false"
     onkeydown={keydown}
-    onpaste={paste}></textarea>
+    onpaste={paste}
+    onfocus={() => onfocuschange?.(true)}
+    onblur={() => onfocuschange?.(false)}></textarea>
 
   {#if compact}
     {@render sendButton()}

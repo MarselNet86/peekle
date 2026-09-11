@@ -13,7 +13,8 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| v80.14  | [A long message of your own folds](#v8014--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
+| v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13  |
+| v80.15  | [A long message of your own folds](#v8015--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
 | v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                    |
 | v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5       |
 | v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9              |
@@ -48,6 +49,30 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.16 — The island stays in your hands
+
+2026-09-11
+
+Writing in the island and pressing ⌃⇧⌘4 folded the island up and put a pill in
+its place asking for the Up arrow. Two things did that, and neither was about
+screenshots: a pill took the view from whatever was showing, sparing only an
+open request, and the pointer timer did not know a cursor was in the field, so
+the screenshot frame carrying the pointer off the shape counted as walking
+away.
+
+Now an island that is being used is left alone. A cursor in the field, an
+unsent draft or attachment, an open picture, the folder dialog, the folder
+question -- none of them let the pointer timer put the island away. An open
+island somebody has come to is not written over: no pill, no screenshot offer
+(⌘V pastes the shot into the open chat, as anywhere), no other chat's turn
+opening over it -- that turn rings the system banner instead. Answering a
+request from inside the chat keeps the chat on screen; only the compact panel
+goes with its answer. Selecting text out past the edge is not a click beside
+the island. And a draft belongs to the chat it was begun in: switching chats
+no longer carries the words along.
+
+Nothing is drawn differently; every shot in this log stands as it did.
 
 ## v80.15 — A long message of your own folds
 

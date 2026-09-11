@@ -671,4 +671,88 @@ test.describe('the island route', () => {
     expect(sent).toHaveLength(1);
     expect(Object.keys(sent[0].args as Record<string, unknown>)).toEqual([]);
   });
+
+  /// Rust puts an island away 800ms after the pointer leaves it, and a hand
+  /// on the keyboard is not a hand that left. The route says when the field is
+  /// being written in: the cursor in it, or something unsent in it, which is
+  /// what survives ⌃⇧⌘4 taking the key window away. tech.md 6.7.
+  test('writing in the field says the island is in hand', async ({ page }) => {
+    await stub(page, [aimed('/Users/dev/peekle')]);
+    await page.goto(ROUTE);
+    const field = page.locator('.reply textarea');
+    await expect(field).toBeVisible();
+
+    const composing = async () => {
+      const calls = await page.evaluate(
+        () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+      );
+      const last = calls.filter((call) => call.command === 'set_composing').at(-1);
+      return (last?.args as { active: boolean } | undefined)?.active;
+    };
+
+    await field.click();
+    await expect.poll(composing).toBe(true);
+
+    await field.blur();
+    await expect.poll(composing).toBe(false);
+
+    await field.fill('half a thought');
+    await expect.poll(composing).toBe(true);
+    await field.blur();
+    await expect.poll(composing).toBe(true);
+
+    // Blank is nothing unsent. Filling focuses, so the field is left first.
+    await field.fill('   ');
+    await field.blur();
+    await expect.poll(composing).toBe(false);
+  });
+
+  /// A press on the shape let go beside it is a selection, not a click beside
+  /// the shape, and the click for it lands on the document. tech.md 6.7.
+  test('selecting text out to the edge does not put the island away', async ({ page }) => {
+    await stub(page, [observed([say('u1', 'a line to take a copy of', 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+    const body = page.locator(".line[data-kind='User'] .body");
+    const first = await settled(body);
+
+    const collapses = async () => {
+      const calls = await page.evaluate(
+        () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+      );
+      return calls.filter((call) => call.command === 'set_view').length;
+    };
+
+    await page.mouse.move(first.x + 12, first.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(700, 540, { steps: 8 });
+    await page.mouse.up();
+    expect(
+      await page.evaluate(() => window.getSelection()?.toString().length ?? 0),
+    ).toBeGreaterThan(0);
+    expect(await collapses()).toBe(0);
+
+    // A click that begins beside the shape still puts it away.
+    await page.mouse.click(700, 540);
+    await expect.poll(collapses).toBe(1);
+  });
+
+  /// One field for all chats was the rule until v80.16, and a reply begun in
+  /// one chat stood in the field of the next. tech.md 6.7.
+  test('a draft belongs to the chat it was begun in', async ({ page }) => {
+    await stub(page, [aimed('/Users/dev/peekle', 's1'), aimed('/Users/dev/site', 's2')]);
+    await page.goto(ROUTE);
+    const field = page.locator('.reply textarea');
+    await field.fill('for peekle');
+
+    await page.evaluate(() =>
+      (window as unknown as { __view: (view: unknown) => void }).__view({ Session: 's2' }),
+    );
+    await expect(field).toHaveValue('');
+    await field.fill('for the site');
+
+    await page.evaluate(() =>
+      (window as unknown as { __view: (view: unknown) => void }).__view({ Session: 's1' }),
+    );
+    await expect(field).toHaveValue('for peekle');
+  });
 });

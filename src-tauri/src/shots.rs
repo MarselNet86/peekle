@@ -14,7 +14,7 @@
 //! copy anybody makes would be a product that spies. tech.md R-13.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use peekle_core::shots::{self, Pasteboard};
 use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
@@ -135,6 +135,15 @@ fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
         tracing::debug!("a permission request holds the view, so no screenshot offer");
         return;
     }
+    // And so does an island somebody is using: the person is writing in it or
+    // reading it, and the pill wiped that to offer a screenshot which, in an
+    // open dialogue, goes in with ⌘V and no offer at all. This was the bug the
+    // owner saw: type, press ⌃⇧⌘4, and the island folds up to ask for the Up
+    // arrow. tech.md 6.7 and 6.13.
+    if state.engaged(Instant::now()) {
+        tracing::debug!("the island is engaged, so no screenshot offer");
+        return;
+    }
 
     let Some(card) = state.newest_owned_session() else {
         // A screenshot with nowhere to go. An observed session has no input
@@ -230,6 +239,7 @@ pub fn attach(app: &AppHandle) {
     let handle = app.clone();
     let session_id = offer.session_id.clone();
     tauri::async_runtime::spawn(async move {
+        // The offer stood on a pill, so nothing is engaged and this opens.
         windows::reveal_turn(&handle, &session_id).await;
     });
 }
