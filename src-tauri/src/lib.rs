@@ -21,7 +21,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn run() {
     init_tracing();
 
-    let builder = tauri::Builder::default();
+    // First in the chain, as the plugin itself requires. A second Peekle
+    // never gets as far as a window or a hook server; the one already
+    // running opens its list instead, because a person who launched the app
+    // again did so because they could not see it. tech.md 6.7.
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tracing::info!("a second launch reached the running instance, opening the list");
+            windows::show_for_a_second_launch(app);
+        }));
     // The panel plugin is macOS: NSPanel is the thing it converts to, and on
     // every other platform the window stays a window. tech.md 6.27.
     #[cfg(target_os = "macos")]
@@ -162,10 +170,45 @@ pub fn run() {
 
 /// Tokens and credentials never reach a log line, so the default filter can
 /// stay chatty without leaking anything. tech.md rule 11.
+///
+/// On Windows and Linux the same lines also go to a file: the binary is
+/// built without a console, so stderr reaches nobody there, and "I click and
+/// nothing happens" cannot be looked into without a log. The file is this
+/// launch's log, not a history. tech.md 6.27.
 fn init_tracing() {
     let filter = tracing_subscriber::EnvFilter::try_from_env("PEEKLE_LOG")
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("peekle=info,peekle_server=info"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+
+    #[cfg(target_os = "macos")]
+    let _ = builder.try_init();
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tracing_subscriber::fmt::writer::MakeWriterExt;
+        match log_file() {
+            // Both, and neither failing stops the other: a closed stderr is the
+            // normal case here, and a full disk must not take the app down.
+            Some(file) => {
+                let _ = builder
+                    .with_ansi(false)
+                    .with_writer(std::io::stderr.and(std::sync::Mutex::new(file)))
+                    .try_init();
+            }
+            None => {
+                let _ = builder.try_init();
+            }
+        }
+    }
+}
+
+/// `<cache>/peekle/peekle.log`, truncated on every launch. tech.md 6.27.
+#[cfg(not(target_os = "macos"))]
+fn log_file() -> Option<std::fs::File> {
+    let dirs = directories::ProjectDirs::from("", "", "peekle")?;
+    let dir = dirs.cache_dir();
+    std::fs::create_dir_all(dir).ok()?;
+    std::fs::File::create(dir.join("peekle.log")).ok()
 }
 
 /// Debug builds carry one extra command so the panel can be driven without a

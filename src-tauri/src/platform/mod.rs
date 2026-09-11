@@ -88,7 +88,13 @@ pub(crate) fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, Pane
 /// events are switched by view and only by Rust. tech.md 6.7.
 pub fn set_takes_clicks(app: &AppHandle, takes_clicks: bool) -> Result<(), PanelError> {
     window(app, ISLAND)?.set_ignore_cursor_events(!takes_clicks)?;
+    // Loud where the first live run ended in "I click and nothing happens":
+    // without this line in the file nobody knows whether the pointer even
+    // reached the window. tech.md 6.27.
+    #[cfg(target_os = "macos")]
     tracing::debug!(takes_clicks, "island cursor events");
+    #[cfg(not(target_os = "macos"))]
+    tracing::info!(takes_clicks, "island cursor events");
     Ok(())
 }
 
