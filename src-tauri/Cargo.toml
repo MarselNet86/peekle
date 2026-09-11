@@ -39,6 +39,10 @@ tauri-plugin-global-shortcut = "2.3.2"
 peekle-hotkey = { version = "0.1.0", path = "../crates/peekle-hotkey" }
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-dialog = "2.7.3"
+# One instance, on every platform. tech.md 6.7.
+tauri-plugin-single-instance = "2.4.4"
+# The log file of the platforms with no stderr to speak of. tech.md 6.27.
+directories = "6.0.0"
 
 # macOS only: the panel and everything AppKit. tech.md 6.27.
 [target.'cfg(target_os = "macos")'.dependencies]

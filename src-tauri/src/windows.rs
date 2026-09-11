@@ -249,6 +249,16 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
     });
 }
 
+/// A second launch reached this instance: open the list and hold it the way
+/// a notice is held. Nobody's pointer is on an island that opened by itself,
+/// and without the hold the leave rule of 6.7 would put it away 800ms later,
+/// which is a flash, not an answer. tech.md 6.7.
+pub fn show_for_a_second_launch(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    state.hold_open(Instant::now() + NOTICE_HOLD);
+    set_view(app, IslandView::Sessions);
+}
+
 /// How old a snapshot may be when the island opens before it is worth asking
 /// again. tech.md 6.4.
 const STALE_AFTER_MS: i64 = 60_000;
