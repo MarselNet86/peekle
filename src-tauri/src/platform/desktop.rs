@@ -12,7 +12,7 @@ use std::sync::Mutex;
 
 use peekle_core::shots::Pasteboard;
 use peekle_core::types::IslandView;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use super::{focusable_for, image_signature, position, window, Notch, PanelError, ISLAND};
 
