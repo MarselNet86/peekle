@@ -652,7 +652,12 @@
       // Two identical frames mean the spring has come to rest.
       if (still >= 2) {
         frame = 0;
-        commands.islandBounds({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+        commands.islandBounds({
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        });
         return;
       }
       frame = requestAnimationFrame(sample);
