@@ -347,6 +347,29 @@ impl AppState {
         sessions.cards().to_vec()
     }
 
+    /// The CLI put the folder question on screen. tech.md 6.24.
+    pub fn ask_trust(&self, session_id: &str, at: i64) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        if !sessions.ask_trust(session_id, at) {
+            return None;
+        }
+        Some(sessions.cards().to_vec())
+    }
+
+    /// The question was answered, either way. tech.md 6.24.
+    pub fn end_trust(&self, session_id: &str) -> Option<Vec<SessionCard>> {
+        let mut sessions = self.lock(&self.sessions);
+        if !sessions.end_trust(session_id) {
+            return None;
+        }
+        Some(sessions.cards().to_vec())
+    }
+
+    /// Whether that question is standing on this chat. tech.md 6.24.
+    pub fn asking_trust(&self, session_id: &str) -> bool {
+        self.lock(&self.sessions).asking_trust(session_id)
+    }
+
     /// Points an aimed chat at another folder. `None` when the store refused:
     /// the chat is not ours, or it has already begun. tech.md 6.23.
     pub fn aim_session(&self, session_id: &str, cwd: &str) -> Option<Vec<SessionCard>> {
@@ -686,6 +709,12 @@ impl AppState {
     /// Submits whatever the session's input box holds. tech.md 6.5.
     pub fn nudge_session(&self, session_id: &str) -> bool {
         self.pty.nudge(session_id).is_ok()
+    }
+
+    /// Answers the folder question with yes, in the pty that asked it. Only
+    /// ever because the person answered it in the island. tech.md 6.24.
+    pub fn trust_session(&self, session_id: &str) -> bool {
+        self.pty.trust(session_id).is_ok()
     }
 
     /// Whether this session has ever said what it answers with. Everything

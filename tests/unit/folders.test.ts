@@ -33,6 +33,7 @@ function card(id: string, cwd: string, over: Partial<SessionCard> = {}): Session
     thinking: null,
     compacting: null,
     stopping: null,
+    asking_trust: null,
     updated_at: 0,
     ...over,
   } as SessionCard;

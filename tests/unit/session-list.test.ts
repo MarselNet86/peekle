@@ -28,6 +28,7 @@ const card = (title: string, project = 'peekle'): SessionCard => ({
   thinking: null,
   compacting: null,
   stopping: null,
+  asking_trust: null,
   updated_at: 0,
 });
 
@@ -165,6 +166,7 @@ describe('continuing a chat', () => {
     thinking: null,
     compacting: null,
     stopping: null,
+    asking_trust: null,
     updated_at: 0,
   });
 

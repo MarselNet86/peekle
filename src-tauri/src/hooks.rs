@@ -697,6 +697,7 @@ mod tests {
             thinking: None,
             compacting: None,
             stopping: None,
+            asking_trust: None,
             updated_at: 0,
         }
     }

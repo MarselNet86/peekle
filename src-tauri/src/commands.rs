@@ -885,6 +885,14 @@ fn watch_delivery(app: &AppHandle, state: &Arc<AppState>, session_id: String, en
     let state = Arc::clone(state);
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(NUDGE_AFTER).await;
+        // Nothing is judged, and nothing is nudged, while the CLI has its
+        // question about the folder on screen: it runs no prompt until that is
+        // answered, so the reply is not late, it has not been offered yet. The
+        // nudge would be worse than pointless -- a newline there lands on the
+        // question's own `No, exit`, which is under the cursor. tech.md 6.24.
+        while state.asking_trust(&session_id) {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
         // Still `Running` means no `UserPromptSubmit` named it, which is what
         // an unsent box looks like from here. One newline submits it if it is
         // there, and does nothing at all if it is not: nothing is written
@@ -957,16 +965,35 @@ fn spawn_owned(
 
     let handle = app.clone();
     let owner = state.clone();
-    let result = state.pty().spawn(&binary, &spec, move |session_id| {
-        // The process was ours, so this is the one place `Ended` states a fact
-        // instead of guessing at someone else's session. tech.md 6.3.
-        tracing::info!(session = %session_id, "the session we own has exited");
-        owner.disown_session(&session_id);
-        let cards = owner.mark_session_ended(&session_id, now_ms());
-        if let Err(err) = handle.emit(events::SESSIONS, &cards) {
-            tracing::warn!(error = %err, "failed to emit sessions");
-        }
-    });
+    // The CLI asks about the folder before it runs anything, and asks it on
+    // screen: no hook fires and no transcript is written until it is answered.
+    // So the island puts the question where the person is, and nothing about
+    // this chat is given up on while it stands. tech.md 6.24.
+    let asking = app.clone();
+    let asked = state.clone();
+    let result = state.pty().spawn(
+        &binary,
+        &spec,
+        move |session_id| {
+            // The process was ours, so this is the one place `Ended` states a
+            // fact instead of guessing at someone else's session. tech.md 6.3.
+            tracing::info!(session = %session_id, "the session we own has exited");
+            owner.disown_session(&session_id);
+            let cards = owner.mark_session_ended(&session_id, now_ms());
+            if let Err(err) = handle.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit sessions");
+            }
+        },
+        move |session_id| {
+            tracing::info!(session = %session_id, "the CLI is asking about this folder");
+            let Some(cards) = asked.ask_trust(&session_id, now_ms()) else {
+                return;
+            };
+            if let Err(err) = asking.emit(events::SESSIONS, &cards) {
+                tracing::warn!(error = %err, "failed to emit sessions");
+            }
+        },
+    );
 
     if let Err(err) = result {
         // The card stays: what failed is one start, and the next message
@@ -1472,6 +1499,48 @@ pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: 
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }
+}
+
+/// Answers the CLI's question about the folder, as the person answered it in
+/// the island. tech.md 6.24.
+///
+/// Yes writes the answer into the pty that asked; no ends the chat, which is
+/// what the question's own `No, exit` does. Peekle never answers it by itself:
+/// the CLI is asking whether this person vouches for what is in the folder,
+/// and an overlay has nothing to say about that.
+#[tauri::command]
+pub fn answer_trust(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    trust: bool,
+) -> Result<(), String> {
+    if !state.asking_trust(&session_id) {
+        return Err("Nothing is asking about a folder there".to_string());
+    }
+    if trust {
+        if !state.trust_session(&session_id) {
+            return Err("That chat is gone".to_string());
+        }
+        tracing::info!(session_id, "the folder was trusted, by the person");
+        let Some(cards) = state.end_trust(&session_id) else {
+            return Ok(());
+        };
+        if let Err(err) = app.emit(events::SESSIONS, &cards) {
+            tracing::warn!(error = %err, "failed to emit sessions");
+        }
+        return Ok(());
+    }
+
+    tracing::info!(session_id, "the folder was not trusted, so the chat ends");
+    state.end_trust(&session_id);
+    state.pty().end(&session_id);
+    state.disown_session(&session_id);
+    let cards = state.mark_session_ended(&session_id, now_ms());
+    if let Err(err) = app.emit(events::SESSIONS, &cards) {
+        tracing::warn!(error = %err, "failed to emit sessions");
+    }
+    Ok(())
 }
 
 /// What `stop_session` says when there is no turn to stop. tech.md 6.5.

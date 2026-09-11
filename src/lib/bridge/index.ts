@@ -80,6 +80,10 @@ export const commands = {
   chooseFolder: () => call<string | null>('choose_folder'),
   setSessionCwd: (sessionId: string, cwd: string) =>
     call<void>('set_session_cwd', { sessionId, cwd }),
+  // The CLI's own question about the folder, answered by the person in the
+  // island. tech.md 6.24.
+  answerTrust: (sessionId: string, trust: boolean) =>
+    call<void>('answer_trust', { sessionId, trust }),
   setUsageEnabled: (enabled: boolean) => call<void>('set_usage_enabled', { enabled }),
   windowReady: (label: string) => call<void>('window_ready', { label }),
   setView: (view: IslandView) => call<void>('set_view', { view }),

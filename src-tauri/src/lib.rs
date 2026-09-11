@@ -208,6 +208,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::open_bug_report,
             commands::choose_folder,
             commands::set_session_cwd,
+            commands::answer_trust,
             commands::dev_emit_prompt,
         ]
     }
@@ -253,6 +254,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::open_bug_report,
             commands::choose_folder,
             commands::set_session_cwd,
+            commands::answer_trust,
         ]
     }
 }

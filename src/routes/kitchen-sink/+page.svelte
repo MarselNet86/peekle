@@ -256,6 +256,7 @@
     thinking: null,
     compacting: null,
     stopping: null,
+    asking_trust: null,
     updated_at: 0,
   }));
 

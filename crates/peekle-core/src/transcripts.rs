@@ -565,6 +565,8 @@ where
         // and `PreCompact` is what carries it. tech.md 6.21.
         compacting: None,
         stopping: None,
+        // And so is a question the CLI has on screen right now. tech.md 6.24.
+        asking_trust: None,
         updated_at: if latest > 0 { latest } else { updated_at },
     })
 }

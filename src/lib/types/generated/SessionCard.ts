@@ -50,6 +50,17 @@ compacting: Compacting | null,
  */
 stopping: number | null, 
 /**
+ * When the CLI asked whether this folder is trusted, `None` when it has
+ * not.
+ *
+ * Set from the one thing Peekle reads off the TUI, because nothing else
+ * reports it: until the question is answered the CLI runs no prompt and
+ * fires no hook, so a chat started in an untrusted folder is silent in
+ * every channel the island has. Answered by the person, in the island.
+ * tech.md 6.24.
+ */
+asking_trust: number | null, 
+/**
  * unix ms
  */
 updated_at: number, };

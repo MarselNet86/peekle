@@ -36,6 +36,7 @@ const card = (
   thinking: null,
   compacting,
   stopping: null,
+  asking_trust: null,
   updated_at: 0,
 });
 
