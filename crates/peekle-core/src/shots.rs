@@ -398,9 +398,15 @@ mod tests {
 
     /// The cache lives under a directory the user can delete at any moment,
     /// and a screenshot that cannot be written is a message, not a panic.
+    ///
+    /// A path no platform will make: unix refuses a directory under a device
+    /// file, Windows refuses a name with `?` in it. tech.md 6.27.
     #[test]
     fn a_directory_that_cannot_be_created_is_an_error_and_not_a_panic() {
+        #[cfg(unix)]
         let path = Path::new("/dev/null/nowhere");
+        #[cfg(windows)]
+        let path = Path::new("C:\\peekle?\\nowhere");
         assert!(write_shot(path, "id", b"png", 3).is_err());
         prune(path, 3);
     }
