@@ -862,12 +862,20 @@ impl AppState {
             .find(|card| card.session.session_id == session_id)
     }
 
-    pub fn newest_owned_session(&self) -> Option<SessionCard> {
-        let sessions = self.lock(&self.sessions);
-        sessions
+    /// The freshest chat a screenshot can go to: the one the person worked in
+    /// last, whatever started it.
+    ///
+    /// Owned only was the rule until v80.21, and it was right exactly as long
+    /// as an observed chat had no input field. Since v66 every chat has one,
+    /// and the first reply into an observed chat forks it (6.5), so there is
+    /// somewhere for the shot to go. Someone who keeps Claude Code in a
+    /// terminal owns no chats at all, and the old rule offered them nothing,
+    /// ever. Ended is still no target: nothing to type into. tech.md 6.13.
+    pub fn newest_live_session(&self) -> Option<SessionCard> {
+        self.lock(&self.sessions)
             .cards()
             .into_iter()
-            .find(|card| sessions.is_owned(&card.session.session_id))
+            .find(|card| card.status != SessionStatus::Ended)
     }
 
     pub fn hotkey_ok(&self) -> bool {
@@ -1565,38 +1573,46 @@ mod shot_tests {
         assert!(!state.set_attach_key(false), "dropping it twice is not");
     }
 
-    /// An observed session has no input field, so a screenshot has nowhere to
-    /// go there. tech.md 6.5 and 6.13.
+    /// The shot goes to the chat the person worked in last, and a chat
+    /// somebody else started counts: it has a field like every other, and the
+    /// first reply into it forks it. Owned-only meant a person who keeps
+    /// Claude Code in a terminal was never offered anything at all.
+    /// tech.md 6.13 and 6.5.
     #[test]
-    fn a_screenshot_goes_to_a_session_the_island_owns() {
+    fn a_screenshot_goes_to_the_freshest_chat_whoever_started_it() {
         let (state, _) = state();
-        assert!(
-            state.newest_owned_session().is_none(),
-            "nothing to offer to"
-        );
+        assert!(state.newest_live_session().is_none(), "nothing to offer to");
 
         state.set_session_status(&session("theirs"), SessionStatus::Working, 1);
-        assert!(
-            state.newest_owned_session().is_none(),
-            "an observed session is not a target"
+        assert_eq!(
+            state.newest_live_session().map(|c| c.session.session_id),
+            Some("theirs".to_string()),
+            "a chat we only watch is still where the person is working"
         );
 
         state.open_owned_session(session("ours"), 2);
         assert_eq!(
-            state.newest_owned_session().map(|c| c.session.session_id),
-            Some("ours".to_string())
+            state.newest_live_session().map(|c| c.session.session_id),
+            Some("ours".to_string()),
+            "and the freshest one wins"
         );
     }
 
-    /// The process behind the session exited, so there is nothing to type into
-    /// and nothing to attach to either.
+    /// A chat whose process is gone is still a target: sending into it resumes
+    /// it (6.5). A chat that ended is not -- there is nothing to type into.
     #[test]
-    fn a_session_whose_process_is_gone_is_not_a_target() {
+    fn a_chat_that_ended_is_not_a_target() {
         let (state, _) = state();
         state.open_owned_session(session("ours"), 1);
 
         state.disown_session("ours");
-        assert!(state.newest_owned_session().is_none());
+        assert!(
+            state.newest_live_session().is_some(),
+            "no process is not the same as no chat"
+        );
+
+        state.mark_session_ended("ours", 2);
+        assert!(state.newest_live_session().is_none());
     }
 
     #[test]

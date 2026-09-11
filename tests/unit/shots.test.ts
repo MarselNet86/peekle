@@ -68,6 +68,31 @@ const offer = (created: number, expires: number): ShotOffer => ({
   expires_at: expires,
 });
 
+/**
+ * The offer pill, as the band every other pill is: the chat it is aimed at on
+ * the first line, what to press on the second, and the key itself at the tail.
+ * tech.md 6.13 and 6.2.
+ */
+describe('the screenshot offer on screen', () => {
+  it('names the chat, says what to press, and draws the key', () => {
+    render(ShotPrompt, { props: { project: 'peekle', secs: 4 } });
+
+    expect(screen.getByText('Screenshot to peekle')).toBeInTheDocument();
+    expect(screen.getByText('Press the up arrow to attach it')).toBeInTheDocument();
+    // Drawn as a key, not mentioned as one: it is the whole point of the pill.
+    expect(screen.getByText('\u2191').tagName).toBe('KBD');
+    expect(screen.getByText('4s')).toBeInTheDocument();
+  });
+
+  it('opens the chat it is offering to when it is pressed', async () => {
+    const onopen = vi.fn();
+    render(ShotPrompt, { props: { project: 'peekle', onopen } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open peekle' }));
+    expect(onopen).toHaveBeenCalledOnce();
+  });
+});
+
 describe('the fuse on the offer', () => {
   it('runs from full to empty across the window', () => {
     const five = offer(1000, 6000);

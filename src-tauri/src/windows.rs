@@ -120,11 +120,20 @@ fn update_hover(app: &AppHandle) {
     };
     let inside = rect.contains((pointer.x, pointer.y));
 
-    if state.view() == IslandView::Collapsed {
+    // The two states that draw something smaller than the window take the
+    // mouse by the rectangle they drew and nowhere else, or a transparent 720
+    // by 560 window eats every click on whatever is underneath. The pill
+    // joined the mark in v80.21, when it got something to press: it opens the
+    // chat it is about. tech.md 6.7 and 6.2.
+    let view = state.view();
+    if view == IslandView::Collapsed || view == IslandView::Pill {
+        // A pill runs on its own clock either way. A request in flight does
+        // not stop this: hiding the shape resolves nothing, the hook stays
+        // pending, and the mark pulses until it is answered. tech.md 6.7.
         state.pointer_returned();
         if state.set_over_rest(inside) {
             if let Err(err) = panel::set_takes_clicks(app, inside) {
-                tracing::error!(error = %err, "failed to switch cursor events for the mark");
+                tracing::error!(error = %err, "failed to switch cursor events for the shape");
             }
         }
         return;
@@ -132,14 +141,6 @@ fn update_hover(app: &AppHandle) {
 
     // An open island already takes the mouse outright, and `set_view` said so.
     state.set_over_rest(false);
-
-    // A pill runs on its own clock. A request in flight does not stop this:
-    // hiding the shape resolves nothing, the hook stays pending, and the mark
-    // pulses until it is answered. tech.md 6.7.
-    if state.view() == IslandView::Pill {
-        state.pointer_returned();
-        return;
-    }
 
     // A question stands until it is answered. Every other open state is the
     // island showing something, and walking away from something you are shown
@@ -457,6 +458,7 @@ pub fn warn_hotkey(app: &AppHandle, text: &str) {
     toast(
         app,
         ToastRequest {
+            session: None,
             text: text.to_string(),
             detail: None,
             took_ms: None,

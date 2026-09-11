@@ -135,6 +135,8 @@ impl AppSink {
                 // than one project runs at a time, and the badge on a toast
                 // is a count rather than a name. tech.md 6.2.
                 text: session.project.clone(),
+                // Pressing it opens the chat it is about. tech.md 6.2.
+                session: Some(session.session_id.clone()),
                 detail: Some(said),
                 took_ms: turn_took(&self.state.sessions(), &session.session_id, now_ms()),
                 tone: ToastTone::Neutral,
@@ -448,11 +450,18 @@ impl HookSink for AppSink {
             .and_then(Value::as_str)
             .unwrap_or("Claude needs you")
             .to_string();
+        // "Claude needs your input" names a chat, and the point of saying so
+        // is to get the person into it. tech.md 6.2.
+        let session = payload
+            .get("session_id")
+            .and_then(Value::as_str)
+            .map(str::to_string);
 
         windows::toast(
             &self.app,
             ToastRequest {
                 text,
+                session,
                 detail: None,
                 took_ms: None,
                 tone: ToastTone::Neutral,

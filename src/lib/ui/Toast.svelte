@@ -27,6 +27,7 @@
     tone = 'Neutral',
     badge,
     ttlMs = null,
+    onopen = null,
   }: {
     text: string;
     /** The quiet line under the first one. Without it the pill is one line. */
@@ -35,6 +36,10 @@
     tookMs?: number | null;
     tone?: ToastTone;
     badge?: number | null;
+    /** Whether pressing it leads anywhere. A pill about the product itself --
+     * a switch flipping, a screenshot that could not be saved -- leads
+     * nowhere and is not pressable at all. tech.md 6.2. */
+    onopen?: (() => void) | null;
     /** How long this pill stands, drawn as the hairline underneath it. The
      * panel draws its own twenty seconds the same way, and for the same
      * reason: a bar that leaks is read without being read. tech.md 6.7. */
@@ -45,11 +50,31 @@
     tookMs !== null && Number.isFinite(tookMs) && tookMs > 0 ? elapsedLabel(tookMs) : null,
   );
   const secs = $derived(ttlMs !== null && ttlMs > 0 ? ttlMs / 1000 : null);
+
+  function press(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onopen?.();
+  }
 </script>
 
 <!-- Content of the pill only. The black fill, the corners and the movement
      belong to Shape. tech.md 9. -->
-<div class="band" data-tone={tone} class:deep={detail !== null}>
+<!-- The whole band is the way into the chat it is about, the same way the
+     permission panel's body is: a notice names a place, and getting there has
+     to cost one press. tech.md 6.2 and 6.7. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+  class="band"
+  data-tone={tone}
+  class:deep={detail !== null}
+  class:pressable={onopen !== null}
+  role={onopen ? 'button' : undefined}
+  tabindex={onopen ? 0 : undefined}
+  aria-label={onopen ? `Open ${text}` : undefined}
+  onclick={onopen ?? undefined}
+  onkeydown={onopen ? press : undefined}
+>
   <!-- The head of the band is the app, the way a notification on this system
        wears the icon of whatever raised it: every pill in the island is
        Peekle speaking, and the tone colours the sign rather than replacing
@@ -110,6 +135,10 @@
   /* A round badge, the size of an icon in a notification rather than a status
      dot: it is the head of the band, and the two lines beside it hang off it.
      tech.md 9. */
+  .band.pressable {
+    cursor: pointer;
+  }
+
   .mark {
     display: grid;
     place-items: center;
