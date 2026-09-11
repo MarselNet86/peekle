@@ -28,6 +28,61 @@ function dotOf(container: HTMLElement): HTMLElement {
   return dot;
 }
 
+describe('FeedRow draws the formatting an answer is written in', () => {
+  const answer = (text: string) =>
+    render(FeedRow, {
+      props: { entry: entry({ kind: 'Assistant', tool: null, state: 'Ok', text }) },
+    });
+
+  /// The pipes were drawn as pipes until v80.18: an answer with a table in it
+  /// arrived as a wall of dashes and bars. tech.md 6.12.
+  it('draws a table as a table, with a cell per column', () => {
+    const { container } = answer('| Cost |\n| ---: |\n| 1908 |');
+
+    const table = container.querySelector('table');
+    expect(table).not.toBeNull();
+    expect(screen.getByText('Cost').tagName).toBe('TH');
+    const cell = screen.getByText('1908');
+    expect(cell.tagName).toBe('TD');
+    expect(cell.style.textAlign).toBe('right');
+  });
+
+  /// Written by hand, an empty heading row means "just the grid".
+  it('draws no heading band when the heading row was empty', () => {
+    const { container } = answer('| | |\n|---|---|\n| Paid | 1908 |');
+
+    expect(container.querySelector('thead')).toBeNull();
+    expect(container.querySelectorAll('tbody td')).toHaveLength(2);
+  });
+
+  it('draws a run of bullets as a list, and a numbered one from its own number', () => {
+    const { container } = answer('- one\n- two');
+    expect(container.querySelectorAll('ul.list li')).toHaveLength(2);
+
+    const numbered = answer('3. third\n4. fourth');
+    const ordered = numbered.container.querySelector('ol.list');
+    expect(ordered?.getAttribute('start')).toBe('3');
+  });
+
+  it('draws a heading as a line that leads rather than as hashes', () => {
+    const { container } = answer('## What changed\nthe row moved');
+
+    const head = container.querySelector('.head');
+    expect(head?.textContent).toBe('What changed');
+    expect(screen.queryByText(/##/)).toBeNull();
+  });
+
+  /// A shell command is full of pipes and a message about flags is full of
+  /// dashes. Neither is a table or a list. tech.md 6.12.
+  it('leaves a sentence that merely carries a pipe or a dash alone', () => {
+    const { container } = answer('ls | grep peekle\n-not a bullet');
+
+    expect(container.querySelector('table')).toBeNull();
+    expect(container.querySelector('.list')).toBeNull();
+    expect(screen.getByText(/ls \| grep peekle/)).toBeInTheDocument();
+  });
+});
+
 describe('FeedRow', () => {
   it('names the tool and previews the call', () => {
     render(FeedRow, { props: { entry: entry() } });

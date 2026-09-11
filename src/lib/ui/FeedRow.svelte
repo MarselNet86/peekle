@@ -5,6 +5,7 @@
   import { shotLines, shotName } from '$lib/logic/shots';
   import FileBlock from './FileBlock.svelte';
   import ShotBlock from './ShotBlock.svelte';
+  import type { Piece } from '$lib/logic/markdown';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 
   let {
@@ -137,18 +138,59 @@
         {#each parts as block, index (index)}
           {#if block.kind === 'code'}
             <pre class="code"><code>{block.value}</code></pre>
-          {:else}
-            <p class="prose">
-              {#each block.pieces as piece, at (at)}
-                {#if piece.kind === 'code'}
-                  <code class="inline">{piece.value}</code>
-                {:else if piece.kind === 'bold'}
-                  <strong>{piece.value}</strong>
-                {:else}
-                  {piece.value}
-                {/if}
-              {/each}
+          {:else if block.kind === 'heading'}
+            <!-- A heading in a bubble is a line that leads, not a banner: the
+                 window is 400 pixels wide and everything in it is one
+                 conversation. Weight and a little air, no size ladder.
+                 tech.md 6.12. -->
+            <p class="head" data-level={Math.min(block.level, 3)}>
+              {@render inline(block.pieces)}
             </p>
+          {:else if block.kind === 'list'}
+            {#if block.ordered}
+              <ol class="list" start={block.start}>
+                {#each block.items as item, at (at)}
+                  <li data-depth={item.depth}>{@render inline(item.pieces)}</li>
+                {/each}
+              </ol>
+            {:else}
+              <ul class="list">
+                {#each block.items as item, at (at)}
+                  <li data-depth={item.depth}>{@render inline(item.pieces)}</li>
+                {/each}
+              </ul>
+            {/if}
+          {:else if block.kind === 'table'}
+            <!-- Its own scroller, because a table is the one thing in a
+                 message that cannot be made narrower by wrapping: a column
+                 squeezed to one letter per line is not a table any more.
+                 tech.md 6.12. -->
+            <!-- `sheet` and not `grid`: Tailwind owns that name and paints its own
+                 rules over anything wearing it. tech.md 9. -->
+            <div class="sheet">
+              <table>
+                {#if block.head}
+                  <thead>
+                    <tr>
+                      {#each block.head as cell, at (at)}
+                        <th style:text-align={block.align[at]}>{@render inline(cell)}</th>
+                      {/each}
+                    </tr>
+                  </thead>
+                {/if}
+                <tbody>
+                  {#each block.rows as row, at (at)}
+                    <tr>
+                      {#each row as cell, column (column)}
+                        <td style:text-align={block.align[column]}>{@render inline(cell)}</td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <p class="prose">{@render inline(block.pieces)}</p>
           {/if}
         {/each}
       </div>
@@ -181,6 +223,21 @@
     {/if}
   </div>
 {/if}
+
+<!-- One run of inline spans, wherever it stands: a paragraph, a heading, a
+     list item or a table cell. Never `{@html}`: this text comes out of an
+     agent turn into a window over the whole screen. tech.md 6.12. -->
+{#snippet inline(spans: Piece[])}
+  {#each spans as piece, at (at)}
+    {#if piece.kind === 'code'}
+      <code class="inline">{piece.value}</code>
+    {:else if piece.kind === 'bold'}
+      <strong>{piece.value}</strong>
+    {:else}
+      {piece.value}
+    {/if}
+  {/each}
+{/snippet}
 
 <style>
   /* A message is there to be read and quoted, so it is one of the few places
@@ -299,10 +356,115 @@
     white-space: pre-wrap;
   }
 
-  .prose + .prose,
-  .prose + .code,
-  .code + .prose {
+  /* One rule for every pair of blocks in a message rather than a list of
+     pairs: a heading, a list and a table are three more kinds, and the list
+     of pairs was already missing half of its own combinations. */
+  .body > * + * {
     margin-top: 6px;
+  }
+
+  /* A heading is a line that leads. Weight and a little air above it, no
+     size ladder: the bubble is 400 pixels wide and everything in it belongs
+     to one conversation, so an `h1` drawn as an `h1` is a banner in a chat.
+     tech.md 6.12. */
+  .head {
+    margin: 0;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .head[data-level='1'],
+  .head[data-level='2'] {
+    font-size: 13px;
+  }
+
+  .head[data-level='3'] {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  .body > .head + * {
+    margin-top: 3px;
+  }
+
+  .body > * + .head {
+    margin-top: 10px;
+  }
+
+  /* The markers are asked for by name because the preflight of the CSS
+     framework (3) takes them off every list on the page, and a list with no
+     bullets is a run of indented lines. */
+  .list {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.45;
+  }
+
+  ul.list {
+    list-style: disc outside;
+  }
+
+  ol.list {
+    list-style: decimal outside;
+  }
+
+  .list li + li {
+    margin-top: 2px;
+  }
+
+  /* Indented rather than renested: a nested list arrives as items that were
+     written deeper, and one padding step says exactly that without a second
+     list inside the first. */
+  .list li[data-depth='1'] {
+    margin-left: 14px;
+  }
+
+  .list li[data-depth='2'] {
+    margin-left: 28px;
+  }
+
+  .list li::marker {
+    color: var(--text-dim);
+  }
+
+  .line[data-kind='User'] .list li::marker {
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  /* A table is the one thing in a message that cannot be made narrower by
+     wrapping, so it scrolls inside the bubble instead of widening it. */
+  .sheet {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .sheet table {
+    border-collapse: collapse;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .sheet th,
+  .sheet td {
+    padding: 4px 9px;
+    border: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+
+  .sheet th {
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* The green bubble has its own ground, and a white hairline on it reads as
+     a gap rather than a rule. Same swap the code spans make. */
+  .line[data-kind='User'] .sheet th,
+  .line[data-kind='User'] .sheet td {
+    border-color: rgba(0, 0, 0, 0.22);
+  }
+
+  .line[data-kind='User'] .sheet th {
+    background: rgba(0, 0, 0, 0.1);
   }
 
   .inline,
