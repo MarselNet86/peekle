@@ -3,10 +3,9 @@ mod events;
 mod hooks;
 mod hotkey;
 mod notify;
-mod panel;
+mod platform;
 mod shots;
 mod state;
-mod trash;
 mod windows;
 
 use std::sync::Arc;
@@ -22,8 +21,13 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn run() {
     init_tracing();
 
-    tauri::Builder::default()
-        .plugin(tauri_nspanel::init())
+    let builder = tauri::Builder::default();
+    // The panel plugin is macOS: NSPanel is the thing it converts to, and on
+    // every other platform the window stays a window. tech.md 6.27.
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    builder
         // Banners for a finished turn. Registering the plugin posts
         // nothing and asks nothing: macOS raises its dialog on the
         // first banner, and the first banner is the toggle's own.
@@ -87,11 +91,11 @@ pub fn run() {
             let state = Arc::new(state::AppState::new(
                 config,
                 provider,
-                Arc::new(shots::SystemPasteboard),
+                Arc::new(platform::SystemPasteboard::new()),
             ));
             app.manage(Arc::clone(&state));
 
-            match app.get_webview_window(panel::ISLAND) {
+            match app.get_webview_window(platform::ISLAND) {
                 Some(window) => tracing::debug!(
                     url = %window.url().map(|u| u.to_string()).unwrap_or_default(),
                     "island window created"
@@ -99,13 +103,13 @@ pub fn run() {
                 None => tracing::error!("island window missing"),
             }
 
-            panel::convert_all(app.handle())?;
+            platform::convert_all(app.handle())?;
 
             // A borderless webview gets no safe area of its own, so Rust hands
             // the measured notch over to the route. tech.md 6.7.
             if let (Some(window), Some((height, width))) = (
-                app.get_webview_window(panel::ISLAND),
-                panel::active_notch(app.handle()),
+                app.get_webview_window(platform::ISLAND),
+                platform::active_notch(app.handle()),
             ) {
                 let url = format!("/island/?notch={height}&notch_width={width}");
                 if let Err(err) = window.eval(format!(
@@ -279,7 +283,7 @@ fn load_config() -> Config {
 fn usage_provider(config: &Config) -> Arc<dyn UsageProvider> {
     match config.usage.provider {
         UsageProviderKind::Account => Arc::new(peekle_usage::AccountUsage::new(
-            Box::new(peekle_usage::SecurityToolStore::for_current_user()),
+            Box::new(peekle_usage::SystemCredentialStore::for_current_user()),
             VERSION,
         )),
         // Off still needs a provider: the bars render the reason rather than

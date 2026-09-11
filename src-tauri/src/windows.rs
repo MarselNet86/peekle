@@ -11,7 +11,7 @@ use peekle_core::types::{
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::events;
-use crate::panel;
+use crate::platform;
 use crate::state::AppState;
 
 /// How long Rust waits for the webview to report it painted the route.
@@ -34,11 +34,11 @@ where
 /// collapsed, and hiding the window on every collapse would flash and cut the
 /// spring short. tech.md section 8.
 pub async fn open_island(app: &AppHandle) {
-    let gate = app.state::<Arc<AppState>>().ready_gate(panel::ISLAND);
+    let gate = app.state::<Arc<AppState>>().ready_gate(platform::ISLAND);
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
 
     on_main(app, "show", move |handle| {
-        if let Err(err) = panel::show(handle, panel::ISLAND) {
+        if let Err(err) = platform::show(handle, platform::ISLAND) {
             tracing::error!(error = %err, "failed to show the island");
         }
     });
@@ -48,17 +48,17 @@ pub async fn open_island(app: &AppHandle) {
 /// to repeat on every open, and the only alternative is reloading the route,
 /// which throws away the feed and whatever the user had typed. tech.md 6.7.
 pub fn send_notch(app: &AppHandle) {
-    let (height, width) = panel::active_notch(app).unwrap_or((0.0, 0.0));
+    let (height, width) = platform::active_notch(app).unwrap_or((0.0, 0.0));
     let payload = serde_json::json!({ "height": height, "width": width });
 
-    if let Err(err) = app.emit_to(panel::ISLAND, events::NOTCH, payload) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::NOTCH, payload) {
         tracing::warn!(error = %err, "failed to emit notch");
     }
 }
 
 /// How often Rust asks where the pointer is while the island rests.
 ///
-/// The safety net, not the mechanism: `panel::watch_pointer` hands the mouse
+/// The safety net, not the mechanism: `platform::watch_pointer` hands the mouse
 /// over the moment the pointer moves onto the mark, because a poll is always
 /// one tick behind and a click inside that tick went through to the menu bar.
 /// What is left for the tick is the paths with no movement at all -- a Space
@@ -76,7 +76,7 @@ const HOVER_TICK: Duration = Duration::from_millis(100);
 pub fn track_pointer(app: &AppHandle) {
     // Movement leads. Installed on the main thread, where the setup runs, and
     // called back there too. tech.md 6.7.
-    if let Err(err) = panel::watch_pointer(app, update_hover) {
+    if let Err(err) = platform::watch_pointer(app, update_hover) {
         tracing::warn!(error = %err, "no mouse monitor, the mark falls back to the poll");
     }
 
@@ -109,7 +109,7 @@ fn update_hover(app: &AppHandle) {
     let Some(bounds) = state.shape_bounds() else {
         return;
     };
-    let Ok((frame, scale)) = panel::island_frame(app) else {
+    let Ok((frame, scale)) = platform::island_frame(app) else {
         return;
     };
     let Some(rect) = shape_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
@@ -132,7 +132,7 @@ fn update_hover(app: &AppHandle) {
         // pending, and the mark pulses until it is answered. tech.md 6.7.
         state.pointer_returned();
         if state.set_over_rest(inside) {
-            if let Err(err) = panel::set_takes_clicks(app, inside) {
+            if let Err(err) = platform::set_takes_clicks(app, inside) {
                 tracing::error!(error = %err, "failed to switch cursor events for the shape");
             }
         }
@@ -205,7 +205,7 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
         return;
     }
 
-    if let Err(err) = app.emit_to(panel::ISLAND, events::VIEW, &view) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::VIEW, &view) {
         tracing::warn!(error = %err, "failed to emit view");
     }
 
@@ -219,17 +219,21 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
         refresh_stale_usage(app, &state);
     }
 
+    let focus_view = view.clone();
     on_main(app, "view", move |handle| {
-        if let Err(err) = panel::set_takes_clicks(handle, takes_clicks) {
+        if let Err(err) = platform::set_takes_clicks(handle, takes_clicks) {
             tracing::error!(error = %err, "failed to switch cursor events");
         }
+        // Whether the window may take focus follows the view on the platforms
+        // where that is not the panel's own call. tech.md 6.27.
+        platform::apply_view(handle, &focus_view);
 
         // Re-order on every open. Section 8 forbids hiding the panel between
         // events, not re-asserting its order: the window server decides space
         // membership when a window is ordered front, so a panel ordered once at
         // startup never follows the user onto a full screen space.
         if opening {
-            if let Err(err) = panel::show(handle, panel::ISLAND) {
+            if let Err(err) = platform::show(handle, platform::ISLAND) {
                 tracing::error!(error = %err, "failed to raise the island");
             }
             // The island may have just landed on a different display, and the
@@ -281,9 +285,9 @@ const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
 /// field. tech.md 6.7 and 15.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     let state = app.state::<Arc<AppState>>().inner().clone();
-    let gate = state.ready_gate(panel::ISLAND);
+    let gate = state.ready_gate(platform::ISLAND);
 
-    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_OPEN, request) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::PROMPT_OPEN, request) {
         tracing::warn!(error = %err, "failed to emit prompt-open");
     }
 
@@ -401,7 +405,7 @@ pub async fn reveal_turn(app: &AppHandle, session_id: &str) -> bool {
         return false;
     }
 
-    let gate = state.ready_gate(panel::ISLAND);
+    let gate = state.ready_gate(platform::ISLAND);
     let _ = tokio::time::timeout(READY_TIMEOUT, gate.notified()).await;
     set_view(app, IslandView::Session(session_id.to_string()));
     state.hold_open(Instant::now() + NOTICE_HOLD);
@@ -420,7 +424,7 @@ fn reveal_takes(current: &IslandView, session_id: &str, engaged: bool) -> bool {
 /// island behind it.
 pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
     let payload = serde_json::json!({ "prompt_id": prompt_id, "outcome": outcome });
-    if let Err(err) = app.emit_to(panel::ISLAND, events::PROMPT_CLOSE, payload) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::PROMPT_CLOSE, payload) {
         tracing::warn!(error = %err, "failed to emit prompt-close");
     }
 
@@ -494,7 +498,7 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 
     let ttl = Duration::from_millis(u64::from(request.ttl_ms));
 
-    if let Err(err) = app.emit_to(panel::ISLAND, events::TOAST, &request) {
+    if let Err(err) = app.emit_to(platform::ISLAND, events::TOAST, &request) {
         tracing::warn!(error = %err, "failed to emit toast");
         return;
     }

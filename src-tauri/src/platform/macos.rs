@@ -1,17 +1,20 @@
-//! All AppKit lives here. tech.md section 6.7 is the window contract and every
-//! flag below is spelled out there, including the traps that produce no error
-//! when you get them wrong.
+//! All AppKit lives here, and nothing but AppKit: the panel, the pasteboard,
+//! the Trash, the app's front. tech.md section 6.7 is the window contract and
+//! every flag below is spelled out there, including the traps that produce
+//! no error when you get them wrong. `mod.rs` is the surface the rest of the
+//! app sees; `desktop.rs` is the same surface for Windows and Linux.
+//! tech.md 6.27.
 
-use peekle_core::island::Rect;
-use tauri::{AppHandle, LogicalPosition, Manager, WebviewWindow};
+use std::path::Path;
+
+use peekle_core::shots::Pasteboard;
+use peekle_core::types::IslandView;
+use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_nspanel::{
     tauri_panel, CollectionBehavior, ManagerExt, Panel, PanelLevel, StyleMask, WebviewWindowExt,
 };
 
-pub const ISLAND: &str = "island";
-
-/// The notch as measured on the main display: height and width in points.
-pub type Notch = (f64, f64);
+use super::{position, window, Notch, PanelError, ISLAND};
 
 // The island takes keystrokes without activating the app, so the user answers
 // the agent while the menu bar still belongs to whatever they were watching.
@@ -24,16 +27,6 @@ tauri_panel! {
             can_become_main_window: false
         }
     })
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PanelError {
-    #[error("window {0} is missing")]
-    MissingWindow(String),
-    #[error("panel {0} is not registered")]
-    MissingPanel(String),
-    #[error("tauri call failed: {0}")]
-    Tauri(#[from] tauri::Error),
 }
 
 /// Converts the one window into a panel. Runs once at startup: the panel is
@@ -196,16 +189,11 @@ where
     }
 }
 
-/// The notch of the display the pointer is on. tech.md 6.7.
-pub fn active_notch(app: &AppHandle) -> Option<Notch> {
-    notch_for(active_screen(app)?.1)
-}
-
 /// The display the user is on, as logical origin and size.
 ///
 /// The pointer is the signal: a non-activating overlay never owns the key
 /// window, and the hand is where the eyes are. tech.md 6.7.
-fn active_screen(app: &AppHandle) -> Option<((f64, f64), (f64, f64))> {
+pub(super) fn active_screen(app: &AppHandle) -> Option<((f64, f64), (f64, f64))> {
     let monitor = app
         .cursor_position()
         .ok()
@@ -216,32 +204,6 @@ fn active_screen(app: &AppHandle) -> Option<((f64, f64), (f64, f64))> {
     let origin = monitor.position().to_logical::<f64>(scale);
     let size = monitor.size().to_logical::<f64>(scale);
     Some(((origin.x, origin.y), (size.width, size.height)))
-}
-
-/// The island frame in physical pixels, with the scale the webview draws at.
-///
-/// Physical on purpose: the pointer arrives from Tauri in physical pixels and
-/// displays can differ in scale, so converting one of them into the logical
-/// space of the other is where an off by a factor of two would hide.
-pub fn island_frame(app: &AppHandle) -> Result<(Rect, f64), PanelError> {
-    let window = window(app, ISLAND)?;
-    let position = window.outer_position()?;
-    let size = window.outer_size()?;
-
-    Ok((
-        Rect::new(
-            f64::from(position.x),
-            f64::from(position.y),
-            f64::from(size.width),
-            f64::from(size.height),
-        ),
-        window.scale_factor()?,
-    ))
-}
-
-fn window(app: &AppHandle, label: &str) -> Result<WebviewWindow, PanelError> {
-    app.get_webview_window(label)
-        .ok_or_else(|| PanelError::MissingWindow(label.to_string()))
 }
 
 /// Places the panel per the geometry of section 6.7 and shows it. Position is
@@ -261,48 +223,6 @@ pub fn show(app: &AppHandle, label: &str) -> Result<(), PanelError> {
     panel.order_front_regardless();
     trace_space_behavior(&window(app, label)?);
     tracing::debug!(label, visible = panel.is_visible(), "panel shown");
-    Ok(())
-}
-
-/// A collapsed island is a transparent 720 by 560 rectangle over the top of the
-/// screen. Letting it take clicks would break everything under it, so mouse
-/// events are switched by view and only by Rust. tech.md 6.7.
-pub fn set_takes_clicks(app: &AppHandle, takes_clicks: bool) -> Result<(), PanelError> {
-    window(app, ISLAND)?.set_ignore_cursor_events(!takes_clicks)?;
-    tracing::debug!(takes_clicks, "island cursor events");
-    Ok(())
-}
-
-fn position(app: &AppHandle, label: &str) -> Result<(), PanelError> {
-    let window = window(app, label)?;
-
-    let Some((origin, screen)) = active_screen(app) else {
-        // No screen to place against. Leave the panel where it is rather than
-        // dropping it at the origin.
-        return Ok(());
-    };
-    let scale = window
-        .current_monitor()?
-        .map(|monitor| monitor.scale_factor())
-        .unwrap_or(1.0);
-    let size = window.outer_size()?.to_logical::<f64>(scale);
-
-    // Flush with the top edge so the black fill continues the notch. A display
-    // without one gets its inset from the shape, not from the window.
-    let x = (screen.0 - size.width) / 2.0;
-    window.set_position(LogicalPosition::new(origin.0 + x, origin.1))?;
-
-    tracing::debug!(
-        label,
-        scale,
-        screen_w = screen.0,
-        screen_h = screen.1,
-        win_w = size.width,
-        win_h = size.height,
-        placed_x = origin.0 + x,
-        placed_y = origin.1,
-        "panel placed"
-    );
     Ok(())
 }
 
@@ -335,4 +255,113 @@ pub fn give_front_back() {
         return;
     };
     NSApplication::sharedApplication(marker).deactivate();
+}
+
+/// The view changed. Nothing to do here: the panel decides key status per
+/// click through `becomes_key_only_if_needed`, and that is the whole point of
+/// it being a panel. Desktop has to switch focusability by view instead.
+/// tech.md 6.27.
+pub fn apply_view(_app: &AppHandle, _view: &IslandView) {}
+
+/// The real pasteboard. tech.md 6.13.
+///
+/// Two halves, deliberately unequal. Detection reads the change count and the
+/// type names, which raises nothing and copies nothing. Reading the contents
+/// runs once, after the user pressed the key: from macOS 15 that read is a
+/// system paste prompt, and asking for one on every copy anybody makes would
+/// be a product that spies. tech.md R-13.
+#[derive(Default)]
+pub struct SystemPasteboard;
+
+impl SystemPasteboard {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Pasteboard for SystemPasteboard {
+    fn change_count(&self) -> i64 {
+        use objc2_app_kit::NSPasteboard;
+
+        let pasteboard = NSPasteboard::generalPasteboard();
+        pasteboard.changeCount() as i64
+    }
+
+    fn item_types(&self) -> Vec<Vec<String>> {
+        use objc2_app_kit::NSPasteboard;
+
+        let pasteboard = NSPasteboard::generalPasteboard();
+        // The item and not the pasteboard: NSPasteboard synthesises TIFF from
+        // a PNG, so its declared list calls every screenshot an image and
+        // every image a screenshot. tech.md 6.13.
+        let Some(items) = pasteboard.pasteboardItems() else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .map(|item| item.types().iter().map(|t| t.to_string()).collect())
+            .collect()
+    }
+
+    fn read_png(&self) -> Option<Vec<u8>> {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypePNG};
+
+        let pasteboard = NSPasteboard::generalPasteboard();
+        // The extern static is the type name itself, and reading one is what
+        // `unsafe` covers here. Nothing about the read is fallible otherwise.
+        let png = unsafe { NSPasteboardTypePNG };
+        let data = pasteboard.dataForType(png)?;
+        Some(data.to_vec())
+    }
+}
+
+/// Moves one file to the Trash. tech.md 6.26.
+///
+/// `NSFileManager.trashItemAtURL` and never `std::fs::remove_file`: a
+/// transcript is a person's own conversation, and "this chat is gone" is a
+/// decision they must be able to take back the way they take back every other
+/// deletion on this machine -- in Finder. It is also what Finder itself calls,
+/// so the file lands where the user looks for it. A refusal from the system is
+/// an error and never a silent success.
+pub fn to_trash(path: &Path) -> Result<(), String> {
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
+
+    let text = path.to_string_lossy().to_string();
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&text));
+    NSFileManager::defaultManager()
+        .trashItemAtURL_resultingItemURL_error(&url, None)
+        .map_err(|err| err.localizedDescription().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ignored on purpose: it puts a real file in the real Trash, which is
+    /// exactly what makes it worth running by hand (`cargo test -- --ignored
+    /// goes_to_the_trash`) and exactly what a suite must not do on its own.
+    /// It cleans up after itself, and only after the one file it created.
+    #[test]
+    #[ignore = "touches the user's Trash"]
+    fn a_file_goes_to_the_trash_and_not_to_nowhere() {
+        let name = format!("peekle-trash-probe-{}.txt", std::process::id());
+        let path = std::env::temp_dir().join(&name);
+        std::fs::write(&path, b"probe").expect("wrote the probe");
+
+        to_trash(&path).expect("the system took the file");
+        assert!(!path.exists(), "the file left where it was");
+
+        let home = std::env::var("HOME").expect("a home");
+        let landed = std::path::Path::new(&home).join(".Trash").join(&name);
+        assert!(landed.exists(), "the file is in the Trash");
+        std::fs::remove_file(&landed).expect("cleaned up the probe");
+    }
+
+    /// A path that is not there is the system's answer to give, and it says no.
+    /// Deletion must never report a success it did not have. tech.md 6.26.
+    #[test]
+    fn a_file_that_is_not_there_is_an_error() {
+        let missing = std::env::temp_dir().join("peekle-no-such-file-2f4a.txt");
+        assert!(to_trash(&missing).is_err());
+    }
 }

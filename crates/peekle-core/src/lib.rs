@@ -28,12 +28,26 @@ pub use sessions::{FeedEvent, SessionRegistry};
 pub use shots::{OfferSlot, Pasteboard};
 pub use types::*;
 
-/// Where `claude` might be, in the order tech.md 6.4 gives.
+/// Where `claude` might be, in the order tech.md 6.4 gives. Relative
+/// entries are under the home directory.
+#[cfg(not(windows))]
 const CLI_CANDIDATES: &[&str] = &[
     ".local/bin/claude",
     "/opt/homebrew/bin/claude",
     "/usr/local/bin/claude",
 ];
+
+/// The native installer and a global npm install. `.cmd` wrappers are not
+/// candidates: the pty starts an executable, not a shell. tech.md 6.27.
+#[cfg(windows)]
+const CLI_CANDIDATES: &[&str] = &[".local/bin/claude.exe", "AppData/Roaming/npm/claude.exe"];
+
+/// The home directory, under the name each platform keeps it. tech.md 6.27.
+fn home_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+}
 
 /// The first candidate that exists.
 ///
@@ -41,14 +55,14 @@ const CLI_CANDIDATES: &[&str] = &[
 /// a GUI process inherits a login environment that rarely has the shell's PATH
 /// in it. tech.md 6.4.
 pub fn claude_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var("HOME").ok()?;
+    let home = home_dir()?;
     CLI_CANDIDATES
         .iter()
         .map(|candidate| {
             if candidate.starts_with('/') {
                 std::path::PathBuf::from(candidate)
             } else {
-                std::path::Path::new(&home).join(candidate)
+                home.join(candidate)
             }
         })
         .find(|path| path.exists())

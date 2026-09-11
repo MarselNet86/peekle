@@ -7,12 +7,16 @@
 //! between one dialog and a dialog on every launch.
 
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 /// Exit codes of `security find-generic-password`. tech.md 6.4.
+#[cfg(target_os = "macos")]
 const EXIT_DENIED: i32 = 128;
+#[cfg(target_os = "macos")]
 const EXIT_NO_ENTRY: i32 = 44;
 
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "Claude Code-credentials";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,11 +35,13 @@ pub trait CredentialStore: Send + Sync + 'static {
     fn read(&self) -> Result<String, CredentialError>;
 }
 
-/// The real one. Only ever called from a user action.
+/// The real one on macOS. Only ever called from a user action.
+#[cfg(target_os = "macos")]
 pub struct SecurityToolStore {
     account: String,
 }
 
+#[cfg(target_os = "macos")]
 impl SecurityToolStore {
     pub fn new(account: impl Into<String>) -> Self {
         Self {
@@ -48,6 +54,7 @@ impl SecurityToolStore {
     }
 }
 
+#[cfg(target_os = "macos")]
 impl CredentialStore for SecurityToolStore {
     fn read(&self) -> Result<String, CredentialError> {
         let output = Command::new("/usr/bin/security")
@@ -73,6 +80,50 @@ impl CredentialStore for SecurityToolStore {
         }
     }
 }
+
+/// The real one on Windows and Linux: the file Claude Code itself keeps its
+/// OAuth in, `~/.claude/.credentials.json`. The same JSON the Keychain blob
+/// carries, so the same `access_token` reads it. No dialog stands in front of
+/// a file, which is why `keychain_granted` (6.4) is set by the first read
+/// that succeeds. tech.md 6.27.
+pub struct ClaudeFileStore {
+    path: PathBuf,
+}
+
+impl ClaudeFileStore {
+    pub fn at(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn for_current_user() -> Self {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        Self::at(home.join(".claude").join(".credentials.json"))
+    }
+}
+
+impl CredentialStore for ClaudeFileStore {
+    fn read(&self) -> Result<String, CredentialError> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(raw) => Ok(raw),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                Err(CredentialError::NotLoggedIn)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                Err(CredentialError::Denied)
+            }
+            Err(_) => Err(CredentialError::Transient),
+        }
+    }
+}
+
+/// The store the app uses on this platform. tech.md 6.27.
+#[cfg(target_os = "macos")]
+pub type SystemCredentialStore = SecurityToolStore;
+#[cfg(not(target_os = "macos"))]
+pub type SystemCredentialStore = ClaudeFileStore;
 
 /// Fake store backed by a temp file. Never raises a Keychain dialog, so tests
 /// and dev sessions never wait on one. tech.md section 7.
@@ -163,6 +214,28 @@ mod tests {
     }
 
     /// Each documented exit code has to reach the UI as its own reason.
+    /// The file Claude Code keeps on Windows and Linux reads like the Keychain
+    /// blob, and a missing file is "never logged in", not a fault.
+    #[test]
+    fn the_file_store_reads_the_blob_and_names_a_missing_one() {
+        let dir = temp_dir();
+        std::fs::create_dir_all(&dir).expect("made the dir");
+        let path = dir.join(".credentials.json");
+        std::fs::write(
+            &path,
+            r#"{"claudeAiOauth":{"accessToken":"sk-ant-oat01-x","expiresAt":1}}"#,
+        )
+        .expect("wrote");
+        let store = ClaudeFileStore::at(path.clone());
+        assert_eq!(
+            access_token(&store.read().expect("read")),
+            Some("sk-ant-oat01-x".to_string())
+        );
+
+        std::fs::remove_file(&path).expect("removed");
+        assert!(matches!(store.read(), Err(CredentialError::NotLoggedIn)));
+    }
+
     #[test]
     fn every_failure_mode_is_reachable() {
         for outcome in [

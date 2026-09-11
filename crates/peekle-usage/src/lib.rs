@@ -9,7 +9,11 @@ pub mod credentials;
 pub mod fake;
 
 pub use account::{AccountUsage, TIMEOUT as POLL_TIMEOUT};
-pub use credentials::{CredentialError, CredentialStore, FakeCredentialStore, SecurityToolStore};
+#[cfg(target_os = "macos")]
+pub use credentials::SecurityToolStore;
+pub use credentials::{
+    ClaudeFileStore, CredentialError, CredentialStore, FakeCredentialStore, SystemCredentialStore,
+};
 pub use fake::FakeUsage;
 
 use peekle_core::types::UsageSnapshot;
