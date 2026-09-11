@@ -40,7 +40,8 @@ platform asks once:
 
 What differs away from macOS is listed in tech.md 6.27, and the short of it:
 the island lives on the primary monitor only, takes screenshots from any of
-them, and has no notch to grow out of, so at rest it is a floating pill. The
+them, and has no notch to grow out of, so it floats off the top edge the way
+the iPhone island does: a capsule at rest, a rounded panel when open. The
 native behaviour on Windows and Linux has not been walked by hand yet — the
 builds compile and bundle on CI, and the first live run on each is the manual
 checklist of tech.md 15.
