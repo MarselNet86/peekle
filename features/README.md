@@ -49,7 +49,7 @@ Screenshots and clips live in [`shots/`](shots).
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
 
-## v80.14 — A long message of your own folds
+## v80.15 — A long message of your own folds
 
 2026-09-11
 
@@ -57,10 +57,13 @@ Half a screen of your own words pushed the answer you were waiting for off the
 island, and the bubble simply ran out at the bottom edge of the window, which
 reads as a message that lost its end.
 
-A message of your own taller than six lines now shows six, fades out instead of
-stopping, and carries **Show more**. The whole of it is one press away, and
-**Show less** puts it back. An answer never folds: reading it is what the
-window is for.
+A message of your own taller than six lines now shows six and fades out instead
+of stopping. Pressing the message opens it; pressing it again puts it back.
+There is no word under it saying so — the fade already says there is more, and
+a label in a window opened to read something else gets read before the thing.
+Selecting the text is not pressing it, so a message can be copied without
+folding under the hand. An answer never folds: reading it is what the window is
+for.
 
 Whether it folds is decided by what was drawn, not by how many characters there
 are — a message that fits offers nothing, at any width or font size.

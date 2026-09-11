@@ -460,13 +460,47 @@ test.describe('the island route', () => {
     }));
     expect(folded).toEqual({ hidden: true, faded: true });
 
-    await page.getByRole('button', { name: 'Show more' }).click();
+    // The message is the control: nothing is written under it, and pressing
+    // the words themselves opens them.
+    await expect(page.getByText('Show more')).toHaveCount(0);
+    const bubble = page.locator(".line[data-kind='User'] .bubble");
+    await expect(bubble).toHaveAttribute('aria-expanded', 'false');
+
+    await bubble.click();
     await expect(body).not.toHaveClass(/folded/);
+    await expect(bubble).toHaveAttribute('aria-expanded', 'true');
     const whole = await body.evaluate((node) => node.scrollHeight <= node.clientHeight + 4);
     expect(whole).toBe(true);
 
     // And it folds back, so one long message cannot own the window.
-    await page.getByRole('button', { name: 'Show less' }).click();
+    await bubble.click();
+    await expect(body).toHaveClass(/folded/);
+  });
+
+  /// Selecting the words is not opening them. Messages are selectable on
+  /// purpose, and folding what somebody just highlighted under their hand is
+  /// the kind of thing that teaches people not to touch. tech.md 6.12 and 9.
+  test('taking a copy of a folded message does not fold it', async ({ page }) => {
+    const long = Array.from(
+      { length: 12 },
+      (_, line) => `строка ${line + 1} этой длинной реплики`,
+    ).join('\n');
+    await stub(page, [observed([say('u1', long, 1_789_000_000_000)])]);
+    await page.goto(ROUTE);
+
+    const body = page.locator(".line[data-kind='User'] .body");
+    await expect(body).toHaveClass(/folded/);
+
+    // A drag across the first line, which ends in a click on the message.
+    const first = (await body.boundingBox())!;
+    await page.mouse.move(first.x + 12, first.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(first.x + 140, first.y + 8, { steps: 8 });
+    await page.mouse.up();
+
+    expect(
+      await page.evaluate(() => window.getSelection()?.toString().length ?? 0),
+    ).toBeGreaterThan(0);
     await expect(body).toHaveClass(/folded/);
   });
 
@@ -477,7 +511,10 @@ test.describe('the island route', () => {
     await page.goto(ROUTE);
 
     await expect(page.getByText('go on')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+    await expect(page.locator(".line[data-kind='User'] .bubble")).not.toHaveAttribute(
+      'aria-expanded',
+      /.*/,
+    );
   });
 
   /// An answer is never folded, however long: reading it is what the window
@@ -502,7 +539,10 @@ test.describe('the island route', () => {
     await page.goto(ROUTE);
 
     await expect(page.locator(".line[data-kind='Assistant'] .body")).not.toHaveClass(/folded/);
-    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+    await expect(page.locator(".line[data-kind='Assistant'] .bubble")).not.toHaveAttribute(
+      'aria-expanded',
+      /.*/,
+    );
   });
 
   /// The CLI asks whether a folder is trusted on its own screen, before it
