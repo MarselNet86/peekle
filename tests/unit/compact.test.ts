@@ -136,23 +136,34 @@ describe('RestMark on a compact', () => {
     await vi.waitFor(() => expect(mark).toHaveClass('turned'));
   });
 
-  /// The hop is the strokes' own move. `working` draws the spinner instead
-  /// and `waiting` the question mark, and each of those swaps announces
-  /// itself: asking for a hop behind a glyph that is not on screen is a
-  /// promise the mark cannot keep. tech.md 6.7.
-  it('asks for no hop into a state that draws no strokes', async () => {
+  /// The hop is the strokes' own move. `working` swaps them for the spinner,
+  /// and that swap announces itself: asking for a hop behind a glyph that is
+  /// not on screen is a promise the mark cannot keep. tech.md 6.7.
+  it('asks for no hop into the one state that draws no strokes', async () => {
     const { container, rerender } = render(RestMark, {
       props: { status: 'idle' as const, pct: 12, onopen: () => {} },
     });
     const mark = container.querySelector('.mark');
 
-    for (const status of ['working', 'waiting'] as const) {
-      await rerender({ status, pct: 12, onopen: () => {} });
-      await new Promise((settle) => requestAnimationFrame(() => settle(null)));
-      expect(mark, status).not.toHaveClass('turned');
-      await rerender({ status: 'idle' as const, pct: 12, onopen: () => {} });
-      await vi.waitFor(() => expect(mark).toHaveClass('turned'));
-    }
+    await rerender({ status: 'working' as const, pct: 12, onopen: () => {} });
+    await new Promise((settle) => requestAnimationFrame(() => settle(null)));
+    expect(mark).not.toHaveClass('turned');
+
+    await rerender({ status: 'idle' as const, pct: 12, onopen: () => {} });
+    await vi.waitFor(() => expect(mark).toHaveClass('turned'));
+  });
+
+  /// Waiting wears the strokes again since v80.23, so it hops like every
+  /// other state that does: a colour nobody saw change is a colour that was
+  /// always that way. tech.md 6.7.
+  it('hops into a standing question, which draws the strokes in purple', async () => {
+    const { container, rerender } = render(RestMark, {
+      props: { status: 'idle' as const, pct: 12, onopen: () => {} },
+    });
+    const mark = container.querySelector('.mark');
+
+    await rerender({ status: 'waiting' as const, pct: 12, onopen: () => {} });
+    await vi.waitFor(() => expect(mark).toHaveClass('turned'));
   });
 });
 

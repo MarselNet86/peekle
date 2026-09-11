@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9               |
 | v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9    |
 | v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9         |
 | v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9               |
@@ -54,6 +55,31 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.23 — The waiting mark wears the sign again
+
+2026-09-11
+
+![The mark while somebody is waited on](shots/waiting-mark.png)
+
+From v80.3 the resting mark swapped the product's own `//` for a pixel
+question mark while the agent waited on a person. The argument was that `//`
+means Peekle, so colouring it purple makes the product's sign say "you are
+being waited on" instead.
+
+The argument cost more than it bought. The moment somebody is waited on is
+exactly the moment they look at the notch, and that was the one moment Peekle
+stopped being visible as Peekle: the sign left the only place it exists. And
+the states were never hard to tell apart anyway — colour reads across a screen
+faster than an eight pixel shape does.
+
+So all four states draw the same two strokes now, and only the colour and the
+motion change: rest is green and still, work swaps them for the console
+spinner, waiting is purple and breathes, a compact is orange and waves. The
+breath stays with waiting and the wave with the compact, or the two would
+differ by colour alone. Waiting joins the states that hop when they change,
+because the strokes are on screen again and a colour nobody saw change is a
+colour that was always that way.
 
 ## v80.21 — The pill is a way in
 
