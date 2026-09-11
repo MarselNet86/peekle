@@ -51,6 +51,24 @@
   let body = $state<HTMLElement | null>(null);
   let folds = $state(false);
   let unfolded = $state(false);
+
+  /** The message itself is the control: pressing it opens and closes it.
+   * Nothing is written under it -- a word saying `Show more` is one more thing
+   * to read in a window where the whole point is reading something else, and
+   * the fade already says there is more. tech.md 6.12. */
+  function toggleFold() {
+    // A press that ends a drag across the text is somebody copying, not
+    // somebody opening. Messages are selectable on purpose (9), and folding
+    // the thing they just selected under them would be maddening.
+    if (!window.getSelection()?.isCollapsed) return;
+    unfolded = !unfolded;
+  }
+
+  function foldKey(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    unfolded = !unfolded;
+  }
   $effect(() => {
     // Read once the words are on screen, and re-read when they change: a fold
     // is a fact about what was drawn, not a guess from the length of a string.
@@ -73,7 +91,20 @@
   <div class="notice"><span>{entry.text}</span></div>
 {:else if spoken}
   <div class="line" data-kind={entry.kind} data-state={entry.state}>
-    <div class="bubble">
+    <!-- It is a button exactly when it folds, and the checker cannot see a
+         role decided at runtime: a message that fits is a message, and one
+         that does not is the control that opens itself. tech.md 6.12. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div
+      class="bubble"
+      class:pressable={folds}
+      role={folds ? 'button' : undefined}
+      tabindex={folds ? 0 : undefined}
+      aria-expanded={folds ? unfolded : undefined}
+      aria-label={folds ? (unfolded ? 'Fold this message' : 'Open this message') : undefined}
+      onclick={folds ? toggleFold : undefined}
+      onkeydown={folds ? foldKey : undefined}
+    >
       <div class="body" class:folded={folds && !unfolded} style:--fold={FOLD_AT} bind:this={body}>
         {#if shown.length > 0}
           <div class="shots">
@@ -105,13 +136,6 @@
           {/if}
         {/each}
       </div>
-      <!-- The whole of it is one press away, and the press says which way it
-           goes rather than only that it can be pressed. tech.md 6.12. -->
-      {#if folds}
-        <button class="unfold" type="button" onclick={() => (unfolded = !unfolded)}>
-          {unfolded ? 'Show less' : 'Show more'}
-        </button>
-      {/if}
     </div>
   </div>
 {:else}
@@ -170,21 +194,10 @@
     mask-image: linear-gradient(to bottom, #000 calc(100% - 42px), transparent);
   }
 
-  .unfold {
-    display: block;
-    margin-top: 5px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: inherit;
-    opacity: 0.7;
-    font: inherit;
-    font-size: 11px;
+  /* The message is the control, so it says so the only way a message can
+     without growing a word: the pointer. tech.md 6.12. */
+  .bubble.pressable {
     cursor: pointer;
-  }
-
-  .unfold:hover {
-    opacity: 1;
   }
 
   .bubble {
