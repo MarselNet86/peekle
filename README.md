@@ -1,6 +1,7 @@
 # Peekle
 
-An overlay on top of Claude Code for macOS.
+An overlay on top of Claude Code. macOS is the home platform; Windows and
+Linux run the same island through a platform layer (tech.md 6.27).
 
 Start an agent and walk away. When it finishes a turn or asks for permission,
 the notch of the MacBook grows, shows what the agent said, takes your answer,
@@ -12,6 +13,37 @@ separate prompt panel.
 
 Contracts, types and the roadmap live in `tech.md`. It is the source of truth;
 this file only explains how to run what exists today.
+
+## Installation
+
+| Platform          | Download                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS (universal) | [Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg)                                                              |
+| Windows           | [Peekle-win-x64-setup.exe](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-win-x64-setup.exe)                                                              |
+| Linux             | [Peekle-linux-x86_64.AppImage](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-linux-x86_64.AppImage) · [Peekle-linux-amd64.deb](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-linux-amd64.deb) |
+
+Every link points at the newest release, and the names carry no version, so a
+link written down once keeps working. Each build comes off a GitHub runner of
+that platform. `Peekle-win-x64.msi`, for a managed rollout, sits beside the
+setup on the release page.
+
+Nothing is code-signed by a paid certificate, on any of the three, so each
+platform asks once:
+
+- **macOS**: the bundle carries an ad-hoc signature. Open it the first time
+  with right-click → Open. macOS 13 or newer.
+- **Windows**: SmartScreen says unknown publisher; More info → Run anyway. The
+  installer pulls WebView2 if the machine has none.
+- **Linux**: `chmod +x Peekle-linux-x86_64.AppImage` and run it, or
+  `sudo apt install ./Peekle-linux-amd64.deb`. Needs webkit2gtk 4.1, so
+  Ubuntu 22.04 or newer and equivalents.
+
+What differs away from macOS is listed in tech.md 6.27, and the short of it:
+the island lives on the primary monitor only, takes screenshots from any of
+them, and has no notch to grow out of, so at rest it is a floating pill. The
+native behaviour on Windows and Linux has not been walked by hand yet — the
+builds compile and bundle on CI, and the first live run on each is the manual
+checklist of tech.md 15.
 
 ## Status
 
@@ -27,11 +59,13 @@ Stage 1 is in and most of stage 2 with it.
 | CLI                  | init, uninstall, doctor, status. `off` is not built            |
 | Usage bars           | Working from the account, dashes with a reason when it cannot  |
 | Screenshots          | ⌃⇧⌘4 offers to attach the shot to a session Peekle started     |
-| Packaging, first run | Not started, S10 and S11                                       |
+| Packaging            | Installers for all three platforms, built by CI on a tag        |
+| First run            | Not started, S11                                                |
 
 ## Requirements
 
-macOS 13+, Node 22.13+, pnpm, Rust from `rust-toolchain.toml`.
+To build it: macOS 13+, Windows 10+ or a Linux with webkit2gtk 4.1, plus
+Node 22.13+, pnpm and Rust from `rust-toolchain.toml`.
 
 ```sh
 pnpm install
@@ -113,8 +147,18 @@ has not been built by any slice yet. Until then the toggle is the hotkey.
 
 ## Config
 
-`~/Library/Application Support/peekle/config.toml`, mode 0600. Written by
-`peekle init`, read at startup. Every key and default is in tech.md 6.8.
+Written by `peekle init`, read at startup. Every key and default is in
+tech.md 6.8.
+
+```
+macOS    ~/Library/Application Support/peekle/config.toml   mode 0600
+Linux    ~/.config/peekle/config.toml                       mode 0600
+Windows  %APPDATA%\peekle\config\config.toml
+```
+
+The file holds the hook token, so on macOS and Linux it is written 0600.
+Windows has no such mode; the file sits in the user's profile, whose ACL
+already admits nobody else. tech.md 6.27.
 
 ## Layout
 
@@ -123,6 +167,7 @@ src/lib/ui/          primitives, nothing else draws
 src/lib/logic/       pure TypeScript, property tested
 src/lib/bridge/      the only module that touches @tauri-apps/api
 src-tauri/src/       windows, panels, commands, state
+src-tauri/src/platform/  every line that knows which OS this is
 crates/peekle-core   types, config, pending registry, label classifier
 crates/peekle-server axum router for the hook endpoints
 fixtures/hooks/      captured payloads, never hand written
