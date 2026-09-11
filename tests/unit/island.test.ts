@@ -9,7 +9,7 @@ import { createRawSnippet } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
 import Shape from '$lib/ui/Shape.svelte';
-import { WINDOW } from '$lib/logic/shape';
+import { FLOAT_TOP, WINDOW } from '$lib/logic/shape';
 import type { IslandView } from '$lib/types/generated/IslandView';
 
 const notch = { width: 200, height: 32 };
@@ -82,6 +82,19 @@ describe('Shape', () => {
 
     await rerender({ view: 'Pill' as IslandView, notch: { width: 200, height: 0 } });
     expect(topCornersAreSquare(shapeOf(container))).toBe(false);
+  });
+});
+
+describe('Shape off the edge', () => {
+  /// Under a notch the black continues the cutout and sits flush with the
+  /// edge; without one the shape floats, the way the iPhone island does.
+  /// tech.md 6.7.
+  it('sits flush under a notch and off the edge without one', async () => {
+    const { container, rerender } = render(Shape, { props: { view: 'Pill' as IslandView, notch } });
+    expect(parseFloat(shapeOf(container).style.marginTop)).toBe(0);
+
+    await rerender({ view: 'Pill' as IslandView, notch: { width: 200, height: 0 } });
+    expect(parseFloat(shapeOf(container).style.marginTop)).toBe(FLOAT_TOP);
   });
 });
 

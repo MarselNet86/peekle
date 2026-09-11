@@ -641,14 +641,18 @@
     let still = 0;
 
     const sample = () => {
-      const size = { width: box.offsetWidth, height: box.offsetHeight };
+      // The whole rectangle, offset included: a shape floating off the edge
+      // (6.7) is where it is drawn, not where a rectangle pinned to the top
+      // would put it, and Rust builds nothing of its own. tech.md 6.5.
+      const rect = box.getBoundingClientRect();
+      const size = { width: rect.width, height: rect.height };
       still = size.width === last.width && size.height === last.height ? still + 1 : 0;
       last = size;
 
       // Two identical frames mean the spring has come to rest.
       if (still >= 2) {
         frame = 0;
-        commands.islandBounds(size.width, size.height);
+        commands.islandBounds({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
         return;
       }
       frame = requestAnimationFrame(sample);

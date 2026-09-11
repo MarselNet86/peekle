@@ -1838,9 +1838,15 @@ fn transcript_of(card: Option<&peekle_core::types::SessionCard>) -> Option<std::
 /// where a resting island takes its click and what an open one has to be walked
 /// away from. tech.md 6.7.
 #[tauri::command]
-pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
-    tracing::debug!(width, height, "island reported its bounds");
-    if state.set_shape_bounds((width, height)) {
+pub fn island_bounds(
+    state: State<'_, Arc<AppState>>,
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+) {
+    tracing::debug!(left, top, width, height, "island reported its bounds");
+    if state.set_shape_bounds(peekle_core::island::Rect::new(left, top, width, height)) {
         // A shape that shrank leaves a hand that never moved outside itself,
         // and that is the island moving rather than the user walking away.
         // Clearing the clock is not enough: the next one runs out just as

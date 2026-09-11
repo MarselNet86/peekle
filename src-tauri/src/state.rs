@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use peekle_core::config::Config;
+use peekle_core::island::Rect;
 use peekle_core::sessions::SessionOverrides;
 use peekle_core::shots::{OfferSlot, Pasteboard};
 use peekle_core::types::{
@@ -84,7 +85,7 @@ pub struct AppState {
     /// Collapsed that rectangle is the resting mark, the one part of a resting
     /// island that takes a click; open it is what the pointer has to leave
     /// before the island puts itself away. tech.md 6.7.
-    shape_bounds: Mutex<Option<(f64, f64)>>,
+    shape_bounds: Mutex<Option<Rect>>,
     /// Whether the pointer is currently inside the resting mark. Held so the
     /// tracker touches AppKit on the crossing only, not on every tick.
     over_rest: AtomicBool,
@@ -257,12 +258,12 @@ impl AppState {
         true
     }
 
-    pub fn shape_bounds(&self) -> Option<(f64, f64)> {
+    pub fn shape_bounds(&self) -> Option<Rect> {
         *self.lock(&self.shape_bounds)
     }
 
     /// Records the measured shape and reports whether it moved. tech.md 6.7.
-    pub fn set_shape_bounds(&self, bounds: (f64, f64)) -> bool {
+    pub fn set_shape_bounds(&self, bounds: Rect) -> bool {
         self.lock(&self.shape_bounds).replace(bounds) != Some(bounds)
     }
 
@@ -1083,8 +1084,8 @@ mod tests {
         let state = state();
         assert_eq!(state.shape_bounds(), None);
 
-        assert!(state.set_shape_bounds((185.0, 47.0)));
-        assert_eq!(state.shape_bounds(), Some((185.0, 47.0)));
+        assert!(state.set_shape_bounds(Rect::new(0.0, 0.0, 185.0, 47.0)));
+        assert_eq!(state.shape_bounds(), Some(Rect::new(0.0, 0.0, 185.0, 47.0)));
     }
 
     /// S17 follow up. The end of an observed turn is one line in the notch,
@@ -1142,13 +1143,16 @@ mod tests {
     fn only_a_shape_that_moved_reads_as_movement() {
         let state = state();
 
-        assert!(state.set_shape_bounds((420.0, 180.0)), "the first is news");
         assert!(
-            !state.set_shape_bounds((420.0, 180.0)),
+            state.set_shape_bounds(Rect::new(0.0, 0.0, 420.0, 180.0)),
+            "the first is news"
+        );
+        assert!(
+            !state.set_shape_bounds(Rect::new(0.0, 0.0, 420.0, 180.0)),
             "the same size is not"
         );
         assert!(
-            state.set_shape_bounds((420.0, 146.0)),
+            state.set_shape_bounds(Rect::new(0.0, 0.0, 420.0, 146.0)),
             "a row of attachments gone is"
         );
     }

@@ -45,36 +45,38 @@ impl Rect {
     }
 }
 
-/// Where the shape sits on screen, given the window frame and the bounds the
-/// webview reported for it.
+/// Where the shape sits on screen, given the window frame and the rectangle
+/// the webview reported for it, in physical pixels relative to the window.
 ///
-/// The shape is centred horizontally in the window and flush with its top
-/// edge, which is what the route lays out and what section 6.7 fixes. Collapsed
-/// this is the resting mark, the one place a resting island takes a click; open
-/// it is the area the pointer has to leave before the island puts itself away.
-/// Bounds that never arrived, or that arrived unusable, yield nothing rather
-/// than a guessed rectangle: a wrong guess eats clicks next to the mark, and
-/// that is worse than a mark that is not clickable yet.
-pub fn shape_rect(window: Rect, bounds: (f64, f64)) -> Option<Rect> {
-    if !window.is_sane() {
+/// The webview measures the whole rectangle -- offset included -- and this
+/// only lays it over the frame. Rust builds nothing of its own: before v82 it
+/// centred the shape and pinned it to the top, which held exactly until the
+/// first shape with an inset from the edge (tech.md 6.7), whose hotspot would
+/// have stood ten pixels above the shape itself. Collapsed this is the resting
+/// mark, the one place a resting island takes a click; open it is the area the
+/// pointer has to leave before the island puts itself away. Bounds that never
+/// arrived, or that arrived unusable, yield nothing rather than a guessed
+/// rectangle: a wrong guess eats clicks next to the mark, and that is worse
+/// than a mark that is not clickable yet.
+pub fn shape_rect(window: Rect, mark: Rect) -> Option<Rect> {
+    if !window.is_sane() || !mark.is_sane() {
         return None;
     }
-    let mark = Rect::new(0.0, 0.0, bounds.0, bounds.1);
-    if !mark.is_sane() {
+    if !mark.x.is_finite() || !mark.y.is_finite() || mark.x < 0.0 || mark.y < 0.0 {
         return None;
     }
 
-    // Clamped rather than rejected: a shape wider than the window is clipped by
+    // Clipped rather than rejected: a shape past the window's edge is cut by
     // the webview with no error, so the clickable part is the visible part.
-    let width = mark.width.min(window.width);
-    let height = mark.height.min(window.height);
+    let x = mark.x.min(window.width);
+    let y = mark.y.min(window.height);
+    let width = mark.width.min(window.width - x);
+    let height = mark.height.min(window.height - y);
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
 
-    Some(Rect::new(
-        window.x + (window.width - width) / 2.0,
-        window.y,
-        width,
-        height,
-    ))
+    Some(Rect::new(window.x + x, window.y + y, width, height))
 }
 
 #[cfg(test)]
@@ -89,30 +91,45 @@ mod tests {
     };
 
     #[test]
-    fn centres_the_mark_on_the_top_edge_of_the_window() {
-        let rect = shape_rect(WINDOW, (200.0, 50.0)).expect("sane bounds give a rect");
-        assert_eq!(rect, Rect::new(100.0 + 260.0, 0.0, 200.0, 50.0));
+    fn lays_the_reported_rectangle_over_the_window_frame() {
+        let rect = shape_rect(WINDOW, Rect::new(260.0, 0.0, 200.0, 50.0)).expect("sane");
+        assert_eq!(rect, Rect::new(360.0, 0.0, 200.0, 50.0));
+    }
+
+    /// A shape floating off the edge (tech.md 6.7) is where it was drawn, not
+    /// where a rectangle pinned to the top would put it.
+    #[test]
+    fn keeps_the_inset_the_webview_measured() {
+        let rect = shape_rect(WINDOW, Rect::new(294.0, 20.0, 132.0, 36.0)).expect("sane");
+        assert_eq!(rect, Rect::new(394.0, 20.0, 132.0, 36.0));
+        assert!(rect.contains((400.0, 30.0)));
+        assert!(!rect.contains((400.0, 10.0)));
     }
 
     /// The error path of S12: the webview has not reported yet, so there is no
     /// hotspot at all.
     #[test]
     fn bounds_that_never_arrived_give_no_hotspot() {
-        for bounds in [
-            (0.0, 0.0),
-            (200.0, 0.0),
-            (-1.0, 50.0),
-            (f64::NAN, 50.0),
-            (200.0, f64::INFINITY),
+        for mark in [
+            Rect::new(0.0, 0.0, 0.0, 0.0),
+            Rect::new(0.0, 0.0, 200.0, 0.0),
+            Rect::new(0.0, 0.0, -1.0, 50.0),
+            Rect::new(0.0, 0.0, f64::NAN, 50.0),
+            Rect::new(0.0, 0.0, 200.0, f64::INFINITY),
+            Rect::new(-5.0, 0.0, 200.0, 50.0),
+            Rect::new(f64::NAN, 0.0, 200.0, 50.0),
+            Rect::new(900.0, 0.0, 200.0, 50.0),
         ] {
-            assert_eq!(shape_rect(WINDOW, bounds), None, "{bounds:?}");
+            assert_eq!(shape_rect(WINDOW, mark), None, "{mark:?}");
         }
     }
 
     #[test]
-    fn a_shape_wider_than_the_window_is_clipped_to_what_is_visible() {
-        let rect = shape_rect(WINDOW, (9000.0, 9000.0)).expect("clamped, not rejected");
+    fn a_shape_past_the_window_is_clipped_to_what_is_visible() {
+        let rect = shape_rect(WINDOW, Rect::new(0.0, 0.0, 9000.0, 9000.0)).expect("clamped");
         assert_eq!(rect, Rect::new(100.0, 0.0, 720.0, 560.0));
+        let rect = shape_rect(WINDOW, Rect::new(700.0, 550.0, 100.0, 100.0)).expect("clamped");
+        assert_eq!(rect, Rect::new(800.0, 550.0, 20.0, 10.0));
     }
 
     #[test]

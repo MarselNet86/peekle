@@ -8,10 +8,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   FALLBACK_NOTCH,
+  FLOAT_TOP,
   readNotch,
-  REST_PILL,
+  REST_FLOAT,
   REST_SIDE,
   shapeBounds,
+  shapeInset,
   WINDOW,
 } from '$lib/logic/shape';
 import type { IslandView } from '$lib/types/generated/IslandView';
@@ -124,13 +126,39 @@ describe('a display with no notch', () => {
     expect(without.radius).toBeGreaterThan(0);
   });
 
-  it('rests as a small pill rather than a bar across the menu bar', () => {
+  it('rests as the capsule rather than a bar across the menu bar', () => {
     const bounds = shapeBounds('Collapsed', { width: 185, height: 0 });
     expect(bounds).toEqual({
-      width: REST_PILL.width,
-      height: REST_PILL.height,
-      radius: REST_PILL.height / 2,
+      width: REST_FLOAT.width,
+      height: REST_FLOAT.height,
+      radius: REST_FLOAT.height / 2,
     });
+  });
+
+  /// The iPhone island: off the edge, and round at every corner. A shape that
+  /// grows out of nothing has no edge to be cut by. tech.md 6.7.
+  it('stands off the top edge, and only there', () => {
+    expect(shapeInset({ width: 185, height: 0 })).toBe(FLOAT_TOP);
+    expect(shapeInset({ width: 185, height: 33 })).toBe(0);
+    expect(shapeInset(FALLBACK_NOTCH)).toBe(FLOAT_TOP);
+  });
+
+  it('rounds the short views at their ends, the way the island expands', () => {
+    const notch = { width: 185, height: 0 };
+    for (const view of ['Collapsed', 'Pill', 'Ask'] as IslandView[]) {
+      const bounds = shapeBounds(view, notch);
+      expect(bounds.radius).toBeCloseTo(bounds.height / 2);
+    }
+    const deep = shapeBounds('Pill', notch, false, false, true);
+    expect(deep.radius).toBeCloseTo(deep.height / 2);
+  });
+
+  it('rounds the tall views wider than under a notch', () => {
+    for (const view of ['Sessions', { Session: 'a' }] as IslandView[]) {
+      const floating = shapeBounds(view, { width: 185, height: 0 });
+      const hugging = shapeBounds(view, { width: 185, height: 33 });
+      expect(floating.radius).toBeGreaterThan(hugging.radius);
+    }
   });
 
   it('keeps every open view inside the window on any screen', () => {
