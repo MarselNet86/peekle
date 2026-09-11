@@ -1,11 +1,12 @@
 <script lang="ts">
   /**
-   * The row inside the field's capsule: the context ring, the model with its
-   * effort, whether it thinks, and the mode. The order is the original's own,
-   * and so is the reasoning behind it — the ring is furthest from the send
-   * button because it acts on what is already spent, and the mode is nearest
-   * because it decides what the next press is allowed to do.
-   * tech.md 6.15, 6.19 and 6.20.
+   * The row inside the field's capsule: the model with its effort, whether it
+   * thinks, and — at the right edge, beside the send button — the context ring
+   * and the mode. The right edge is what decides the next turn: the ring
+   * compacts, the mode says what the press is allowed to do, and both are
+   * reached for before sending rather than after. What the row starts with is
+   * not here at all: the plus that attaches to the message is the composer's
+   * (6.25). tech.md 6.15, 6.19 and 6.20.
    */
   import { modeIcon, modeLabel, modeOptions, noteTitle, MODE_NOTE } from '$lib/logic/agent';
   import ContextRing from '$lib/ui/ContextRing.svelte';
@@ -91,15 +92,6 @@
 
 {#if shown}
   <div class="agent-bar">
-    <!-- Furthest from send: it acts on what is already spent. tech.md 6.15. -->
-    <ContextRing
-      pct={measured ? shown.context_pct : null}
-      title={contextTitle}
-      live={live && measured}
-      pending={pendingCompact}
-      onclick={() => (live ? oncompact?.() : onnote?.())}
-    />
-
     <ModelBlock
       agent={shown}
       {models}
@@ -126,6 +118,17 @@
     />
 
     <span class="gap"></span>
+
+    <!-- Beside the mode rather than at the far end of the row: what it shows
+         is about the window already spent, but what it does is a compact,
+         which is preparing the next turn. tech.md 6.15. -->
+    <ContextRing
+      pct={measured ? shown.context_pct : null}
+      title={contextTitle}
+      live={live && measured}
+      pending={pendingCompact}
+      onclick={() => (live ? oncompact?.() : onnote?.())}
+    />
 
     <!-- Nearest the send button, because it decides what pressing it will be
          allowed to do. tech.md 6.19. -->

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Bug, Settings, X } from '@lucide/svelte';
+  import { ArrowLeft, Bug, Plus, Settings, X } from '@lucide/svelte';
 
   let {
     name,
@@ -11,7 +11,7 @@
     /** Which sign it wears. The signs come from the icon set, not from hand
      * drawn paths: a gear drawn by hand comes out a sun, which is what the
      * first cut of this did. tech.md 9. */
-    name: 'settings' | 'back' | 'close' | 'bug';
+    name: 'settings' | 'back' | 'close' | 'bug' | 'plus';
     /** What it does, for the pointer and for a reader who sees no icon. */
     title: string;
     /** One line, raised under the button while the pointer is on it or the
@@ -26,7 +26,7 @@
     onclick?: () => void;
   } = $props();
 
-  const SIGNS = { settings: Settings, back: ArrowLeft, close: X, bug: Bug };
+  const SIGNS = { settings: Settings, back: ArrowLeft, close: X, bug: Bug, plus: Plus };
   const Sign = $derived(SIGNS[name]);
 
   const id = $props.id();

@@ -307,6 +307,22 @@ mod tests {
         }
     }
 
+    /// A file chosen from disk travels the same way a screenshot does, and its
+    /// name is the user's rather than a ulid: spaces, dots and unicode all
+    /// belong in it. Nothing here escapes anything -- the line is written into
+    /// the TUI's field as text, not into a shell. tech.md 6.25.
+    #[test]
+    fn a_file_from_disk_takes_its_own_line_whatever_it_is_called() {
+        let files = vec![
+            "/Users/dev/Documents/my report.pdf".to_string(),
+            "/Users/dev/заметки 2026.md".to_string(),
+        ];
+        assert_eq!(
+            compose("read both of these", &files),
+            "/Users/dev/Documents/my report.pdf\n/Users/dev/заметки 2026.md\nread both of these"
+        );
+    }
+
     #[test]
     fn an_offer_is_settled_exactly_once() {
         let slot = OfferSlot::new();

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { blocks } from '$lib/logic/markdown';
   import { FOLD_AT } from '$lib/logic/feed';
+  import { fileLines } from '$lib/logic/files';
   import { shotLines, shotName } from '$lib/logic/shots';
+  import FileBlock from './FileBlock.svelte';
   import ShotBlock from './ShotBlock.svelte';
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 
@@ -32,10 +34,21 @@
   // reply has to show what actually went to the agent.
   let broken = $state<string[]>([]);
   const shown = $derived(shotSrc ? carried.shots.filter((path) => !broken.includes(path)) : []);
+  // And what it carried from disk. A file has no picture and nothing to open:
+  // the block says which file, and the path it says it by is the line that
+  // went to the agent. tech.md 6.25.
+  //
+  // A reply of one's own and never an answer. Only a person attaches; an agent
+  // that puts a bare path on a line is naming a file it touched, which is a
+  // word about a file and not a file, and drawing it as one would take the
+  // path out of an answer that was written to carry it.
+  const withFiles = $derived(
+    entry.kind === 'User' ? fileLines(carried.said) : { files: [], said: carried.said },
+  );
   // Whatever could not be drawn stays a line of the message, so nothing the
   // agent received disappears from the reply that sent it.
   const said = $derived(
-    [...carried.shots.filter((path) => !shown.includes(path)), carried.said]
+    [...carried.shots.filter((path) => !shown.includes(path)), withFiles.said]
       .filter((line) => line !== '')
       .join('\n'),
   );
@@ -106,7 +119,7 @@
       onkeydown={folds ? foldKey : undefined}
     >
       <div class="body" class:folded={folds && !unfolded} style:--fold={FOLD_AT} bind:this={body}>
-        {#if shown.length > 0}
+        {#if shown.length > 0 || withFiles.files.length > 0}
           <div class="shots">
             {#each shown as path (path)}
               <ShotBlock
@@ -115,6 +128,9 @@
                 onopen={() => onopenshot?.(path)}
                 onbroken={() => (broken = [...broken, path])}
               />
+            {/each}
+            {#each withFiles.files as path (path)}
+              <FileBlock {path} />
             {/each}
           </div>
         {/if}

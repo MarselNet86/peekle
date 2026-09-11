@@ -56,6 +56,17 @@ export function looksLikeImagePaste(types: readonly string[]): boolean {
  */
 const SHOT_LINE = /^\/.*\/peekle\/shots\/[0-9A-HJKMNP-TV-Z]{26}\.png$/;
 
+/**
+ * Whether this path is one Peekle wrote for a screenshot.
+ *
+ * By shape, never by reading the disk, and used by more than the split below:
+ * the chip above the field asks it to know whether it has a picture to show,
+ * and the file rule (6.25) asks it to keep its hands off a screenshot.
+ */
+export function isShot(path: string): boolean {
+  return SHOT_LINE.test(path.trim());
+}
+
 /** A reply split into the shots it carries and the words that go with them. */
 export interface SaidWithShots {
   shots: string[];
@@ -71,7 +82,7 @@ export function shotLines(text: string): SaidWithShots {
   const words: string[] = [];
 
   for (const line of text.split('\n')) {
-    if (SHOT_LINE.test(line.trim())) {
+    if (isShot(line)) {
       shots.push(line.trim());
       continue;
     }

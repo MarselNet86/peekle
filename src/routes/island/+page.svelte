@@ -26,6 +26,7 @@
     type SettingsNote,
   } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
+  import { attachable, fileName, SPLIT_PATH_NOTE } from '$lib/logic/files';
   import { canPickFolder, CHOOSE, folderOptions } from '$lib/logic/folders';
   import { feedRows } from '$lib/logic/work';
   import {
@@ -40,7 +41,7 @@
     ASKED_TO_STOP,
     STOP_ASKED_NOTE,
   } from '$lib/logic/sessions';
-  import { shotName } from '$lib/logic/shots';
+  import { isShot, shotName } from '$lib/logic/shots';
   import { clickSettles, restStatus } from '$lib/logic/rest';
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
@@ -406,8 +407,36 @@
   function setReply(text: string) {
     if (openId) drafts[openId] = text;
   }
+  /**
+   * The plus at the start of the row: files from disk, attached by path.
+   *
+   * Nothing is copied anywhere -- the file is already on disk and Claude Code
+   * opens it itself once it is named -- so the path goes straight into the
+   * row above the field and travels with the message. tech.md 6.25.
+   */
+  async function attachFiles() {
+    if (!current) return;
+    const id = current.session.session_id;
+    let picked: string[] | null;
+    try {
+      picked = await commands.chooseFiles();
+    } catch (err) {
+      startError = String(err);
+      return;
+    }
+    // A cancel is not an event and says nothing. Neither is a route rendered
+    // with no Tauri under it, which answers null. tech.md 6.25.
+    if (!picked || picked.length === 0) return;
+    for (const path of picked.filter(attachable)) shots.attach(id, path);
+    startError = picked.every(attachable) ? null : SPLIT_PATH_NOTE;
+  }
+
   // What is waiting in the field of the session on screen. tech.md 6.13.
   const attached = $derived(current ? shots.of(current.session.session_id) : []);
+  // A screenshot has a picture to show and open; a file has a name and no
+  // more. One list, two kinds, told apart by the shape of the path.
+  // tech.md 6.13 and 6.25.
+  const chips = $derived(attached.map((path) => ({ path, shot: isShot(path) })));
   // Whether the island is being written in: the cursor in the field with the
   // panel key, or something unsent in it. Rust stops the leave clock and keeps
   // pills and other chats' turns off it while this holds. The cursor alone is
@@ -947,12 +976,13 @@
                  what they want done with it. tech.md 6.13. -->
             {#if attached.length > 0}
               <div class="attached">
-                {#each attached as path (path)}
+                {#each chips as chip (chip.path)}
                   <ShotChip
-                    name={shotName(path)}
-                    src={fileSrc(path)}
-                    onopen={() => openShot(path, true)}
-                    onremove={() => current && shots.remove(current.session.session_id, path)}
+                    name={chip.shot ? shotName(chip.path) : fileName(chip.path)}
+                    kind={chip.shot ? 'shot' : 'file'}
+                    src={chip.shot ? fileSrc(chip.path) : ''}
+                    onopen={chip.shot ? () => openShot(chip.path, true) : undefined}
+                    onremove={() => current && shots.remove(current.session.session_id, chip.path)}
                   />
                 {/each}
               </div>
@@ -1015,6 +1045,7 @@
               onstop={() => (askedToStop === null ? stop() : (rowNote = STOP_ASKED_NOTE))}
               onescape={() => island.dismiss()}
               onpasteimage={() => current && shots.paste(current.session.session_id)}
+              onattach={attachFiles}
             >
               <!-- In the capsule, under the text: what will answer what is
                    being typed belongs to the typing. tech.md 6.15. -->
