@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9              |
 | v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9   |
 | v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13  |
 | v80.15  | [A long message of your own folds](#v8015--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
@@ -50,6 +51,28 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.18 — An answer is drawn the way it was written
+
+2026-09-11
+
+The feed knew three pieces of Markdown: backticks, asterisks and fences. An
+agent also writes headings, lists and tables, and those arrived as the raw
+characters they are — a table came through as a wall of bars and dashes.
+
+Five kinds of block now. A heading is a line with weight and some air above it,
+not a size ladder: the bubble is 400 pixels wide and everything in it belongs
+to one conversation. A run of bullets or numbers is a list, nested by how far
+it was indented, and a numbered list that starts at three still starts at
+three. A table is a table, with its columns aligned the way the dashes said,
+its own horizontal scroller, and no heading band when the heading row was
+written empty.
+
+What is not recognised is left as the text it is, which is the only safe
+failure for a renderer of somebody else's words. A shell command full of pipes
+stays a shell command.
+
+[markdown-in-message.png](shots/markdown-in-message.png)
 
 ## v80.17 — A file goes with the message
 
