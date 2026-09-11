@@ -29,12 +29,20 @@ export function renameSession(sessionId: string, title: string) {
 }
 
 /**
- * Puts a session away in the island. The transcript is untouched: it belongs
- * to Claude Code, and the session stays where the user can still find it
- * there. tech.md 11.
+ * Deletes a chat for good: its process if the island runs it, its transcript
+ * into the macOS Trash, and its row.
+ *
+ * Answers with why it could not, or null when it did. The row stays and says
+ * so in that case: the one thing a delete may never do is look like it
+ * happened. tech.md 6.26.
  */
-export function hideSession(sessionId: string) {
-  commands.hideSession(sessionId);
+export async function deleteSession(sessionId: string): Promise<string | null> {
+  try {
+    await commands.deleteSession(sessionId);
+    return null;
+  } catch (err) {
+    return String(err);
+  }
 }
 
 /** The session id a view is showing, or undefined for every other view. */

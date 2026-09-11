@@ -9,7 +9,7 @@
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
   import {
-    hideSession,
+    deleteSession,
     openList,
     openSession,
     renameSession,
@@ -414,6 +414,17 @@
    * opens it itself once it is named -- so the path goes straight into the
    * row above the field and travels with the message. tech.md 6.25.
    */
+  /** Why the last deletion did not happen, and whose row said so. Cleared by
+   * the next attempt: one fault at a time, on the row it belongs to.
+   * tech.md 6.26. */
+  let deleteFault = $state<{ id: string; why: string } | null>(null);
+
+  async function remove(sessionId: string) {
+    deleteFault = null;
+    const why = await deleteSession(sessionId);
+    if (why) deleteFault = { id: sessionId, why };
+  }
+
   async function attachFiles() {
     if (!current) return;
     const id = current.session.session_id;
@@ -848,7 +859,8 @@
                   {card}
                   onopen={() => openSession(card.session.session_id)}
                   onrename={(title) => renameSession(card.session.session_id, title)}
-                  onhide={() => hideSession(card.session.session_id)}
+                  ondelete={() => remove(card.session.session_id)}
+                  fault={deleteFault?.id === card.session.session_id ? deleteFault.why : null}
                 />
               {/each}
               <!-- An empty list opened from the mark says so. Collapsing on the

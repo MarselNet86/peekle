@@ -873,6 +873,32 @@ test.describe('the island route', () => {
     await expect(bubble).toContainText('/Users/dev/peekle/src/lib/ui/FileBlock.svelte');
   });
 
+  /// The bin used to hide the row and nothing else: the chat went on being
+  /// offered by `claude --resume`, and a chat of ours went on running with no
+  /// row to stop it from. It asks once, then deletes. tech.md 6.26.
+  test('the bin asks once and then deletes the chat', async ({ page }) => {
+    await stub(page, [aimed('/Users/dev/peekle', 's1')], 'Sessions');
+    await page.goto(ROUTE);
+
+    const row = page.locator('.row').first();
+    await row.hover();
+    await row.getByRole('button', { name: 'Delete this chat' }).click();
+
+    await expect(page.getByText('Delete this chat and its transcript?')).toBeVisible();
+    const before = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string }[] }).__calls,
+    );
+    expect(before.filter((call) => call.command === 'delete_session')).toHaveLength(0);
+
+    await row.getByRole('button', { name: 'Delete this chat for good' }).click();
+    const after = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const sent = after.filter((call) => call.command === 'delete_session');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args).toEqual({ sessionId: 's1' });
+  });
+
   /// One field for all chats was the rule until v80.16, and a reply begun in
   /// one chat stood in the field of the next. tech.md 6.7.
   test('a draft belongs to the chat it was begun in', async ({ page }) => {

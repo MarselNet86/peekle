@@ -7,22 +7,64 @@
     now = Date.now(),
     onopen,
     onrename,
-    onhide,
+    ondelete,
+    fault = null,
   }: {
     card: SessionCard;
     now?: number;
     onopen?: () => void;
     onrename?: (title: string) => void;
-    onhide?: () => void;
+    /** Delete the chat: its process, its transcript and this row. Asked twice
+     * by the button itself. tech.md 6.26. */
+    ondelete?: () => void;
+    /** Why the last deletion did not happen. The row stays and says so: a
+     * press that changes nothing and explains nothing reads as a dead
+     * button. tech.md 9. */
+    fault?: string | null;
   } = $props();
 
   let editing = $state(false);
   let draft = $state('');
   let field: HTMLInputElement | undefined = $state();
 
+  /** How long the question stands before the row goes back to itself. Long
+   * enough to move the hand to the same button, short enough that a row left
+   * alone is never found asking. tech.md 6.26. */
+  const CONFIRM_FOR = 4000;
+
+  let asking = $state(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
   const age = $derived(ageLabel(card.updated_at, now));
 
+  function forget() {
+    clearTimeout(timer);
+    asking = false;
+  }
+
+  /**
+   * The trash asks with itself rather than with a dialog: the island has one
+   * shape (6.7), and a modal window for one row would be a second one. Two
+   * presses, because the first one ends a live process, and a slip of the
+   * mouse costs a turn. tech.md 6.26.
+   */
+  function press() {
+    if (asking) {
+      forget();
+      ondelete?.();
+      return;
+    }
+    asking = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => (asking = false), CONFIRM_FOR);
+  }
+
+  // The question belongs to the press, not to the row: a hand that went
+  // somewhere else has answered it. tech.md 6.26.
+  $effect(() => () => clearTimeout(timer));
+
   function edit() {
+    forget();
     draft = card.title;
     editing = true;
   }
@@ -55,7 +97,14 @@
   };
 </script>
 
-<div class="row" data-status={card.status} data-editing={editing}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="row"
+  data-status={card.status}
+  data-editing={editing}
+  class:asking
+  onpointerleave={forget}
+>
   <span class="dot"></span>
 
   {#if editing}
@@ -73,7 +122,15 @@
     <button class="open" onclick={() => onopen?.()}>
       <span class="body">
         <span class="title">{card.title || card.session.project}</span>
-        <span class="status">{card.session.project} · {STATUS[card.status] ?? card.status}</span>
+        <!-- What the row says about itself, unless something is about to
+             happen to it or something already failed to. tech.md 6.26. -->
+        {#if fault}
+          <span class="status bad">{fault}</span>
+        {:else if asking}
+          <span class="status warn">Delete this chat and its transcript?</span>
+        {:else}
+          <span class="status">{card.session.project} · {STATUS[card.status] ?? card.status}</span>
+        {/if}
       </span>
     </button>
 
@@ -90,7 +147,12 @@
           />
         </svg>
       </button>
-      <button class="tool" onclick={() => onhide?.()} aria-label="Remove this session">
+      <button
+        class="tool"
+        class:armed={asking}
+        onclick={press}
+        aria-label={asking ? 'Delete this chat for good' : 'Delete this chat'}
+      >
         <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true">
           <path
             d="M2.6 3.8h8.8M5.4 3.8V2.4h3.2v1.4M3.8 3.8l.6 8h5.2l.6-8"
@@ -187,6 +249,29 @@
   .tool:hover {
     color: var(--text);
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Asking. It stays lit while the question stands, because the answer is a
+     second press on this very button and it has to be findable without
+     hunting. tech.md 6.26. */
+  .tool.armed,
+  .tool.armed:hover {
+    color: var(--notch);
+    background: var(--danger);
+  }
+
+  /* A row that is asking keeps its tools out, or the question would vanish
+     the moment the pointer left the button for the button. */
+  .row.asking .tools {
+    opacity: 1;
+  }
+
+  .status.warn {
+    color: var(--danger);
+  }
+
+  .status.bad {
+    color: var(--danger);
   }
 
   /* No focus rings anywhere in the island. tech.md 9. */

@@ -116,7 +116,10 @@ export const commands = {
   stopSession: (sessionId: string) => call<void>('stop_session', { sessionId }),
   renameSession: (sessionId: string, title: string) =>
     call<void>('rename_session', { sessionId, title }),
-  hideSession: (sessionId: string) => call<void>('hide_session', { sessionId }),
+  // Deletes the chat: ends its process if we run it, puts the transcript in
+  // the macOS Trash, and drops the row for good. Refuses out loud when the
+  // system will not take the file. tech.md 6.26.
+  deleteSession: (sessionId: string) => call<void>('delete_session', { sessionId }),
   // The row under the field. A slash command is text, so all three take the
   // channel a reply takes: written into the pty of a session we own.
   // tech.md 6.15.

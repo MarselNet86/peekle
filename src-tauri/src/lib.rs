@@ -6,6 +6,7 @@ mod notify;
 mod panel;
 mod shots;
 mod state;
+mod trash;
 mod windows;
 
 use std::sync::Arc;
@@ -196,7 +197,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::usage_badge,
             commands::set_usage_badge,
             commands::rename_session,
-            commands::hide_session,
+            commands::delete_session,
             commands::get_models,
             commands::get_defaults,
             commands::set_model,
@@ -244,7 +245,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::usage_badge,
             commands::set_usage_badge,
             commands::rename_session,
-            commands::hide_session,
+            commands::delete_session,
             commands::get_models,
             commands::get_defaults,
             commands::set_model,
