@@ -43,6 +43,9 @@ pub type Notch = (f64, f64);
 pub enum PanelError {
     #[error("window {0} is missing")]
     MissingWindow(String),
+    /// Raised only where there is a panel to miss: the desktop has none and
+    /// never constructs this, and the enum is one enum on every platform.
+    #[allow(dead_code)]
     #[error("panel {0} is not registered")]
     MissingPanel(String),
     #[error("tauri call failed: {0}")]
