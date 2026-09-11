@@ -99,6 +99,29 @@ pub fn to_trash(path: &Path) -> Result<(), String> {
     trash::delete(path).map_err(|err| err.to_string())
 }
 
+/// Hands a URL to the browser the person chose. tech.md 6.16 and 6.22.
+///
+/// Windows through `rundll32 url.dll` rather than `cmd /c start`: `start`
+/// reads `&` in a query string as a command separator, and an OAuth URL is
+/// nothing but query string. Linux through `xdg-open`, which every desktop
+/// that ships a browser ships too.
+pub fn open_url(url: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = std::process::Command::new("rundll32.exe");
+        command.arg("url.dll,FileProtocolHandler");
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = std::process::Command::new("xdg-open");
+
+    command
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
 /// The type name 6.13 recognises a screenshot by. The clipboards here have
 /// no such vocabulary, so the one thing they can say -- a picture is on the
 /// clipboard -- is said in the words the shared rule already understands.

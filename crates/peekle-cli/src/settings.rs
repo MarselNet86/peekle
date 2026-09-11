@@ -267,13 +267,40 @@ fn timeout_for(event: &str) -> Option<u32> {
 /// The command `init` installs. Absolute python3 rather than a bare name: the
 /// hook runs with whatever environment Claude Code had, which is not a login
 /// shell. tech.md 6.1.
+///
+/// Windows has no `/usr/bin/env` and no absolute python to point at: the
+/// interpreter lands wherever its installer put it and is reached by name.
+/// The path is quoted because a Windows home directory has spaces in it more
+/// often than not. tech.md 6.27.
 fn hook_command() -> String {
-    format!("/usr/bin/env python3 {}", hook_script_path().display())
+    let script = hook_script_path().display().to_string();
+    if cfg!(windows) {
+        format!("python \"{script}\"")
+    } else {
+        format!("/usr/bin/env python3 {script}")
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hook is run by Claude Code, not by a shell of ours, so the line
+    /// has to be runnable as written on the platform it was written on. A
+    /// line naming `/usr/bin/env` on Windows is a hook that never fires.
+    #[test]
+    fn the_hook_line_names_an_interpreter_this_platform_has() {
+        let line = hook_command();
+        let script = hook_script_path().display().to_string();
+
+        assert!(line.contains(&script), "{line}");
+        if cfg!(windows) {
+            assert!(line.starts_with("python "), "{line}");
+            assert!(line.contains(&format!("\"{script}\"")), "{line}");
+        } else {
+            assert!(line.starts_with("/usr/bin/env python3 "), "{line}");
+        }
+    }
 
     /// Every managed event, pinned to the endpoint and matcher of the table in
     /// tech.md 6.1. The mapping drifted from that table and nothing noticed,

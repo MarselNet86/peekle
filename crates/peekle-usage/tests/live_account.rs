@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)]
-//! The one test that talks to the network and to the Keychain.
+//! The one test that talks to the network and to the store the platform
+//! keeps the token in: the Keychain on macOS, `~/.claude/.credentials.json`
+//! elsewhere. tech.md 6.27.
 //!
 //! Ignored by default: it can raise a Keychain dialog, and CI has neither an
 //! account nor a Keychain. It costs nothing to run otherwise, the endpoint
@@ -9,12 +11,12 @@
 //!     cargo test -p peekle-usage --test live_account -- --ignored --nocapture
 
 use peekle_core::types::{UsageSource, UsageWindow};
-use peekle_usage::{AccountUsage, SecurityToolStore, UsageProvider};
+use peekle_usage::{AccountUsage, SystemCredentialStore, UsageProvider};
 
 #[test]
 #[ignore = "reads the live account with the user's own token"]
 fn the_live_account_still_reports_both_windows() {
-    let provider = AccountUsage::new(Box::new(SecurityToolStore::for_current_user()), "0.1.0");
+    let provider = AccountUsage::new(Box::new(SystemCredentialStore::for_current_user()), "0.1.0");
     let snapshot = provider.snapshot();
 
     println!(
