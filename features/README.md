@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.14  | [A long message of your own folds](#v8014--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
 | v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                    |
 | v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5       |
 | v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9              |
@@ -47,6 +48,25 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.14 — A long message of your own folds
+
+2026-09-11
+
+Half a screen of your own words pushed the answer you were waiting for off the
+island, and the bubble simply ran out at the bottom edge of the window, which
+reads as a message that lost its end.
+
+A message of your own taller than six lines now shows six, fades out instead of
+stopping, and carries **Show more**. The whole of it is one press away, and
+**Show less** puts it back. An answer never folds: reading it is what the
+window is for.
+
+Whether it folds is decided by what was drawn, not by how many characters there
+are — a message that fits offers nothing, at any width or font size.
+
+![A long message, folded](shots/long-message.png)
+![The same message, open](shots/long-message-open.png)
 
 ## v80.13 — The hint fits its own ground
 
