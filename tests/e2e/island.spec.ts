@@ -542,6 +542,14 @@ test.describe('the island route', () => {
     const shape = (await page.locator('.shape').boundingBox())!;
     expect(line.x).toBeGreaterThanOrEqual(shape.x);
     expect(line.x + line.width).toBeLessThanOrEqual(shape.x + shape.width);
+    // And the ground is under all of it. It was not: with `nowrap` under a
+    // ceiling the words ran past the box they were drawn on, and the tail of
+    // the line stood on the conversation.
+    const fits = await hint.evaluate((node) => ({
+      wide: node.scrollWidth <= node.clientWidth + 1,
+      tall: node.scrollHeight <= node.clientHeight + 1,
+    }));
+    expect(fits).toEqual({ wide: true, tall: true });
 
     await gear.hover();
     await expect(hint).toHaveCount(0);
