@@ -1,6 +1,6 @@
 [package]
 name = "peekle"
-description = "Overlay on top of Claude Code for macOS"
+description = "Overlay on top of Claude Code"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
