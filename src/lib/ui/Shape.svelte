@@ -2,7 +2,7 @@
   import { Spring } from 'svelte/motion';
   import { untrack, type Snippet } from 'svelte';
 
-  import { shapeBounds, type Notch } from '$lib/logic/shape';
+  import { shapeBounds, shapeInset, type Notch } from '$lib/logic/shape';
   import type { IslandView } from '$lib/types/generated/IslandView';
 
   let {
@@ -34,6 +34,8 @@
   const target = $derived(shapeBounds(view, notch, badge, asking, deep));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
+  // Off the edge without a notch, flush with it under one. tech.md 6.7.
+  const inset = $derived(shapeInset(notch));
 
   // One spring for the whole product, identical opening and closing, so growing
   // and collapsing read as one body rather than two effects. tech.md 6.10.
@@ -67,6 +69,7 @@
   data-view={typeof view === 'string' ? view : 'Session'}
   style:width="{bounds.current.width}px"
   style:height="{bounds.current.height}px"
+  style:margin-top="{inset}px"
   style:border-radius={hasNotch
     ? `0 0 ${bounds.current.radius}px ${bounds.current.radius}px`
     : `${bounds.current.radius}px`}
@@ -97,6 +100,7 @@
        that this is a window on top of the system. tech.md 9 and 6.10. */
     background: var(--notch);
     position: relative;
+    /* Centred; the top margin is the inset of 6.7, set per notch above. */
     margin: 0 auto;
     overflow: hidden;
     color: var(--text);

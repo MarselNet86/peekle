@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use peekle_core::island::shape_rect;
+use peekle_core::island::{shape_rect, Rect};
 use peekle_core::types::{
     IslandView, PromptKind, PromptOutcome, PromptRequest, ToastRequest, ToastTone,
 };
@@ -112,7 +112,13 @@ fn update_hover(app: &AppHandle) {
     let Ok((frame, scale)) = platform::island_frame(app) else {
         return;
     };
-    let Some(rect) = shape_rect(frame, (bounds.0 * scale, bounds.1 * scale)) else {
+    let mark = Rect::new(
+        bounds.x * scale,
+        bounds.y * scale,
+        bounds.width * scale,
+        bounds.height * scale,
+    );
+    let Some(rect) = shape_rect(frame, mark) else {
         return;
     };
     let Ok(pointer) = app.cursor_position() else {

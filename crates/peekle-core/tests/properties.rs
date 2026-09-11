@@ -66,11 +66,14 @@ proptest! {
         h in 1.0f64..4000.0,
         x in -4000.0f64..4000.0,
         y in -4000.0f64..4000.0,
+        mark_x in proptest::num::f64::ANY,
+        mark_y in proptest::num::f64::ANY,
         mark_w in proptest::num::f64::ANY,
         mark_h in proptest::num::f64::ANY,
     ) {
         let window = Rect::new(x, y, w, h);
-        let Some(rect) = shape_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+        let mark = Rect::new(mark_x, mark_y, mark_w, mark_h);
+        let Some(rect) = shape_rect(window, mark) else { return Ok(()) };
 
         prop_assert!(rect.x >= window.x);
         prop_assert!(rect.y >= window.y);
@@ -82,17 +85,40 @@ proptest! {
     /// otherwise Rust hands the mouse to a window that draws nothing there.
     #[test]
     fn every_point_of_the_mark_is_a_point_of_the_window(
+        mark_x in 0.0f64..800.0,
+        mark_y in 0.0f64..600.0,
         mark_w in 1.0f64..2000.0,
         mark_h in 1.0f64..2000.0,
         px in -100.0f64..900.0,
         py in -100.0f64..800.0,
     ) {
         let window = Rect::new(0.0, 0.0, 720.0, 560.0);
-        let Some(rect) = shape_rect(window, (mark_w, mark_h)) else { return Ok(()) };
+        let mark = Rect::new(mark_x, mark_y, mark_w, mark_h);
+        let Some(rect) = shape_rect(window, mark) else { return Ok(()) };
 
         if rect.contains((px, py)) {
             prop_assert!(window.contains((px, py)));
         }
+    }
+
+    /// The webview says where the shape is, and the hotspot is there and
+    /// nowhere else: a shape off the top edge (tech.md 6.7) must not take a
+    /// click at the edge. tech.md 6.5.
+    #[test]
+    fn the_hotspot_is_where_the_shape_was_drawn(
+        mark_x in 0.0f64..600.0,
+        mark_y in 0.0f64..400.0,
+        mark_w in 1.0f64..100.0,
+        mark_h in 1.0f64..100.0,
+    ) {
+        let window = Rect::new(50.0, 20.0, 720.0, 560.0);
+        let mark = Rect::new(mark_x, mark_y, mark_w, mark_h);
+        let rect = shape_rect(window, mark).expect("a mark inside the window is a hotspot");
+
+        prop_assert_eq!(rect.x, window.x + mark_x);
+        prop_assert_eq!(rect.y, window.y + mark_y);
+        prop_assert!(rect.contains((window.x + mark_x, window.y + mark_y)));
+        prop_assert!(!rect.contains((window.x + mark_x, window.y + mark_y - 0.5)));
     }
 }
 

@@ -11,7 +11,7 @@ import fc from 'fast-check';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { clickPutsAway, clickSettles, restStatus } from '$lib/logic/rest';
-import { REST_PILL, REST_SIDE, shapeBounds } from '$lib/logic/shape';
+import { REST_FLOAT, REST_SIDE, shapeBounds } from '$lib/logic/shape';
 import RestMark from '$lib/ui/RestMark.svelte';
 import Shape from '$lib/ui/Shape.svelte';
 import type { IslandView } from '$lib/types/generated/IslandView';
@@ -74,10 +74,10 @@ describe('the collapsed shape', () => {
     expect(bounds.height).toBe(32);
   });
 
-  it('floats a small pill on a display with no bezel to hang from', () => {
+  it('floats the capsule of the iPhone island on a display with no bezel to hang from', () => {
     const bounds = shapeBounds('Collapsed', { width: 200, height: 0 });
-    expect(bounds.width).toBe(REST_PILL.width);
-    expect(bounds.height).toBe(REST_PILL.height);
+    expect(bounds.width).toBe(REST_FLOAT.width);
+    expect(bounds.height).toBe(REST_FLOAT.height);
   });
 });
 

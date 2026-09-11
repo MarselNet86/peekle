@@ -23,10 +23,19 @@ export const FALLBACK_NOTCH = { width: 200, height: 0 } as const;
 export const REST_SIDE = 38;
 
 /**
- * The mark on a display with no bezel to hang from. Stretching it to
- * `FALLBACK_NOTCH` would lay a black bar across the middle of the menu bar.
+ * The mark on a display with no bezel to hang from: the capsule of the iPhone
+ * island, floating below the edge. Stretching it to `FALLBACK_NOTCH` would lay
+ * a black bar across the middle of the menu bar; the 78 by 20 pill that stood
+ * here before v82 was a crumb at the edge of a 1920 pixel screen, neither
+ * recognisable nor pressable. tech.md 6.7.
  */
-export const REST_PILL = { width: 78, height: 20 } as const;
+export const REST_FLOAT = { width: 132, height: 36 } as const;
+
+/**
+ * How far every shape stands off the top edge on a display with no notch.
+ * Zero with one: the black there continues the cutout. tech.md 6.7.
+ */
+export const FLOAT_TOP = 10;
 
 /**
  * How much wider a resting shape gets on each side while the usage badge
@@ -47,8 +56,15 @@ export interface Notch {
 export interface ShapeBounds {
   width: number;
   height: number;
-  /** Bottom corners. The top is cut by the screen edge. tech.md 6.10. */
+  /** Bottom corners under a notch, where the top is cut by the screen edge;
+   * every corner on a display without one. tech.md 6.10 and 6.7. */
   radius: number;
+}
+
+/** The gap between the shape and the top edge: none under a notch, where the
+ * black continues the cutout, and `FLOAT_TOP` without one. tech.md 6.7. */
+export function shapeInset(notch: Notch): number {
+  return sane(notch.height, FALLBACK_NOTCH.height) > 0 ? 0 : FLOAT_TOP;
 }
 
 /** Rust hands these over in the query string and either can be absent. */
@@ -105,30 +121,39 @@ export function shapeBounds(
   // its growth on the sides. A strip hanging below the notch reads as a second
   // notch painted under the real one, which is the one giveaway the island
   // exists to avoid. tech.md 6.7.
+  // Without a notch the shape floats, and floats as the iPhone island does:
+  // every corner round, the short views round at the ends, the tall ones on
+  // a wide radius. A shape that grows out of nothing needs no straight top.
+  // tech.md 6.7.
+  const floating = height === 0;
   const bounds =
     view === 'Collapsed'
-      ? height > 0
-        ? { width: width + 2 * REST_SIDE + grown, height, radius: 12 }
-        : {
-            width: REST_PILL.width + grown,
-            height: REST_PILL.height,
-            radius: REST_PILL.height / 2,
+      ? floating
+        ? {
+            width: REST_FLOAT.width + grown,
+            height: REST_FLOAT.height,
+            radius: REST_FLOAT.height / 2,
           }
+        : { width: width + 2 * REST_SIDE + grown, height, radius: 12 }
       : view === 'Pill'
         ? // A pill carrying a second line is the height of the panel that
           // carries two: one shape for two lines, whatever is on them.
           // tech.md 6.2 and 6.7.
-          { width: 420, height: height + (deep ? 62 : 44), radius: 20 }
+          {
+            width: 420,
+            height: height + (deep ? 62 : 44),
+            radius: floating ? (deep ? 31 : 22) : 20,
+          }
         : // Two lines and two buttons, and nothing else: the answer to a
           // permission needs no feed. tech.md 6.7.
           view === 'Ask'
-          ? { width: 460, height: height + 62, radius: 22 }
+          ? { width: 460, height: height + 62, radius: floating ? 31 : 22 }
           : view === 'Sessions'
-            ? { width: 460, height: height + 380, radius: 24 }
+            ? { width: 460, height: height + 380, radius: floating ? 28 : 24 }
             : {
                 width: 560,
                 height: asking ? WINDOW.height : height + 420,
-                radius: 24,
+                radius: floating ? 28 : 24,
               };
 
   return clamp(bounds);
