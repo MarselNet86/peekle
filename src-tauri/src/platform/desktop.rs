@@ -8,13 +8,17 @@
 //! cannot promise it.
 
 use std::path::Path;
+#[cfg(not(target_os = "windows"))]
 use std::sync::Mutex;
 
 use peekle_core::shots::Pasteboard;
 use peekle_core::types::IslandView;
 use tauri::AppHandle;
 
-use super::{focusable_for, image_signature, position, window, Notch, PanelError, ISLAND};
+use super::{focusable_for, position, window, Notch, PanelError, ISLAND};
+// Only the platform without a counter of its own signs the picture itself.
+#[cfg(not(target_os = "windows"))]
+use super::image_signature;
 
 /// Sets the window up once at startup. It is shown and hidden afterwards,
 /// never created and destroyed. tech.md 6.7 and 6.27.
@@ -106,13 +110,13 @@ pub fn to_trash(path: &Path) -> Result<(), String> {
 /// nothing but query string. Linux through `xdg-open`, which every desktop
 /// that ships a browser ships too.
 pub fn open_url(url: &str) -> Result<(), String> {
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = std::process::Command::new("rundll32.exe");
         command.arg("url.dll,FileProtocolHandler");
         command
     };
-    #[cfg(not(windows))]
+    #[cfg(not(target_os = "windows"))]
     let mut command = std::process::Command::new("xdg-open");
 
     command
@@ -132,18 +136,13 @@ const PICTURE: &str = "public.png";
 /// Reading the picture is what turns it into a file, on every platform. What
 /// differs is how a write is noticed: Windows keeps a change counter of its
 /// own, Linux does not, and the poll there reads the picture and signs it.
+#[derive(Default)]
 pub struct SystemPasteboard {
     /// The last signature seen and the counter it stands behind, for the
-    /// platform that has no counter of its own.
+    /// platform that has no counter of its own. Windows keeps one, so there
+    /// the struct holds nothing at all.
+    #[cfg(not(target_os = "windows"))]
     signed: Mutex<(u64, i64)>,
-}
-
-impl Default for SystemPasteboard {
-    fn default() -> Self {
-        Self {
-            signed: Mutex::new((0, 0)),
-        }
-    }
 }
 
 impl SystemPasteboard {
