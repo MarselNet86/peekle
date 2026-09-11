@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+
   import { commands, fileSrc } from '$lib/bridge';
   import { createAgent } from '$lib/features/agent/agent.svelte';
   import { createNotify, NOTIFY_HINT } from '$lib/features/notify/notify.svelte';
@@ -396,9 +398,47 @@
     if (choice) island.choose(choice);
   }
 
-  let reply = $state('');
+  // The draft of each chat, by id. One field for all chats was the rule until
+  // v80.16, and a reply begun in one chat stood in the field of the next one
+  // opened -- by hand or by another chat's turn ending. tech.md 6.7.
+  let drafts = $state<Record<string, string>>({});
+  const reply = $derived(openId ? (drafts[openId] ?? '') : '');
+  function setReply(text: string) {
+    if (openId) drafts[openId] = text;
+  }
   // What is waiting in the field of the session on screen. tech.md 6.13.
   const attached = $derived(current ? shots.of(current.session.session_id) : []);
+  // Whether the island is being written in: the cursor in the field with the
+  // panel key, or something unsent in it. Rust stops the leave clock and keeps
+  // pills and other chats' turns off it while this holds. The cursor alone is
+  // not enough: the field focuses itself on mount, panel key or not, and a
+  // page nobody clicked into is not being written in. tech.md 6.7.
+  let fieldFocused = $state(false);
+  let pageFocused = $state(false);
+  const composing = $derived(
+    current !== undefined &&
+      ((fieldFocused && pageFocused) || reply.trim().length > 0 || attached.length > 0),
+  );
+  $effect(() => {
+    commands.setComposing(composing);
+  });
+  // Asked rather than only listened for: the panel can stop being the key
+  // window while the field stays first responder -- the screenshot frame, an
+  // app coming to the front -- and WebKit does not promise a blur for that.
+  // A quarter second is far under the 800ms leave clock. tech.md 6.7.
+  $effect(() => {
+    if (!current) return;
+    const read = () => (pageFocused = document.hasFocus());
+    read();
+    const tick = setInterval(read, 250);
+    window.addEventListener('focus', read);
+    window.addEventListener('blur', read);
+    return () => {
+      clearInterval(tick);
+      window.removeEventListener('focus', read);
+      window.removeEventListener('blur', read);
+    };
+  });
   // Which attachment is open at full size. A layer over the content, so it is
   // the route's and not Rust's: no view changes and the window keeps its size.
   let opened = $state<string | null>(null);
@@ -433,8 +473,10 @@
   });
 
   // A settled request leaves nothing behind for the next one to inherit.
+  // Untracked, because the draft is the open chat's: read through the
+  // dependency, this cleared the draft of every chat on the way in.
   $effect(() => {
-    if (!island.prompt) reply = '';
+    if (!island.prompt) untrack(() => setReply(''));
   });
 
   // Queued text has left the field the moment it is in the feed.
@@ -465,7 +507,7 @@
 
       if (outcome.ok) {
         shots.clear(id);
-        reply = '';
+        setReply('');
         // A different id means the chat was held elsewhere and this is a copy
         // of it. Said out loud where the conversation now is: an id that
         // changes silently reads as the island losing the chat. tech.md 6.5.
@@ -479,7 +521,7 @@
 
     island.answer(text, id, attached);
     if (!answering) shots.clear(id);
-    reply = '';
+    setReply('');
   }
 
   $effect(() => {
@@ -510,11 +552,19 @@
   $effect(() => {
     if (island.view === 'Collapsed') return;
 
+    // Where the press began. A drag that starts on the shape and ends beside
+    // it is a selection, and its click lands on the document. tech.md 6.7.
+    let pressed: EventTarget | null = null;
+    const press = (event: PointerEvent) => {
+      pressed = event.target;
+    };
     const dismiss = (event: MouseEvent) => {
+      const began = pressed;
+      pressed = null;
       // An open picture is what a click beside the shape is aimed at, so it
       // takes it: collapsing would carry off the feed and the reply with it.
       // tech.md 6.13.
-      switch (clickSettles(island.view, event.target, opened !== null)) {
+      switch (clickSettles(island.view, event.target, opened !== null, began)) {
         case 'preview':
           opened = null;
           break;
@@ -524,8 +574,12 @@
       }
     };
 
+    window.addEventListener('pointerdown', press, true);
     window.addEventListener('click', dismiss);
-    return () => window.removeEventListener('click', dismiss);
+    return () => {
+      window.removeEventListener('pointerdown', press, true);
+      window.removeEventListener('click', dismiss);
+    };
   });
 
   // Rust records what the shape actually measured and changes nothing with it:
@@ -952,7 +1006,8 @@
               </div>
             {/if}
             <PromptInput
-              bind:value={reply}
+              bind:value={() => reply, setReply}
+              onfocuschange={(focused) => (fieldFocused = focused)}
               placeholder={replyHint}
               disabled={!reachable}
               working={(canStop || askedToStop !== null) && !stopping}

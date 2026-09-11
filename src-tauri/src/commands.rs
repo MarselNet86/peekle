@@ -1486,6 +1486,18 @@ pub fn set_preview(state: State<'_, Arc<AppState>>, open: bool) {
     state.set_preview(open);
 }
 
+/// The webview says whether the field is being written in: the cursor in it
+/// with the panel key, or a draft or an attachment waiting. tech.md 6.7.
+///
+/// No view change and no window resize, like `set_preview`: what it buys is
+/// that the pointer timer does not put the island away under a hand that is
+/// on the keyboard, and that no pill or other chat's turn writes over it.
+#[tauri::command]
+pub fn set_composing(state: State<'_, Arc<AppState>>, active: bool) {
+    tracing::debug!(active, "the field is being written in, or not");
+    state.set_composing(active);
+}
+
 /// Ends a session the island owns.
 #[tauri::command]
 pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String) {
@@ -1809,6 +1821,11 @@ pub fn island_bounds(state: State<'_, Arc<AppState>>, width: f64, height: f64) {
 pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    // The pointer goes into the dialog, and that is not leaving the island:
+    // the leave clock is off for as long as the dialog stands. tech.md 6.7
+    // and 6.23.
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(panel::take_front);
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1820,6 +1837,7 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
         });
 
     let picked = rx.await;
+    state.set_dialog(false);
     let _ = app.run_on_main_thread(panel::give_front_back);
     let picked = picked.map_err(|_| "the folder dialog went away".to_string())?;
 

@@ -161,6 +161,22 @@ describe('closing an open island with a click', () => {
     expect(clickSettles('Sessions', cross, false)).toBe('nothing');
   });
 
+  /// Selecting text that ends at the edge is a press on the shape let go
+  /// beside it, and the click for that lands on the document. It used to take
+  /// the island, and the selection, with it. tech.md 6.7.
+  it('leaves the island alone when the press began on the shape', () => {
+    const { inside, outside } = targets();
+    expect(clickPutsAway('Sessions', outside, inside)).toBe(false);
+    expect(clickPutsAway('Sessions', document.body, inside)).toBe(false);
+    expect(clickSettles({ Session: 'abc' }, outside, false, inside)).toBe('nothing');
+  });
+
+  it('still closes when the press began beside the shape too', () => {
+    const { outside } = targets();
+    expect(clickPutsAway('Sessions', outside, outside)).toBe(true);
+    expect(clickPutsAway('Sessions', outside, null)).toBe(true);
+  });
+
   /// A picture open at full size is what the click is aimed at, and collapsing
   /// would carry off the feed and the reply with it. tech.md 6.13.
   describe('with a shot open', () => {

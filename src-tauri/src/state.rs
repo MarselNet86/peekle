@@ -110,6 +110,16 @@ pub struct AppState {
     /// stays up while it is: the picture is something the user opened by hand
     /// and closes by hand, and the pointer leaving is not that. tech.md 6.13.
     preview: AtomicBool,
+    /// Whether the field of the open chat is being written in: the cursor is
+    /// in it with the panel key, or a draft or an attachment is waiting in
+    /// it. The island stays up while it is, for the same reason a picture
+    /// holds it: a hand on the keyboard is not a hand that walked away, and a
+    /// window with text half written in it does not put itself away.
+    /// tech.md 6.7.
+    composing: AtomicBool,
+    /// Whether a system dialog the island raised is standing. The pointer went
+    /// into the dialog, and that is not leaving. tech.md 6.23.
+    dialog: AtomicBool,
     /// The pasteboard change count as of the last tick. Only a change is worth
     /// reading the types for, and nothing reads the contents.
     seen_change: AtomicI64,
@@ -203,6 +213,8 @@ impl AppState {
             anchor: Mutex::new(None),
             shape_moved: AtomicBool::new(false),
             preview: AtomicBool::new(false),
+            composing: AtomicBool::new(false),
+            dialog: AtomicBool::new(false),
             seen_change: AtomicI64::new(0),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -784,6 +796,55 @@ impl AppState {
     /// Whether a picture is standing open over the island's content.
     pub fn preview_open(&self) -> bool {
         self.preview.load(Ordering::Relaxed)
+    }
+
+    /// The webview says whether the field is being written in. tech.md 6.7.
+    pub fn set_composing(&self, active: bool) {
+        self.composing.store(active, Ordering::Relaxed);
+    }
+
+    pub fn composing(&self) -> bool {
+        self.composing.load(Ordering::Relaxed)
+    }
+
+    /// A system dialog the island raised went up or came down. tech.md 6.23.
+    pub fn set_dialog(&self, open: bool) {
+        self.dialog.store(open, Ordering::Relaxed);
+    }
+
+    pub fn dialog_open(&self) -> bool {
+        self.dialog.load(Ordering::Relaxed)
+    }
+
+    /// Whether the chat on screen is asking about its folder. tech.md 6.24.
+    pub fn open_session_asks_trust(&self) -> bool {
+        match self.view() {
+            IslandView::Session(id) => self.asking_trust(&id),
+            _ => false,
+        }
+    }
+
+    /// Whether the island is in the user's hands: something on it that they
+    /// opened, are writing, or are being asked, and that a pointer walking
+    /// off the shape says nothing about. The leave clock does not run while
+    /// it is. tech.md 6.7.
+    pub fn in_hand(&self) -> bool {
+        self.preview_open()
+            || self.composing()
+            || self.dialog_open()
+            || self.open_session_asks_trust()
+    }
+
+    /// Whether the open island is somebody's: in their hands, or the pointer
+    /// has already come to it so the opening hold is gone. An island that
+    /// opened by itself and that nobody came to is not, and may be written
+    /// over; an engaged one may not -- not by a pill, not by a screenshot
+    /// offer, not by another chat's turn ending. tech.md 6.7.
+    pub fn engaged(&self, now: Instant) -> bool {
+        if !self.view().takes_clicks() {
+            return false;
+        }
+        self.in_hand() || !self.held_open(now)
     }
 
     /// The freshest session the island can actually type into.
@@ -1433,6 +1494,55 @@ mod shot_tests {
 
         state.set_preview(false);
         assert!(!state.preview_open(), "a closed picture holds nothing");
+    }
+
+    /// An island in the user's hands is not one they are walking away from,
+    /// and an open island somebody came to is theirs: no pill, no screenshot
+    /// offer and no other chat's turn writes over it. One that opened by
+    /// itself and nobody came to is not, and may be. tech.md 6.7.
+    #[test]
+    fn an_island_somebody_is_using_is_engaged_and_a_resting_one_never_is() {
+        let (state, _) = state();
+        let now = Instant::now();
+
+        assert!(!state.in_hand());
+        assert!(!state.engaged(now), "nothing is open");
+
+        state.set_view(IslandView::Session("s".into()));
+        assert!(
+            state.engaged(now),
+            "opened by hand, so nobody had to come to it"
+        );
+
+        state.hold_open(now + Duration::from_secs(10));
+        assert!(!state.engaged(now), "opened by a notice, and nobody came");
+        state.clear_hold();
+        assert!(state.engaged(now), "the pointer came");
+
+        state.hold_open(now + Duration::from_secs(10));
+        state.set_composing(true);
+        assert!(state.in_hand());
+        assert!(
+            state.engaged(now),
+            "written in, whether anybody came or not"
+        );
+        state.set_composing(false);
+        state.set_dialog(true);
+        assert!(state.in_hand(), "a dialog is up");
+        state.set_dialog(false);
+        state.set_preview(true);
+        assert!(state.in_hand(), "a picture is open");
+        state.set_preview(false);
+        assert!(!state.in_hand());
+
+        state.set_view(IslandView::Pill);
+        state.set_composing(true);
+        assert!(
+            !state.engaged(now),
+            "a pill takes no clicks and is nobody's"
+        );
+        state.set_view(IslandView::Collapsed);
+        assert!(!state.engaged(now));
     }
 
     #[test]
