@@ -271,6 +271,33 @@ pub fn asks_trust(screen: &str) -> bool {
 /// Terminal output is a drawing, not a document: the same sentence arrives
 /// with cursor moves inside it, split across reads, and redrawn a dozen times.
 /// What survives all of that is the order of the printed characters.
+/// The most the trust-scan window may hold, and how much of it survives a trim.
+///
+/// Only enough to outlive one split mark has to be kept, and the marks are
+/// short ASCII, so eight kibibytes is far more than any split can straddle.
+const SCAN_CAP: usize = 16_384;
+const SCAN_KEEP: usize = 8_192;
+
+/// Trims the scan window without ever splitting a glyph.
+///
+/// The window is a `String`, and the screen it holds is full of multibyte
+/// glyphs -- box drawing and Cyrillic. Cutting it by raw byte length
+/// (`len - SCAN_KEEP`) panicked the reader the instant that offset fell inside
+/// one of them, and a panicked reader stops draining the pty: the process on
+/// the other end then wedges on a full buffer, and every reply typed into that
+/// session sits unconfirmed. So the cut is walked forward to the next char
+/// boundary, which `len` itself always is. tech.md 6.24.
+fn trim_scan_window(tail: &mut String) {
+    if tail.len() <= SCAN_CAP {
+        return;
+    }
+    let mut cut = tail.len() - SCAN_KEEP;
+    while cut < tail.len() && !tail.is_char_boundary(cut) {
+        cut += 1;
+    }
+    tail.drain(..cut);
+}
+
 fn squeeze(screen: &str) -> String {
     let mut out = String::with_capacity(screen.len());
     let mut chars = screen.chars().peekable();
@@ -556,9 +583,7 @@ impl PtyHost {
                     }
                     // Screens are redrawn whole and often; this only has to
                     // outlive one split mark.
-                    if tail.len() > 16_384 {
-                        tail.drain(..tail.len() - 8_192);
-                    }
+                    trim_scan_window(&mut tail);
                 }
             }
             on_exit(id);
@@ -769,6 +794,39 @@ mod tests {
     /// row as a sentence when it redraws it under the cursor. A matcher that
     /// looked for the sentence would wait for that redraw; this one has the
     /// question before it comes.
+    /// The reader used to trim its scan window by raw byte length, and the
+    /// TUI is full of multibyte glyphs -- the box drawing of its frames and
+    /// the Cyrillic a person types. When the cut fell inside one, the reader
+    /// panicked and stopped draining the pty; the process wedged on a full
+    /// buffer and every reply into that session sat unconfirmed. So the trim
+    /// must land on a char boundary, whatever the window holds. tech.md 6.24.
+    #[test]
+    fn the_scan_window_is_trimmed_without_splitting_a_glyph() {
+        // A window well over the cap, made of two-byte glyphs so that
+        // `len - SCAN_KEEP` lands mid-glyph as often as not.
+        let mut tail = "⏵ добавь поддержку отправки ".repeat(1_500);
+        assert!(tail.len() > SCAN_CAP);
+        trim_scan_window(&mut tail); // the call that used to panic
+        assert!(tail.len() <= SCAN_CAP, "the window was actually trimmed");
+        assert!(tail.is_char_boundary(0) && std::str::from_utf8(tail.as_bytes()).is_ok());
+
+        // A short ASCII mark riding the very end of the window still survives a
+        // trim, so the question is not lost to it.
+        let mut tail = "ф".repeat(9_000);
+        tail.push_str("No,exit");
+        trim_scan_window(&mut tail);
+        assert!(tail.contains("No,exit"), "the mark at the tail survived");
+    }
+
+    /// Nothing to trim is left alone, byte-for-byte.
+    #[test]
+    fn a_small_scan_window_is_untouched() {
+        let mut tail = "Yes,Itrustthisfolder No,exit".to_string();
+        let before = tail.clone();
+        trim_scan_window(&mut tail);
+        assert_eq!(tail, before);
+    }
+
     #[test]
     fn the_question_is_caught_on_its_first_drawing() {
         let raw = screen("trust-question.txt");
