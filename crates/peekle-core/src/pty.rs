@@ -1166,13 +1166,24 @@ and then stop",
     }
 
     /// The session must not run with the crippled path a GUI app inherits, or
-    /// the agent cannot find the tools the user works with.
+    /// the agent cannot find the tools the user works with. What "usable"
+    /// means is the one thing that differs: unix has a directory every
+    /// machine carries, Windows has none, so there the test asks that the
+    /// list name somewhere that exists. tech.md 6.27.
     #[test]
     fn the_session_path_is_never_empty() {
         let path = session_path();
         assert!(!path.is_empty());
+
+        #[cfg(unix)]
         assert!(
             path.split(':').any(|dir| dir == "/usr/bin"),
+            "a usable path at minimum: {path}"
+        );
+        #[cfg(windows)]
+        assert!(
+            path.split(';')
+                .any(|dir| !dir.is_empty() && Path::new(dir).is_dir()),
             "a usable path at minimum: {path}"
         );
     }
@@ -1197,6 +1208,15 @@ and then stop",
         assert!(matches!(result, Err(PtyError::NoCwd)));
     }
 
+    /// A program that is on every machine of its platform and ends by
+    /// itself: the test wants an exit, not output.
+    fn a_program_that_exits() -> &'static Path {
+        #[cfg(unix)]
+        return Path::new("/bin/echo");
+        #[cfg(windows)]
+        return Path::new("C:\\Windows\\System32\\whoami.exe");
+    }
+
     /// The whole point of owning the process: we learn it died, and `Ended`
     /// becomes a fact instead of a guess.
     #[test]
@@ -1204,7 +1224,7 @@ and then stop",
         let host = PtyHost::new();
         let spec = SpawnSpec {
             session_id: new_session_id(),
-            cwd: "/tmp".to_string(),
+            cwd: std::env::temp_dir().display().to_string(),
             cols: 120,
             rows: 40,
             resume: false,
@@ -1217,7 +1237,7 @@ and then stop",
         };
         let (tx, rx) = std::sync::mpsc::channel();
         host.spawn(
-            Path::new("/bin/echo"),
+            a_program_that_exits(),
             &spec,
             move |id| {
                 let _ = tx.send(id);
