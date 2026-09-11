@@ -1,7 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
-  import { ASK_CYCLE_MS, ASK_PIXEL, ASK_PIXELS, ASK_STEP_MS } from '$lib/logic/ask-sign';
   import type { RestStatus } from '$lib/logic/rest';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import { REST_SIDE } from '$lib/logic/shape';
@@ -43,21 +42,19 @@
   };
   const usageLabel = $derived(known ? `, ${value}% of the 5h window used` : '');
 
-  /** The one state that is about the person rather than about the agent, and
-   * the one that swaps the glyph rather than only its colour. tech.md 6.7. */
-  const asking = $derived(status === 'waiting');
-
   /** How long the strokes hop for when the state changes under them. Long
    * enough to be seen from across a screen, short enough not to be a state of
    * its own. tech.md 6.21. */
   const HOP_MS = 620;
 
   /** The states the two strokes are drawn in, and so the only ones a hop of
-   * the strokes can be seen in. `working` swaps them for the spinner and
-   * `waiting` for the question mark, and each of those swaps is its own
-   * announcement -- a hop asked for behind a glyph that is not on screen is a
-   * promise the mark cannot keep. tech.md 6.7. */
-  const HOPS: readonly RestStatus[] = ['idle', 'compacting'];
+   * the strokes can be seen in. `working` is the one that swaps them, for the
+   * spinner, and that swap is its own announcement -- a hop asked for behind a
+   * glyph that is not on screen is a promise the mark cannot keep. Waiting is
+   * back among them since v80.23: it wears the strokes again, in purple, and
+   * a colour change nobody saw happen is a colour that was always that way.
+   * tech.md 6.7. */
+  const HOPS: readonly RestStatus[] = ['idle', 'waiting', 'compacting'];
 
   // The colour says what is happening; the hop says it just changed. Without
   // it a compact that ends while nobody is looking at the notch is a green
@@ -111,11 +108,10 @@
   aria-label="{labels[status]}{usageLabel}. Open the session list"
   onclick={onopen}
 >
-  <!-- Two strokes at rest. While the agent works they give way to one stroke
-       stepping through `|`, `\`, `-`, `/`: the console spinner, where a frame
-       is replaced rather than turned. tech.md 6.12. A standing question takes
-       the whole glyph away and puts a question mark in its place: the sign
-       says Peekle, and what the island has to say here is not Peekle.
+  <!-- Two strokes in every state but one. While the agent works they give way
+       to a single stroke stepping through `|`, `\`, `-`, `/`: the console
+       spinner, where a frame is replaced rather than turned. tech.md 6.12.
+       A standing question keeps the strokes and takes the colour instead.
        tech.md 6.7. -->
   <span class="glyph">
     <svg
@@ -124,58 +120,31 @@
       height={SIGN_BOX.height}
       aria-hidden="true"
     >
-      {#if asking}
-        <!-- Whole pixels, drawn from `logic/ask-sign.ts`: at ten by twelve a
-             drawn curve turns to mush, and a bitmap is what a terminal would
-             have written anyway. Nothing here moves and nothing fades: a pixel
-             shifted or dimmed by a fraction is a blurred pixel. What it does
-             instead is lay itself out one pixel at a time and come apart in
-             the same order, which is a question being asked and taken back
-             rather than a light breathing. tech.md 6.7. -->
-        <g
-          class="ask"
-          shape-rendering="crispEdges"
-          style:--ask-step="{ASK_STEP_MS}ms"
-          style:--ask-cycle="{ASK_CYCLE_MS}ms"
-        >
-          {#each ASK_PIXELS as pixel, index (`${pixel.x},${pixel.y}`)}
-            <rect
-              x={pixel.x}
-              y={pixel.y}
-              width={ASK_PIXEL}
-              height={ASK_PIXEL}
-              fill="currentColor"
-              style:--i={index}
-            />
-          {/each}
-        </g>
-      {:else}
-        <g class="sign">
-          <!-- The geometry is the one in `logic/sign.ts`, not a copy of it: the
-               empty dialogue draws the same two strokes, and a sign drawn twice
-               by hand is a sign that drifts. tech.md 9. -->
-          {#each SIGN_STROKES as stroke, index (stroke)}
-            <path
-              class="stroke"
-              class:first={index === 0}
-              class:second={index === 1}
-              d={stroke}
-              stroke="currentColor"
-              stroke-width={SIGN_WEIGHT}
-              stroke-linecap="round"
-            />
-          {/each}
-        </g>
-        <!-- Four glyphs, not one turning stroke. A console spinner replaces the
-             character: the vertical bar is tall, the dash is short and wide, and
-             the eye reads a swap rather than a rotation. tech.md 6.12. -->
-        <g class="spin">
-          <path class="frame f1" d="M7 1.9L7 10.1" />
-          <path class="frame f2" d="M4.3 10.1L9.7 1.9" />
-          <path class="frame f3" d="M3.1 6L10.9 6" />
-          <path class="frame f4" d="M4.3 1.9L9.7 10.1" />
-        </g>
-      {/if}
+      <g class="sign">
+        <!-- The geometry is the one in `logic/sign.ts`, not a copy of it: the
+             empty dialogue draws the same two strokes, and a sign drawn twice
+             by hand is a sign that drifts. tech.md 9. -->
+        {#each SIGN_STROKES as stroke, index (stroke)}
+          <path
+            class="stroke"
+            class:first={index === 0}
+            class:second={index === 1}
+            d={stroke}
+            stroke="currentColor"
+            stroke-width={SIGN_WEIGHT}
+            stroke-linecap="round"
+          />
+        {/each}
+      </g>
+      <!-- Four glyphs, not one turning stroke. A console spinner replaces the
+           character: the vertical bar is tall, the dash is short and wide, and
+           the eye reads a swap rather than a rotation. tech.md 6.12. -->
+      <g class="spin">
+        <path class="frame f1" d="M7 1.9L7 10.1" />
+        <path class="frame f2" d="M4.3 10.1L9.7 1.9" />
+        <path class="frame f3" d="M3.1 6L10.9 6" />
+        <path class="frame f4" d="M4.3 1.9L9.7 10.1" />
+      </g>
     </svg>
   </span>
 
@@ -337,41 +306,17 @@
   }
 
   /* Waiting is the one state that costs the user time, so it is the one state
-     that changes its colour and the only one that changes its glyph. The sign
-     is green for Peekle and for everything the agent does on its own; a
-     question standing unanswered is neither, and the eye has to find it from
-     across a screen. The breath is all of the movement, and opacity is all of
-     the breath: the wave that ran through the two strokes until v80.3 went
-     with them, and a pixel glyph that scales or slides is a pixel glyph with
-     soft edges. Never filter or backdrop-filter: those repaint everything
-     under the window on every frame. tech.md 6.7, 6.10 and 6.14. */
+     that changes the colour of the sign. The strokes stay: they are the two
+     the mark wears everywhere else, and swapping the whole glyph for a
+     question mark (v80.3 through v80.22) bought a difference nobody needed at
+     the price of the product's own mark leaving the notch. Purple carries it
+     instead, and the breath says it is standing rather than sitting. Opacity
+     is all of the breath, and never filter or backdrop-filter: those repaint
+     everything under the window on every frame. tech.md 6.7, 6.10 and 6.14. */
   .mark[data-status='waiting'] .glyph {
     opacity: 1;
     color: var(--waiting);
-  }
-
-  /* The glyph lays itself out a pixel at a time and takes itself apart in the
-     same order, in the order `ASK_PIXELS` is written: bowl, stem, dot. Each
-     pixel runs one cycle a step behind the one before it, so the wave through
-     the delays is the assembly, and the same wave through the far end of each
-     pixel's own span is the disassembly. `steps(1, end)` is what makes them
-     cubes rather than lights: a pixel is on or it is off. tech.md 6.7. */
-  .mark[data-status='waiting'] .ask rect {
-    /* Off until this pixel's turn comes, which is what the delay buys. */
-    opacity: 0;
-    animation: cube var(--ask-cycle) steps(1, end) infinite;
-    animation-delay: calc(var(--i) * var(--ask-step));
-  }
-
-  /* 58% is `ASK_ON_PCT`, and the arithmetic that keeps the glyph whole for a
-     beat and empty for a beat is checked against it. */
-  @keyframes cube {
-    0% {
-      opacity: 1;
-    }
-    58% {
-      opacity: 0;
-    }
+    animation: breathe 1800ms ease-in-out infinite;
   }
 
   @keyframes wave {
@@ -393,9 +338,9 @@
     color: var(--orange);
   }
 
-  /* The wave the waiting mark wore until v80.3, a shade quicker: work moves,
-     waiting breathes, and a compact rides this. No breath under it, so it and
-     waiting never read alike. */
+  /* The wave, a shade quicker than a breath: work moves, waiting breathes,
+     and a compact rides this. One moves the strokes and the other dims them,
+     so the two never read alike even though both wear the same glyph. */
   .mark[data-status='compacting'] .stroke {
     transform-box: fill-box;
     transform-origin: center;
@@ -446,13 +391,6 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mark[data-status='waiting'] .glyph {
-      animation: none;
-    }
-
-    /* Nothing lays itself out; the whole question stands, which is the thing
-       the motion was there to say. */
-    .mark[data-status='waiting'] .ask rect {
-      opacity: 1;
       animation: none;
     }
 

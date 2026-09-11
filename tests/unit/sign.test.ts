@@ -70,6 +70,32 @@ describe('the sign', () => {
     expect(image.querySelector('.caption')?.textContent).toBe("Let's begin");
   });
 
+  /// A standing question wore a pixel question mark from v80.3 to v80.22 and
+  /// wears the sign again: the two strokes, in purple. The glyph is the
+  /// product's mark and stays in the notch; the colour is what says somebody
+  /// is being waited on. tech.md 6.7.
+  it('keeps the strokes while a question stands, and only changes colour', () => {
+    const { container } = render(RestMark, {
+      props: { status: 'waiting', pct: 12, onopen: () => {} },
+    });
+
+    expect(strokes(container)).toEqual([...SIGN_STROKES]);
+    expect(container.querySelector('.mark')?.getAttribute('data-status')).toBe('waiting');
+  });
+
+  /// Every state the mark can be in draws the same geometry now, so none of
+  /// them can drift from the others.
+  it('draws one geometry in every state', () => {
+    for (const status of ['idle', 'working', 'waiting', 'compacting'] as const) {
+      const { container, unmount } = render(RestMark, {
+        props: { status, pct: 12, onopen: () => {} },
+      });
+
+      expect(strokes(container), status).toEqual([...SIGN_STROKES]);
+      unmount();
+    }
+  });
+
   /// The one rule this slice adds to section 9: the mark and the empty chat
   /// draw the same geometry, because a sign redrawn by hand in a second place
   /// is a sign that drifts from the first.
