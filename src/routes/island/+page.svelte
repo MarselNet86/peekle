@@ -103,6 +103,22 @@
   /** When the island asked this chat to stop and the turn has not ended yet.
    * tech.md 6.5. */
   const askedToStop = $derived(current?.stopping ?? null);
+  /** The CLI is asking whether this folder is trusted, and until that is
+   * answered it runs nothing at all. tech.md 6.24. */
+  const askingTrust = $derived(current?.asking_trust != null);
+  let answeringTrust = $state(false);
+
+  async function answerTrust(trust: boolean) {
+    if (!current || answeringTrust) return;
+    answeringTrust = true;
+    try {
+      await commands.answerTrust(current.session.session_id, trust);
+    } catch (err) {
+      startError = String(err);
+    } finally {
+      answeringTrust = false;
+    }
+  }
   const rows = $derived(
     feedRows(
       current?.entries ?? [],
@@ -898,6 +914,32 @@
                  is chosen in the same breath as the first message. It stands
                  only while it can be taken -- nothing said in this chat yet.
                  tech.md 6.23. -->
+            <!-- The CLI asks whether this folder is trusted before it runs
+                 anything, and it asks on its own screen, where nobody can see
+                 it: no hook fires and no transcript is written until it is
+                 answered. So the question stands here instead, and the person
+                 answers it. Peekle never answers it for them -- it is about
+                 whether they vouch for what is in the folder. tech.md 6.24. -->
+            {#if askingTrust}
+              <div class="trust">
+                <p class="asked">Claude Code asks whether you trust this folder</p>
+                <p class="where">{current.session.cwd}</p>
+                <div class="answers">
+                  <Button
+                    label="Trust it"
+                    variant="prominent"
+                    busy={answeringTrust}
+                    onclick={() => answerTrust(true)}
+                  />
+                  <Button
+                    label="Not here"
+                    variant="muted"
+                    disabled={answeringTrust}
+                    onclick={() => answerTrust(false)}
+                  />
+                </div>
+              </div>
+            {/if}
             {#if aiming}
               <div class="aim">
                 <PickerMenu
@@ -1198,5 +1240,36 @@
   .aim {
     display: flex;
     padding: 0 4px 5px;
+  }
+
+  /* Over the field, where the answer is given, and with its own ground: it is
+     a question about this chat, not a line in it. tech.md 6.24. */
+  .trust {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 2px 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .asked {
+    margin: 0;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .where {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .answers {
+    display: flex;
+    gap: 8px;
   }
 </style>

@@ -11,40 +11,73 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                                            | Contract             |
-| ------- | -------------------------------------------------------------------------------------------------- | -------------------- |
-| v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                           | 6.13, 9              |
-| v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)       | 6.13, 9              |
-| v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                  | 6.23, 6.5, 9         |
-| v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                            | 6.22, 6.5, 9         |
-| v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                  | 6.5                  |
-| v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows) | 6.21, 9              |
-| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                          | 6.2, 6.7             |
-| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                | 6.7, 9               |
-| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                              | 6.7, 9               |
-| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                          | 6.12, 9              |
-| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                        | 9                    |
-| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                              | 6.3, 6.5, 6.11, 6.21 |
-| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)         | 6.5, 6.15            |
-| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                               | 6.1, 6.3, 6.5, 6.21  |
-| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one)        | 6.2, 6.3, 6.7, 9     |
-| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                         | 6.7, 6.14, 9         |
-| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)             | 6.3, 6.7, 6.14, 9    |
-| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)                     | 6.7, 6.12, 9         |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                         | 6.15, 6.20, 9        |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                                  | 6.5, 6.11            |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)                                    | 6.5, 6.11            |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                                           | 6.5, 9               |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                                | 6.12, 6.15, 6.20, 9  |
-| v64     | [Live mode switching](#v64--live-mode-switching)                                                   | 6.19, 9              |
-| v63     | [Permission mode](#v63--permission-mode)                                                           | 6.3, 6.5, 6.19, 9    |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)                      | 6.4                  |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                                 | 6.3, 6.12, 6.16, 9   |
-| v60     | [Composer layout](#v60--composer-layout)                                                           | 6.12, 6.15, 9        |
-| v59     | [Permission panel](#v59--permission-panel)                                                         | 6.3, 6.7, 9          |
-| v58     | [Usage badge](#v58--usage-badge)                                                                   | 6.8, 6.10, 6.18, 9   |
-| v57     | [Work line](#v57--work-line)                                                                       | 6.12, 9              |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                         | 6.5, 6.15, 9         |
+| Version | Feature                                                                                                                  | Contract             |
+| ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5       |
+| v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9              |
+| v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)                             | 6.13, 9              |
+| v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                                        | 6.23, 6.5, 9         |
+| v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                                                  | 6.22, 6.5, 9         |
+| v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                                        | 6.5                  |
+| v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows)                       | 6.21, 9              |
+| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                                                | 6.2, 6.7             |
+| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                                      | 6.7, 9               |
+| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                                                    | 6.7, 9               |
+| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                                                | 6.12, 9              |
+| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                                              | 9                    |
+| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                                                    | 6.3, 6.5, 6.11, 6.21 |
+| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)                               | 6.5, 6.15            |
+| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                                                     | 6.1, 6.3, 6.5, 6.21  |
+| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one)                              | 6.2, 6.3, 6.7, 9     |
+| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                                               | 6.7, 6.14, 9         |
+| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)                                   | 6.3, 6.7, 6.14, 9    |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)                                           | 6.7, 6.12, 9         |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                                               | 6.15, 6.20, 9        |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                                                        | 6.5, 6.11            |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                                                          | 6.5, 6.11            |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                                                                 | 6.5, 9               |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                                                      | 6.12, 6.15, 6.20, 9  |
+| v64     | [Live mode switching](#v64--live-mode-switching)                                                                         | 6.19, 9              |
+| v63     | [Permission mode](#v63--permission-mode)                                                                                 | 6.3, 6.5, 6.19, 9    |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)                                            | 6.4                  |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                                                       | 6.3, 6.12, 6.16, 9   |
+| v60     | [Composer layout](#v60--composer-layout)                                                                                 | 6.12, 6.15, 9        |
+| v59     | [Permission panel](#v59--permission-panel)                                                                               | 6.3, 6.7, 9          |
+| v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
+| v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v80.12 — A chat in a folder Claude Code has not been trusted in
+
+2026-09-11
+
+Picking a folder worked. Starting a chat in it did not, and it failed in
+silence: the CLI opens with a question — _Quick safety check: is this a project
+you created or one you trust?_ — and until that is answered it runs nothing.
+Not the message it was handed, not one hook, not a line of transcript. The
+island waited for a confirmation that could never come and turned the bubble
+red. Worse, the nudge that pokes an unconfirmed message wrote a newline into
+the pty, and the cursor on that question sits on **No, exit**.
+
+It only asks about folders that look like projects — a repository, a
+`CLAUDE.md`, settings of their own — which is to say exactly the folders the
+picker exists to reach.
+
+Nothing reports the question but the screen itself, so this is the one thing
+Peekle reads off the TUI: two marks on a stream with its escape sequences and
+its spaces squeezed out, within two minutes of the start. The words have to be
+squeezed because the screen has none — the TUI writes a word and jumps the
+cursor, so the sentence never arrives as a sentence until a redraw prints it,
+which is later than we need it.
+
+The question then stands over the field, naming the folder. **Trust it** writes
+the answer into the pty that asked; **Not here** ends the chat, which is what
+that question's own _No, exit_ does. Peekle never answers it alone: the CLI is
+asking whether this person vouches for what is in the folder. While it stands,
+the message is neither nudged nor given up on — it is not late, it has not been
+offered yet.
+
+![The question about a folder, in the island](shots/folder-trust.png)
 
 ## v80.11 — Pressing a screenshot opens it
 

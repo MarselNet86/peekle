@@ -296,6 +296,7 @@ impl SessionRegistry {
                 thinking: None,
                 compacting: None,
                 stopping: None,
+                asking_trust: None,
                 updated_at: at,
             },
         );
@@ -807,6 +808,41 @@ impl SessionRegistry {
         }
     }
 
+    /// The CLI is asking whether this folder is trusted. tech.md 6.24.
+    ///
+    /// `false` when there is no card: the question belongs to a chat Peekle
+    /// started, and it started it with a card.
+    pub fn ask_trust(&mut self, session_id: &str, at: i64) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.asking_trust = Some(at);
+        true
+    }
+
+    /// The question is over, answered either way. tech.md 6.24.
+    pub fn end_trust(&mut self, session_id: &str) -> bool {
+        let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.session.session_id == session_id)
+        else {
+            return false;
+        };
+        card.asking_trust.take().is_some()
+    }
+
+    /// Whether this chat has the question standing. tech.md 6.24.
+    pub fn asking_trust(&self, session_id: &str) -> bool {
+        self.cards
+            .iter()
+            .any(|card| card.session.session_id == session_id && card.asking_trust.is_some())
+    }
+
     /// The island asked this chat to stop. tech.md 6.5.
     ///
     /// `false` when there is no card to ask about: a chat nobody has seen an
@@ -953,6 +989,9 @@ impl SessionRegistry {
         if status == SessionStatus::Ended {
             card.compacting = None;
             card.stopping = None;
+            // And the question about the folder died with the screen that
+            // asked it. tech.md 6.24.
+            card.asking_trust = None;
         }
         card.updated_at = at;
         self.touch(session_id);
@@ -1031,6 +1070,7 @@ impl SessionRegistry {
                     thinking: None,
                     compacting: None,
                     stopping: None,
+                    asking_trust: None,
                     updated_at: at,
                 },
             );

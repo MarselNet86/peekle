@@ -376,6 +376,16 @@ pub struct SessionCard {
     /// tech.md 6.5.
     #[ts(type = "number | null")]
     pub stopping: Option<i64>,
+    /// When the CLI asked whether this folder is trusted, `None` when it has
+    /// not.
+    ///
+    /// Set from the one thing Peekle reads off the TUI, because nothing else
+    /// reports it: until the question is answered the CLI runs no prompt and
+    /// fires no hook, so a chat started in an untrusted folder is silent in
+    /// every channel the island has. Answered by the person, in the island.
+    /// tech.md 6.24.
+    #[ts(type = "number | null")]
+    pub asking_trust: Option<i64>,
     /// unix ms
     #[ts(type = "number")]
     pub updated_at: i64,

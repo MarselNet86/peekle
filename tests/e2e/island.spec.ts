@@ -46,6 +46,7 @@ function observed(entries: unknown[] = [], id = 's1'): Card {
     thinking: null,
     compacting: null,
     stopping: null,
+    asking_trust: null,
     updated_at: 0,
   };
 }
@@ -282,6 +283,7 @@ test.describe('the island route', () => {
           thinking: null,
           compacting: null,
           stopping: null,
+          asking_trust: null,
           updated_at: 2,
         },
       ]);
@@ -357,6 +359,7 @@ test.describe('the island route', () => {
           thinking: null,
           compacting: null,
           stopping: null,
+          asking_trust: null,
           updated_at: 2,
         },
       ]);
@@ -433,6 +436,53 @@ test.describe('the island route', () => {
     await expect(page.getByText('go on')).toBeVisible();
     await expect(page.locator('.aim')).toHaveCount(0);
     await expect(page.locator('.head .project')).toContainText('peekle');
+  });
+
+  /// The CLI asks whether a folder is trusted on its own screen, before it
+  /// runs anything -- no hook, no transcript, nothing. The island puts the
+  /// question where the person is, and answers it only as they answer it.
+  /// tech.md 6.24.
+  test('the question about a folder is asked where the person is', async ({ page }) => {
+    const asking = { ...aimed('/Users/dev/whitelist'), asking_trust: Date.now() - 2_000 };
+    await stub(page, [asking]);
+    await page.goto(ROUTE);
+
+    await expect(page.getByText('Claude Code asks whether you trust this folder')).toBeVisible();
+    // Which folder, in full: the answer is about this path and no other.
+    await expect(page.locator('.trust .where')).toHaveText('/Users/dev/whitelist');
+
+    await page.getByRole('button', { name: 'Trust it' }).click();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const answered = calls.filter((call) => call.command === 'answer_trust');
+    expect(answered).toHaveLength(1);
+    expect(answered[0].args).toEqual({ sessionId: 's1', trust: true });
+  });
+
+  /// And no is an answer too: it is the question's own `No, exit`.
+  test('the folder question can be answered with no', async ({ page }) => {
+    const asking = { ...aimed('/Users/dev/whitelist'), asking_trust: Date.now() - 2_000 };
+    await stub(page, [asking]);
+    await page.goto(ROUTE);
+
+    await page.getByRole('button', { name: 'Not here' }).click();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
+    );
+    const answered = calls.filter((call) => call.command === 'answer_trust');
+    expect(answered).toHaveLength(1);
+    expect(answered[0].args).toEqual({ sessionId: 's1', trust: false });
+  });
+
+  /// A chat nobody is asking about carries no panel: it is an answer to a
+  /// question, and there is no question.
+  test('a chat with nothing to answer carries no panel', async ({ page }) => {
+    await stub(page, [aimed('/Users/dev/peekle')]);
+    await page.goto(ROUTE);
+
+    await expect(page.locator('.aim')).toBeVisible();
+    await expect(page.locator('.trust')).toHaveCount(0);
   });
 
   /// A screenshot in a message is a reference to the picture, so pressing it

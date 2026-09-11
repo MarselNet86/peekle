@@ -232,6 +232,86 @@ pub fn is_slash_command(text: &str) -> bool {
 /// it, and the message that follows lands in the box the way it should.
 pub const CONFIRM_GAP: std::time::Duration = SETTING_GAP;
 
+/// What the CLI puts on screen when it asks whether this folder is trusted.
+///
+/// Captured live 2026-09-11 on 2.1.263 (`fixtures/pty/trust-question.txt`) by
+/// starting a chat in a folder whose `hasTrustDialogAccepted` is false: a
+/// full-screen question headed `Quick safety check`, with `No, exit` under the
+/// cursor and `Yes, I trust this folder` below it. Until it is answered the
+/// CLI runs nothing at all -- not the prompt it was handed, and not one hook
+/// -- so a chat started in such a folder sat there in silence until its reply
+/// went red. tech.md 6.24.
+///
+/// The mark carries no spaces because the screen has none: the TUI writes each
+/// word and then jumps the cursor to the next column, so `Yes, I trust this
+/// folder` reaches the pty as words with escape sequences between them and the
+/// phrase never appears contiguously. [`asks_trust`] squeezes both out before
+/// looking, which is also why the mark is this long: a single word survives
+/// squeezing in any prose the agent might print.
+/// Both of the answers it offers, because one of them is a sentence a person
+/// could also type: the agent's own replies are drawn on this same screen, and
+/// `I trust this folder` in a reply must not be read as the CLI asking.
+pub const TRUST_MARKS: [&str; 2] = ["Itrustthisfolder", "No,exit"];
+
+/// How long after a start the question can still be the question.
+///
+/// It is asked before anything runs and answered before anything else can
+/// happen, so a screen that says it an hour in is the agent talking. tech.md
+/// 6.24.
+pub const TRUST_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Whether this screen is the folder question. tech.md 6.24.
+pub fn asks_trust(screen: &str) -> bool {
+    let screen = squeeze(screen);
+    TRUST_MARKS.iter().all(|mark| screen.contains(mark))
+}
+
+/// A screen with its escape sequences and its whitespace taken out.
+///
+/// Terminal output is a drawing, not a document: the same sentence arrives
+/// with cursor moves inside it, split across reads, and redrawn a dozen times.
+/// What survives all of that is the order of the printed characters.
+fn squeeze(screen: &str) -> String {
+    let mut out = String::with_capacity(screen.len());
+    let mut chars = screen.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            // CSI and OSC both end on a byte outside the parameter range; the
+            // two-character escapes end on the character right after it.
+            match chars.peek() {
+                Some('[') | Some(']') | Some('(') | Some(')') => {
+                    chars.next();
+                }
+                _ => {
+                    chars.next();
+                    continue;
+                }
+            }
+            for ch in chars.by_ref() {
+                if ch.is_ascii_alphabetic() || ch == '\u{7}' || ch == '\u{9c}' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if ch.is_whitespace() || ch.is_control() {
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// The keys that answer it with yes.
+///
+/// The cursor stands on `No, exit`, so yes is one step down and Enter. Two
+/// writes with a gap between them, for the reason [`ENTER_GAP`] gives: a
+/// selection and its confirmation read as one keystroke when they arrive in
+/// one read.
+pub fn trust_writes() -> Vec<Vec<u8>> {
+    vec![b"\x1b[B".to_vec(), b"\r".to_vec()]
+}
+
 /// A session id Claude Code accepts: it insists on a UUID.
 pub fn new_session_id() -> String {
     let raw = ulid::Ulid::generate().to_bytes();
@@ -380,9 +460,16 @@ impl PtyHost {
     /// `on_exit` runs on the reader thread when the process goes away, which
     /// is the only moment `SessionStatus::Ended` is a fact rather than a
     /// guess: the process was ours. tech.md 6.3.
-    pub fn spawn<F>(&self, binary: &Path, spec: &SpawnSpec, on_exit: F) -> Result<(), PtyError>
+    pub fn spawn<F, T>(
+        &self,
+        binary: &Path,
+        spec: &SpawnSpec,
+        on_exit: F,
+        on_trust: T,
+    ) -> Result<(), PtyError>
     where
         F: FnOnce(String) + Send + 'static,
+        T: FnOnce(String) + Send + 'static,
     {
         if !Path::new(&spec.cwd).is_dir() {
             return Err(PtyError::NoCwd);
@@ -442,15 +529,36 @@ impl PtyHost {
             .try_clone_reader()
             .map_err(|err| PtyError::Pty(err.to_string()))?;
 
-        // Drain and discard. The feed is built from hooks and transcripts, not
-        // from the TUI, but an unread buffer fills up and wedges the process on
-        // the other end, so reading is not optional. tech.md 6.5.
+        // Drained because an unread buffer wedges the process on the other
+        // end, and read for exactly one thing: the question about trusting
+        // this folder. The feed is still built from hooks and transcripts and
+        // never from the TUI -- this is not feed, it is the one question that
+        // stops every hook from ever arriving, so nothing but the screen can
+        // report it. tech.md 6.5 and 6.24.
         let id = spec.session_id.clone();
         std::thread::spawn(move || {
             let mut buffer = [0u8; 8192];
+            // A window over the last two chunks, so the mark is still found
+            // when a read splits it in half.
+            let mut tail = String::new();
+            let mut ask = Some(on_trust);
+            let started = std::time::Instant::now();
             while let Ok(read) = reader.read(&mut buffer) {
                 if read == 0 {
                     break;
+                }
+                if ask.is_some() && started.elapsed() < TRUST_WINDOW {
+                    tail.push_str(&squeeze(&String::from_utf8_lossy(&buffer[..read])));
+                    if TRUST_MARKS.iter().all(|mark| tail.contains(mark)) {
+                        if let Some(ask) = ask.take() {
+                            ask(id.clone());
+                        }
+                    }
+                    // Screens are redrawn whole and often; this only has to
+                    // outlive one split mark.
+                    if tail.len() > 16_384 {
+                        tail.drain(..tail.len() - 8_192);
+                    }
                 }
             }
             on_exit(id);
@@ -514,6 +622,23 @@ impl PtyHost {
 
     /// Ends a session Peekle owns. Unknown ids are a no-op: the process may
     /// have exited on its own a moment earlier, and that is not an error.
+    /// Answers the folder trust question with yes. tech.md 6.24.
+    ///
+    /// Only ever called because the person answered it in the island: the CLI
+    /// asks whether they vouch for what is in the folder, and that is not a
+    /// question an overlay may answer for them.
+    pub fn trust(&self, session_id: &str) -> Result<(), PtyError> {
+        let writer = self.writer_of(session_id)?;
+        let mut writer = lock_writer(&writer);
+        for (index, chunk) in trust_writes().into_iter().enumerate() {
+            if index > 0 {
+                std::thread::sleep(ENTER_GAP);
+            }
+            put(writer.as_mut(), &chunk)?;
+        }
+        Ok(())
+    }
+
     pub fn end(&self, session_id: &str) {
         if let Some(mut owned) = self.lock().remove(session_id) {
             let _ = owned.child.kill();
@@ -623,6 +748,60 @@ pub type SharedPtyHost = Arc<PtyHost>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn screen(name: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/pty")
+            .join(name);
+        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
+    }
+
+    /// tech.md 6.24. The question is read off the screen because nothing else
+    /// reports it, so the only test worth anything is the screen itself.
+    #[test]
+    fn the_folder_question_is_recognised_on_the_screen_that_asks_it() {
+        assert!(asks_trust(&screen("trust-question.txt")));
+        assert!(!asks_trust(&screen("no-question.txt")));
+    }
+
+    /// And the reason the mark has no spaces in it. The TUI draws the question
+    /// a word at a time, jumping the cursor between them, and only prints the
+    /// row as a sentence when it redraws it under the cursor. A matcher that
+    /// looked for the sentence would wait for that redraw; this one has the
+    /// question before it comes.
+    #[test]
+    fn the_question_is_caught_on_its_first_drawing() {
+        let raw = screen("trust-question.txt");
+        let whole = raw
+            .find("I trust this folder")
+            .expect("a later redraw prints the row whole");
+        let first_drawing = &raw[..whole];
+
+        assert!(!first_drawing.contains("I trust this folder"));
+        assert!(
+            asks_trust(first_drawing),
+            "the question is on screen well before it is on screen as a sentence"
+        );
+    }
+
+    /// One answer is a sentence somebody could type, so it is not enough on
+    /// its own: the agent's own replies are drawn on this same screen.
+    #[test]
+    fn a_reply_that_says_the_same_words_is_not_the_question() {
+        assert!(!asks_trust("Sure, I trust this folder -- go ahead"));
+        // Both halves, and then it is the question and nothing else.
+        assert!(asks_trust("No, exit\nYes, I trust this folder"));
+    }
+
+    /// The cursor stands on `No, exit`, so yes is a move and then a
+    /// confirmation -- in that order, and never in one write. tech.md 6.24.
+    #[test]
+    fn yes_is_a_move_and_then_a_confirmation() {
+        let writes = trust_writes();
+        assert_eq!(writes.len(), 2);
+        assert_eq!(writes[0], b"\x1b[B".to_vec(), "one step down, onto yes");
+        assert_eq!(writes[1], b"\r".to_vec());
+    }
 
     #[test]
     fn passes_the_session_id_it_assigned() {
@@ -950,7 +1129,7 @@ and then stop",
             mode: None,
             thinking: None,
         };
-        let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {});
+        let result = host.spawn(Path::new("/bin/echo"), &spec, |_| {}, |_| {});
         assert!(matches!(result, Err(PtyError::NoCwd)));
     }
 
@@ -973,9 +1152,14 @@ and then stop",
             thinking: None,
         };
         let (tx, rx) = std::sync::mpsc::channel();
-        host.spawn(Path::new("/bin/echo"), &spec, move |id| {
-            let _ = tx.send(id);
-        })
+        host.spawn(
+            Path::new("/bin/echo"),
+            &spec,
+            move |id| {
+                let _ = tx.send(id);
+            },
+            |_| {},
+        )
         .expect("spawn echo");
 
         assert!(host.owns(&spec.session_id));

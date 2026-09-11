@@ -835,6 +835,57 @@ fn a_session_we_start_has_a_card_before_any_hook_arrives() {
     assert!(registry.is_owned("ours"));
 }
 
+/// tech.md 6.24. The CLI asks about the folder on its own screen, where
+/// nobody can see it, and runs nothing until it is answered. The card carries
+/// the question so the island can put it where the person is.
+#[test]
+fn a_chat_carries_the_question_about_its_folder() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.claim("ours");
+    registry.open_owned(session, 1);
+
+    assert!(!registry.asking_trust("ours"));
+    assert!(registry.ask_trust("ours", 5));
+    assert_eq!(registry.cards()[0].asking_trust, Some(5));
+    assert!(registry.asking_trust("ours"));
+
+    // Answered either way, it is over, and saying so twice says nothing.
+    assert!(registry.end_trust("ours"));
+    assert!(!registry.end_trust("ours"));
+    assert!(!registry.asking_trust("ours"));
+
+    // A chat nobody has a card for cannot be asked about.
+    assert!(!registry.ask_trust("nobody", 5));
+}
+
+/// The screen that asked it is gone when the process is, so the question goes
+/// with it: a panel over the field asking about a chat that has ended is a
+/// button that answers nothing. tech.md 6.24.
+#[test]
+fn the_question_dies_with_the_chat() {
+    let mut registry = SessionRegistry::new();
+    let session = peekle_core::types::SessionRef {
+        session_id: "ours".to_string(),
+        cwd: "/tmp/project".to_string(),
+        project: "project".to_string(),
+        pid: None,
+        tty: None,
+    };
+    registry.claim("ours");
+    registry.open_owned(session, 1);
+    registry.ask_trust("ours", 5);
+
+    registry.set_status("ours", peekle_core::types::SessionStatus::Ended, 6);
+    assert_eq!(registry.cards()[0].asking_trust, None);
+}
+
 /// tech.md 6.23. The folder is an intention until the first message: nothing
 /// has read it yet, so it moves freely, and the card's project name moves
 /// with it -- a chat named for the folder it left is a chat named wrong.
@@ -1065,6 +1116,7 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
         thinking: None,
         compacting: None,
         stopping: None,
+        asking_trust: None,
         agent: None,
         updated_at: 2,
     }]);
