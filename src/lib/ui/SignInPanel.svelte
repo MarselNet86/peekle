@@ -179,6 +179,20 @@
     /* Short lines, and the reason the text is capped rather than the block:
        the axis stays put while the wrapping changes. */
     max-width: 340px;
+    /* And the capped block stands in the middle of whatever holds it. The
+       gate lays its children out with `align-items: stretch`, which for an
+       item that refuses to stretch means the start of the cross axis: the
+       whole screen sat 46 px left of the shape it was drawn in, every line of
+       it centred inside a block that was not. Centring belongs here, beside
+       the cap that makes it necessary.
+
+       `width` and not only the cap: auto margins on a flex item with no width
+       of its own shrink it to its content, and then the block -- and the
+       button across it -- changes size with whatever the screen is saying.
+       One width for every state, so the action does not move between them.
+       tech.md 6.16. */
+    width: 100%;
+    margin: 0 auto;
   }
 
   /* The strip under the session list: one column, left aligned, small. The
