@@ -575,8 +575,23 @@ pub async fn start_sign_in(
 
     let host = state.sign_in().clone();
     let reporter = app.clone();
+    let watcher = state.clone();
+    let watched = host.clone();
     let started = host.start(&binary, move |next| {
-        publish_sign_in(&reporter, next);
+        let next = publish_sign_in(&reporter, next);
+        // The process left on its own with no code in flight: the browser
+        // finished the login through the CLI's own callback and there was
+        // never a code to paste. Nobody else will settle this run, so its exit
+        // does, the same way a submitted code is settled -- by asking the CLI
+        // rather than trusting an exit status. tech.md 6.16.
+        if next.stage == peekle_core::types::SignInStage::Finishing && !watched.is_running() {
+            let app = reporter.clone();
+            let state = watcher.clone();
+            let host = watched.clone();
+            tauri::async_runtime::spawn(async move {
+                settle_from_cli(&app, &state, &host).await;
+            });
+        }
     });
 
     match started {
@@ -616,6 +631,18 @@ pub async fn submit_sign_in_code(
     // The CLI has the code; whether it worked is a question for the CLI, not
     // for an exit status read through a terminal. Asked once it has had time
     // to write, and settled exactly once either way. Rule 10.
+    Ok(settle_from_cli(&app, &state, &host).await)
+}
+
+/// Asks the CLI whether the run signed it in, and settles the run on the
+/// answer. The one way a run ends well: after a code went in, and after the
+/// process left on its own because the browser finished the login for it.
+/// tech.md 6.16.
+async fn settle_from_cli(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    host: &peekle_core::auth::SharedSignInHost,
+) -> SignInState {
     let answered = tauri::async_runtime::spawn_blocking(cli_signed_in)
         .await
         .ok()
@@ -628,14 +655,14 @@ pub async fn submit_sign_in_code(
         // below is what will tell, so this does not claim a failure.
         None => host.settle(true, None),
     };
-    let settled = publish_sign_in(&app, settled);
+    let settled = publish_sign_in(app, settled);
 
     // The point of signing in is that the bars fill. Making the user press
     // again afterwards would be one more lost click. tech.md 6.16.
     if settled.stage == peekle_core::types::SignInStage::Done {
-        fetch_usage(&app, &state).await;
+        fetch_usage(app, state).await;
     }
-    Ok(settled)
+    settled
 }
 
 /// Opens the authorize page in the user's browser.

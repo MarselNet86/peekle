@@ -384,6 +384,13 @@ impl SignInHost {
         self.lock_state().clone()
     }
 
+    /// Whether the process is still up. False once it has exited or been put
+    /// down -- which is how the exit of a run that never asked for a code is
+    /// told apart from a code on its way in. tech.md 6.16.
+    pub fn is_running(&self) -> bool {
+        self.lock_running().is_some()
+    }
+
     /// Starts `claude auth login` in a pty and reports every step through
     /// `on_state`.
     ///
@@ -499,8 +506,15 @@ impl SignInHost {
     /// believe. So the last word belongs to whoever asked the CLI. Resolved
     /// exactly once per run, like every other blocking path. Rule 10.
     pub fn settle(&self, done: bool, error: Option<String>) -> SignInState {
-        self.lock_running().take();
+        put_down(self.lock_running().take());
         let mut state = self.lock_state();
+        // Settled once. Two askers can reach here for one run -- the code that
+        // was submitted and the exit that followed it both ask the CLI -- and
+        // the first answer is the answer; the second finds it and keeps it.
+        // Rule 10.
+        if matches!(state.stage, SignInStage::Done | SignInStage::Failed) {
+            return state.clone();
+        }
         state.stage = if done {
             SignInStage::Done
         } else {
