@@ -104,7 +104,7 @@ describe('which control a failure earns', () => {
   /// list with no control at all.
   it('still gates the session list when the way out is a sign-in', () => {
     expect(gateSessions(snapshot('NotLoggedIn'))).toBe(true);
-    expect(gateSessions(snapshot('NotLoggedIn', true))).toBe(false);
+    expect(gateSessions(snapshot('NotLoggedIn', true))).toBe(true);
     expect(gateSessions(snapshot('RateLimited'))).toBe(false);
   });
 });

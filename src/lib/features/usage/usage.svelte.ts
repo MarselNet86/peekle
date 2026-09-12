@@ -105,19 +105,24 @@ export function outOfReach(snapshot: UsageSnapshot | null): boolean {
  * Whether the session list should be replaced by one big connect screen
  * instead of drawn at all.
  *
- * Exactly when access has never been granted and there is a button that could
- * fix that -- never for `Disabled`, `Unsupported` or `RateLimited`, where no
- * press would do anything, and never once `keychain_granted` is true, because
- * a later network blip or rate limit must not hide history that was already
- * reachable. Before the first snapshot arrives (`null`) this reads as
- * reachable too, so the list opens on nothing rather than flashing this
- * screen for the instant before `get_state` answers. tech.md 6.4.
+ * Signed out gates it outright, whatever was granted before. The rows are
+ * chats of an account nobody is signed in to, and a list standing over a
+ * sign-in screen reads as a product that works -- right up until the first row
+ * is pressed and the agent behind it has no account to answer with. The grant
+ * is not the question there: a grant given once says the Keychain may be read,
+ * not that there is anything in it. tech.md 6.4 and 6.16.
+ *
+ * Every other reason keeps the older rule: gated only before the first grant,
+ * and never after one, because a network blip or a rate limit must not hide
+ * history that was already reachable. Never for `Disabled`, `Unsupported` or
+ * `RateLimited` either, where no press would do anything. Before the first
+ * snapshot arrives (`null`) this reads as reachable, so the list opens on
+ * nothing rather than flashing this screen for the instant before `get_state`
+ * answers. tech.md 6.4.
  */
 export function gateSessions(snapshot: UsageSnapshot | null): boolean {
-  return (
-    !(snapshot?.keychain_granted ?? true) &&
-    (connectLabel(snapshot) !== null || needsSignIn(snapshot))
-  );
+  if (needsSignIn(snapshot)) return true;
+  return !(snapshot?.keychain_granted ?? true) && connectLabel(snapshot) !== null;
 }
 
 export function createUsage() {

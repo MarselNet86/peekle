@@ -212,10 +212,19 @@ describe('gating the session list', () => {
 
   /// Once granted, a later failure of any kind must not hide history that
   /// was already reachable -- the exact flapping this gate exists to end.
+  /// Signed out is the one exception, below.
   it('never re-gates once access has been granted', () => {
     expect(gateSessions(snapshot('Network', true))).toBe(false);
     expect(gateSessions(snapshot('Offline', true))).toBe(false);
     expect(gateSessions(snapshot(null, true))).toBe(false);
+  });
+
+  /// Signed out is not a blip: the rows are chats of an account nobody is
+  /// signed in to, and a list standing over a sign-in screen reads as a
+  /// product that works until the first row is pressed. tech.md 6.4 and 6.16.
+  it('gates whenever nobody is signed in, granted or not', () => {
+    expect(gateSessions(snapshot('NotLoggedIn', false))).toBe(true);
+    expect(gateSessions(snapshot('NotLoggedIn', true))).toBe(true);
   });
 
   /// Before the first snapshot arrives, the list opens on nothing rather than
