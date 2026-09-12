@@ -28,14 +28,21 @@ export const REST_SIDE = 38;
  * a black bar across the middle of the menu bar; the 78 by 20 pill that stood
  * here before v82 was a crumb at the edge of a 1920 pixel screen, neither
  * recognisable nor pressable. tech.md 6.7.
+ *
+ * 132 by 36 was the first live size, and the first live Windows run said it
+ * back: a capsule that wide sits across the tab strip of whatever is
+ * maximised under it and reads as a black bar somebody left on the screen.
+ * 104 by 28 still carries the sign and the ring with room between them, still
+ * gives the pointer a target it cannot miss, and stops pretending to be a
+ * notch on a screen that has none. tech.md 6.7 and 6.27.
  */
-export const REST_FLOAT = { width: 132, height: 36 } as const;
+export const REST_FLOAT = { width: 104, height: 28 } as const;
 
 /**
  * How far every shape stands off the top edge on a display with no notch.
  * Zero with one: the black there continues the cutout. tech.md 6.7.
  */
-export const FLOAT_TOP = 10;
+export const FLOAT_TOP = 6;
 
 /**
  * How much wider a resting shape gets on each side while the usage badge
@@ -46,7 +53,7 @@ export const FLOAT_TOP = 10;
  * centred on it. So the left edge gains empty fill and the right edge gains
  * the room the number needs. tech.md 6.18.
  */
-export const REST_BADGE = 36;
+export const REST_BADGE = 28;
 
 export interface Notch {
   width: number;
