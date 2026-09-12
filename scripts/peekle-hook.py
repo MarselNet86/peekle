@@ -29,7 +29,25 @@ import sys
 import urllib.error
 import urllib.request
 
-CONFIG = os.path.expanduser("~/Library/Application Support/peekle/config.toml")
+def config_file():
+    """Where `peekle init` wrote the config, under the name the platform uses.
+
+    The same three places `directories::ProjectDirs` hands the Rust side, and
+    they have to agree exactly: this file carries the port and the token, and a
+    handler that cannot find it posts nowhere and exits quiet -- which is what
+    every hook on Windows did until v82.7, so the island showed no feed, no
+    spinner, and a reply nothing ever confirmed. tech.md 6.8 and 6.27.
+    """
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support/peekle/config.toml")
+    if os.name == "nt":
+        roaming = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
+        return os.path.join(roaming, "peekle", "config", "config.toml")
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "peekle", "config.toml")
+
+
+CONFIG = config_file()
 
 # Only these two ever wait for a person. Everything else is fire and forget, and
 # a feed event that blocks the agent would be a bug with a stopwatch on it.
