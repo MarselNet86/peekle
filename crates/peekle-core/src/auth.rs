@@ -15,6 +15,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+#[cfg(not(target_os = "windows"))]
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 
 use crate::types::{SignInFix, SignInNeed, SignInStage, SignInState};
@@ -204,8 +205,154 @@ pub enum SignInError {
 /// The one sign-in process, and the handles that keep it alive.
 struct Running {
     writer: Box<dyn Write + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
-    _master: Box<dyn portable_pty::MasterPty + Send>,
+    handles: Handles,
+}
+
+/// What the process was started through, and so what has to be put down.
+///
+/// A pty everywhere the CLI behaves in one. On Windows it does not: under a
+/// pseudoconsole `claude auth login` sits at zero CPU, prints nothing and
+/// never exits -- the first live sign-in there stood on `Opening your
+/// browser` for good. Started on plain pipes the same binary prints the
+/// address, opens the browser and reads the code, so that is how it is
+/// started there. The parts of 6.16 that read the output do not know which:
+/// pipes carry no escapes to strip, and stripping none is not an error.
+/// tech.md 6.16 and 6.27.
+enum Handles {
+    #[cfg(not(target_os = "windows"))]
+    Pty {
+        child: Box<dyn portable_pty::Child + Send + Sync>,
+        _master: Box<dyn portable_pty::MasterPty + Send>,
+    },
+    #[cfg(target_os = "windows")]
+    Pipes { child: std::process::Child },
+}
+
+impl Handles {
+    fn kill(&mut self) {
+        match self {
+            #[cfg(not(target_os = "windows"))]
+            Handles::Pty { child, .. } => {
+                let _ = child.kill();
+            }
+            #[cfg(target_os = "windows")]
+            Handles::Pipes { child } => {
+                let _ = child.kill();
+            }
+        }
+    }
+}
+
+/// A process just started: what it writes, what it reads, what keeps it.
+struct Spawned {
+    reader: Box<dyn Read + Send>,
+    writer: Box<dyn Write + Send>,
+    handles: Handles,
+}
+
+/// Starts the login in the pty the CLI opens its browser from. tech.md 6.16.
+#[cfg(not(target_os = "windows"))]
+fn spawn(binary: &Path) -> Result<Spawned, SignInError> {
+    let system = NativePtySystem::default();
+    let pair = system
+        .openpty(PtySize {
+            // Wide enough that the authorize address is not wrapped: a
+            // line break inside it would split it in the stream and leave
+            // the panel offering half an address.
+            rows: 40,
+            cols: 400,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|err| SignInError::Pty(err.to_string()))?;
+
+    let mut command = CommandBuilder::new(binary);
+    for arg in LOGIN_ARGS {
+        command.arg(arg);
+    }
+    command.env("TERM", "xterm-256color");
+    command.env("PATH", crate::pty::session_path());
+
+    let child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|err| SignInError::Pty(err.to_string()))?;
+    drop(pair.slave);
+
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|err| SignInError::Pty(err.to_string()))?;
+    let reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|err| SignInError::Pty(err.to_string()))?;
+
+    Ok(Spawned {
+        reader,
+        writer,
+        handles: Handles::Pty {
+            child,
+            _master: pair.master,
+        },
+    })
+}
+
+/// Starts the login on pipes, with no console of its own: a console child of
+/// a windowed parent gets a fresh console window otherwise, and one flashed
+/// up on every press. tech.md 6.27.
+#[cfg(target_os = "windows")]
+fn spawn(binary: &Path) -> Result<Spawned, SignInError> {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let mut child = Command::new(binary)
+        .args(LOGIN_ARGS)
+        .env("PATH", crate::pty::session_path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|err| SignInError::Pty(err.to_string()))?;
+    let reader = child
+        .stdout
+        .take()
+        .ok_or_else(|| SignInError::Pty("no stdout".to_string()))?;
+    let writer = child
+        .stdin
+        .take()
+        .ok_or_else(|| SignInError::Pty("no stdin".to_string()))?;
+
+    Ok(Spawned {
+        reader: Box::new(reader),
+        writer: Box::new(writer),
+        handles: Handles::Pipes { child },
+    })
+}
+
+/// Puts a run down, off whatever thread asked for it.
+///
+/// Dropping the master closes the pseudoconsole, and on Windows
+/// `ClosePseudoConsole` waits: for the console host to go, which waits for
+/// every process still attached to it, which is not always the one that was
+/// just killed. The second live sign-in on Windows ended in a window that
+/// stopped answering, because the thread that pressed Cancel was the main
+/// thread and the drop sat on it holding the `running` lock. So the run is
+/// taken out under the lock, the lock is let go, and the kill and the drop
+/// happen on a thread nobody waits for. A host that never lets go costs one
+/// parked thread, and that is the whole price. tech.md 6.16 and 6.27.
+fn put_down(running: Option<Running>) {
+    let Some(mut running) = running else {
+        return;
+    };
+    std::thread::spawn(move || {
+        running.handles.kill();
+        drop(running);
+        tracing::debug!("the sign-in process is put down");
+    });
 }
 
 /// How much of the output is carried between reads, so an address split across
@@ -256,40 +403,11 @@ impl SignInHost {
         self.cancel();
         let generation = self.bump();
 
-        let system = NativePtySystem::default();
-        let pair = system
-            .openpty(PtySize {
-                // Wide enough that the authorize address is not wrapped: a
-                // line break inside it would split it in the stream and leave
-                // the panel offering half an address.
-                rows: 40,
-                cols: 400,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|err| SignInError::Pty(err.to_string()))?;
-
-        let mut command = CommandBuilder::new(binary);
-        for arg in LOGIN_ARGS {
-            command.arg(arg);
-        }
-        command.env("TERM", "xterm-256color");
-        command.env("PATH", crate::pty::session_path());
-
-        let child = pair
-            .slave
-            .spawn_command(command)
-            .map_err(|err| SignInError::Pty(err.to_string()))?;
-        drop(pair.slave);
-
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|err| SignInError::Pty(err.to_string()))?;
-        let mut reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|err| SignInError::Pty(err.to_string()))?;
+        let Spawned {
+            mut reader,
+            writer,
+            handles,
+        } = spawn(binary)?;
 
         let starting = SignInState {
             stage: SignInStage::Starting,
@@ -299,11 +417,7 @@ impl SignInHost {
             fix: None,
         };
         *self.lock_state() = starting.clone();
-        self.lock_running().replace(Running {
-            writer,
-            child,
-            _master: pair.master,
-        });
+        self.lock_running().replace(Running { writer, handles });
 
         let host = Arc::clone(self);
         std::thread::spawn(move || {
@@ -370,10 +484,11 @@ impl SignInHost {
     /// of the run being killed reports nothing after this. tech.md 6.16.
     pub fn cancel(&self) {
         self.bump();
-        if let Some(mut running) = self.lock_running().take() {
-            let _ = running.child.kill();
+        let running = self.lock_running().take();
+        if running.is_some() {
             tracing::debug!("the sign-in was cancelled");
         }
+        put_down(running);
         *self.lock_state() = SignInState::idle();
     }
 
@@ -430,6 +545,9 @@ impl SignInHost {
         if !self.current(generation) {
             return;
         }
+        // The process is gone, so nothing below needs its handles; a run left
+        // in the slot would be the next start's to tear down, on its thread.
+        put_down(self.lock_running().take());
         let next = {
             let mut state = self.lock_state();
             if matches!(state.stage, SignInStage::Done | SignInStage::Failed) {

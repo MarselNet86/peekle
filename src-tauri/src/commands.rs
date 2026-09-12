@@ -406,7 +406,8 @@ fn cli_supports_login() -> Option<bool> {
 /// a prompt and opens an interactive session on them. tech.md 6.16 and 6.27.
 fn cli_says(args: &[&str]) -> Option<String> {
     let binary = peekle_core::claude_path()?;
-    let mut child = std::process::Command::new(binary)
+    let mut command = std::process::Command::new(binary);
+    let mut child = platform::hidden(&mut command)
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -660,10 +661,16 @@ pub fn open_sign_in_page(state: State<'_, Arc<AppState>>) -> Result<(), String> 
 }
 
 /// Kills the sign-in and puts the panel away. tech.md 6.16.
+///
+/// Async, and it has to be: a plain command runs on the main thread, and this
+/// is the one that tears a pseudoconsole down. The teardown no longer blocks
+/// its caller (`auth::put_down`), but the thread that draws the window is not
+/// the place to find out. tech.md 6.27.
 #[tauri::command]
-pub fn cancel_sign_in(app: AppHandle, state: State<'_, Arc<AppState>>) {
+pub async fn cancel_sign_in(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.sign_in().cancel();
     publish_sign_in(&app, SignInState::idle());
+    Ok(())
 }
 
 #[tauri::command]

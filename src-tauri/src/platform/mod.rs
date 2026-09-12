@@ -35,6 +35,22 @@ pub use desktop::{
 
 pub const ISLAND: &str = "island";
 
+/// Keeps a helper run of a console program off the screen.
+///
+/// Peekle is a windowed process, and on Windows a console child of one is
+/// given a console of its own -- a black window that flashes up for every
+/// `claude --help` and `claude auth status` behind a press. Nothing to do on
+/// the other platforms, where a child inherits no window. tech.md 6.27.
+pub fn hidden(command: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// The notch as measured on the display: height and width in points. None on
 /// every platform but macOS, and on macOS on every display without one.
 pub type Notch = (f64, f64);
