@@ -357,13 +357,13 @@
     <h2>SignInPanel</h2>
     <div class="frame">
       <SignInPanel
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null, fix: null }}
         reason="Offline"
       />
     </div>
     <div class="frame">
       <SignInPanel
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null, fix: null }}
         reason="NotLoggedIn"
       />
     </div>
@@ -374,6 +374,7 @@
           url: 'https://claude.com/cai/oauth/authorize?code=true',
           needs_code: true,
           error: null,
+          fix: null,
         }}
         reason="NotLoggedIn"
       />
@@ -385,6 +386,38 @@
           url: null,
           needs_code: false,
           error: 'That code was not accepted.',
+          fix: null,
+        }}
+        reason="NotLoggedIn"
+      />
+    </div>
+
+    <!-- Claude Code itself is what is missing: the panel stops offering a
+         press and hands over the one line that fixes it. tech.md 6.16. -->
+    <div class="frame">
+      <SignInPanel
+        signIn={{
+          stage: 'Failed',
+          url: null,
+          needs_code: false,
+          error: 'Claude Code is not installed on this machine.',
+          fix: {
+            need: 'Install',
+            shell: 'Terminal',
+            command: 'curl -fsSL https://claude.ai/install.sh | bash',
+          },
+        }}
+        reason="NotLoggedIn"
+      />
+    </div>
+    <div class="frame">
+      <SignInPanel
+        signIn={{
+          stage: 'Failed',
+          url: null,
+          needs_code: false,
+          error: 'This Claude Code is too old to sign in from the island.',
+          fix: { need: 'Update', shell: 'PowerShell', command: 'claude update' },
         }}
         reason="NotLoggedIn"
       />
@@ -396,7 +429,7 @@
     <div class="frame">
       <SignInPanel
         compact
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
+        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null, fix: null }}
         reason="NotLoggedIn"
       />
     </div>
@@ -408,6 +441,7 @@
           url: null,
           needs_code: false,
           error: 'Check your connection or VPN, then wait a moment.',
+          fix: null,
         }}
         reason="NotLoggedIn"
       />
@@ -415,7 +449,13 @@
     <div class="frame">
       <SignInPanel
         compact
-        signIn={{ stage: 'Waiting', url: 'https://claude.ai/x', needs_code: true, error: null }}
+        signIn={{
+          stage: 'Waiting',
+          url: 'https://claude.ai/x',
+          needs_code: true,
+          error: null,
+          fix: null,
+        }}
       />
     </div>
 

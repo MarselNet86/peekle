@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accountCopy, canAct, runCopy } from '$lib/logic/signin';
+  import { accountCopy, canAct, fixCopy, runCopy } from '$lib/logic/signin';
   import Button from '$lib/ui/Button.svelte';
   import type { SignInState } from '$lib/types/generated/SignInState';
   import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
@@ -38,9 +38,45 @@
 
   const run = $derived(runCopy(signIn));
   const rest = $derived(accountCopy(reason));
-  const title = $derived(run?.title ?? rest?.title ?? 'Signed out');
-  const line = $derived(run ? run.line : (signIn.error ?? rest?.line ?? ''));
+  // Claude Code itself is what is missing, and the screen becomes one
+  // instruction: it outranks every other line the panel could show, because
+  // none of them are true until this one is done. tech.md 6.16.
+  const fix = $derived(signIn.fix ? fixCopy(signIn.fix) : null);
+  const title = $derived(fix?.title ?? run?.title ?? rest?.title ?? 'Signed out');
+  const line = $derived(fix ? fix.line : run ? run.line : (signIn.error ?? rest?.line ?? ''));
   const action = $derived(rest?.action ?? 'Sign in');
+
+  /** Long enough to be read, short enough not to become the label. */
+  const COPIED_MS = 1600;
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function copyCommand() {
+    const command = signIn.fix?.command;
+    if (!command) return;
+    // The webview is not a secure context on every platform, so the clipboard
+    // API is tried and the old selection trick catches the rest. A command
+    // nobody can copy is a command they have to retype by hand.
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch {
+      const field = document.createElement('textarea');
+      field.value = command;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.append(field);
+      field.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        field.remove();
+      }
+    }
+    copied = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copied = false), COPIED_MS);
+  }
   // A refusal offers nothing to press: every button here would repeat what
   // has already been tried. tech.md 6.16.
   const acts = $derived(canAct(signIn));
@@ -72,6 +108,21 @@
   <h2>{title}</h2>
   {#if line}
     <p>{line}</p>
+  {/if}
+
+  {#if signIn.fix}
+    <!-- The one line that fixes it, laid out to be copied rather than read:
+         the shell it belongs in above, the command itself in the box, and the
+         copy beside it. tech.md 6.16. -->
+    <div class="fix">
+      <span class="where">{fix?.label}</span>
+      <div class="command">
+        <code>{signIn.fix.command}</code>
+        <button class="copy" type="button" onclick={copyCommand}>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+    </div>
   {/if}
 
   {#if signIn.needs_code}
@@ -189,6 +240,73 @@
     font-size: 13px;
     line-height: 1.45;
     color: var(--text-dim);
+  }
+
+  /* The instruction block: quiet label, the command in a box of its own, and
+     the copy inside it. Nothing here is a control the panel competes with --
+     the command is the action. tech.md 6.16 and 9. */
+  .fix {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+    margin-top: 18px;
+    text-align: left;
+  }
+
+  .where {
+    font-size: 11px;
+    letter-spacing: 0.01em;
+    color: var(--text-dim);
+  }
+
+  .command {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--hairline);
+    border-radius: 9px;
+    background: var(--bubble);
+    padding: 8px 8px 8px 11px;
+  }
+
+  code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text);
+    /* Selectable, because copy is the fallback of the copy button and not the
+       other way round. */
+    user-select: text;
+  }
+
+  .copy {
+    flex: none;
+    border: none;
+    border-radius: 6px;
+    background: var(--hairline);
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 11px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+
+  .copy:hover {
+    color: var(--text);
+  }
+
+  .copy:focus,
+  .copy:focus-visible {
+    outline: none;
+  }
+
+  .compact .fix {
+    margin-top: 10px;
   }
 
   input {

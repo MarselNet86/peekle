@@ -382,17 +382,38 @@ const STATUS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 /// failure is exactly the pointless login this is here to prevent.
 /// tech.md 6.16.
 fn cli_signed_in() -> Option<bool> {
+    let raw = cli_says(peekle_core::auth::STATUS_ARGS)?;
+    // The outcome, never the body: it carries the account's email and org.
+    let answer = peekle_core::auth::logged_in(&raw);
+    tracing::debug!(?answer, "claude auth status");
+    answer
+}
+
+/// Whether the Claude Code on this machine still carries the login the panel
+/// drives. `None` when the question could not be put at all. tech.md 6.16.
+fn cli_supports_login() -> Option<bool> {
+    let help = cli_says(peekle_core::auth::HELP_ARGS)?;
+    let answer = peekle_core::auth::supports_login(&help);
+    tracing::debug!(answer, "claude carries the auth command");
+    Some(answer)
+}
+
+/// Runs the CLI with `args` and hands back what it printed, or nothing.
+///
+/// Bounded by hand rather than by `output()`: a CLI that never returns would
+/// otherwise hold this thread for the life of the process -- and a build
+/// without the `auth` command does exactly that, because it reads the words as
+/// a prompt and opens an interactive session on them. tech.md 6.16 and 6.27.
+fn cli_says(args: &[&str]) -> Option<String> {
     let binary = peekle_core::claude_path()?;
     let mut child = std::process::Command::new(binary)
-        .args(peekle_core::auth::STATUS_ARGS)
+        .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
         .ok()?;
 
-    // Bounded by hand rather than by `output()`: a CLI that never returns
-    // would otherwise hold this thread for the life of the process.
     let deadline = std::time::Instant::now() + STATUS_TIMEOUT;
     loop {
         match child.try_wait() {
@@ -402,11 +423,11 @@ fn cli_signed_in() -> Option<bool> {
             }
             Ok(None) => {
                 let _ = child.kill();
-                tracing::warn!("claude auth status did not answer in time");
+                tracing::warn!(?args, "the claude command did not answer in time");
                 return None;
             }
             Err(err) => {
-                tracing::warn!(error = %err, "could not wait on claude auth status");
+                tracing::warn!(error = %err, ?args, "could not wait on the claude command");
                 return None;
             }
         }
@@ -417,10 +438,7 @@ fn cli_signed_in() -> Option<bool> {
         use std::io::Read;
         child.stdout.take()?.read_to_string(&mut raw).ok()?;
     }
-    // The outcome, never the body: it carries the account's email and org.
-    let answer = peekle_core::auth::logged_in(&raw);
-    tracing::debug!(?answer, "claude auth status");
-    answer
+    Some(raw)
 }
 
 /// Publishes a sign-in state and remembers it.
@@ -489,6 +507,38 @@ pub async fn start_sign_in(
 ) -> Result<SignInState, String> {
     let state = state.inner().clone();
 
+    // Nothing to drive. The island does not ship a CLI and must not: it is
+    // Anthropic's to install. So the panel stops explaining and hands over the
+    // one line that fixes it. tech.md 6.16.
+    if peekle_core::claude_path().is_none() {
+        return Ok(publish_sign_in(
+            &app,
+            SignInState::needs(
+                "Claude Code is not installed on this machine.",
+                peekle_core::auth::install_fix(),
+            ),
+        ));
+    }
+
+    // Asked before anything else is put to the CLI, because everything else
+    // this command runs is an `auth` subcommand: a build without one reads the
+    // words as a prompt and opens an interactive session on them, which is a
+    // sign-in that sits on `Starting` with no address and no exit. tech.md 6.16.
+    if tauri::async_runtime::spawn_blocking(cli_supports_login)
+        .await
+        .ok()
+        .flatten()
+        == Some(false)
+    {
+        return Ok(publish_sign_in(
+            &app,
+            SignInState::needs(
+                "This Claude Code is too old to sign in from the island.",
+                peekle_core::auth::update_fix(),
+            ),
+        ));
+    }
+
     // Asked before the process is spawned, because the answer decides whether
     // spawning one is the right thing at all. A CLI that is signed in while
     // the endpoint refuses is not a login problem: the credential is there and
@@ -515,7 +565,10 @@ pub async fn start_sign_in(
     let Some(binary) = peekle_core::claude_path() else {
         return Ok(publish_sign_in(
             &app,
-            SignInState::failed("no claude command found on this Mac"),
+            SignInState::needs(
+                "Claude Code is not installed on this machine.",
+                peekle_core::auth::install_fix(),
+            ),
         ));
     };
 

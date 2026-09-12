@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 
-use crate::types::{SignInStage, SignInState};
+use crate::types::{SignInFix, SignInNeed, SignInStage, SignInState};
 
 /// Sign in against a Claude subscription, which is the account whose token the
 /// usage endpoint answers for. `--console` would be an API-billed account and
@@ -28,6 +28,69 @@ pub const LOGIN_ARGS: &[&str] = &["auth", "login", "--claudeai"];
 /// Keychain dialog, which is what makes it safe to call before offering a
 /// sign-in that might not be the thing that helps. tech.md 6.16.
 pub const STATUS_ARGS: &[&str] = &["auth", "status", "--json"];
+
+/// What the CLI is asked to print so the two above can be trusted.
+pub const HELP_ARGS: &[&str] = &["--help"];
+
+/// Whether this Claude Code still carries the `auth` command the panel drives.
+///
+/// Read off the CLI's own `Commands:` block rather than compared as a version
+/// number. The command list is what actually decides -- a build without `auth`
+/// answers `claude auth login` by treating the words as a prompt and opening
+/// an interactive session, which is a login that hangs on `Starting` forever
+/// with no address and no exit. A version comparison would have to be edited
+/// every time the CLI moves; this reads the answer from the CLI in front of
+/// us. tech.md 6.16 and 6.27.
+pub fn supports_login(help: &str) -> bool {
+    let plain = strip_escapes(help);
+    let mut in_commands = false;
+    for line in plain.lines() {
+        let indented = line.starts_with(char::is_whitespace);
+        if !indented {
+            // `Commands:` opens the block and the next unindented line closes
+            // it, so a command named like a section heading cannot be read out
+            // of the wrong list.
+            in_commands = line.trim_end().eq_ignore_ascii_case("commands:");
+            continue;
+        }
+        if in_commands && line.split_whitespace().next() == Some("auth") {
+            return true;
+        }
+    }
+    false
+}
+
+/// The command that puts Claude Code on this machine, in the shell that runs
+/// it. Anthropic's own installer, and nothing bundled by Peekle: the CLI is
+/// theirs to ship. tech.md 6.16 and 6.27.
+pub fn install_fix() -> SignInFix {
+    #[cfg(target_os = "windows")]
+    {
+        SignInFix {
+            need: SignInNeed::Install,
+            shell: "PowerShell".to_string(),
+            command: "irm https://claude.ai/install.ps1 | iex".to_string(),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        SignInFix {
+            need: SignInNeed::Install,
+            shell: "Terminal".to_string(),
+            command: "curl -fsSL https://claude.ai/install.sh | bash".to_string(),
+        }
+    }
+}
+
+/// The command that brings an installed Claude Code up to a version that can
+/// sign in. One line on every platform; only the shell it is typed in differs.
+pub fn update_fix() -> SignInFix {
+    SignInFix {
+        need: SignInNeed::Update,
+        shell: install_fix().shell,
+        command: "claude update".to_string(),
+    }
+}
 
 /// What the CLI prints when it wants the code from the authorize page.
 ///
@@ -233,6 +296,7 @@ impl SignInHost {
             url: None,
             needs_code: false,
             error: None,
+            fix: None,
         };
         *self.lock_state() = starting.clone();
         self.lock_running().replace(Running {
@@ -450,6 +514,78 @@ mod tests {
     fn knows_the_paste_prompt_when_it_comes() {
         assert!(wants_code(LIVE));
         assert!(!wants_code("Opening browser to sign in"));
+    }
+
+    /// Captured from `claude --help` on a build that still has the command
+    /// this panel drives.
+    const HELP_WITH_AUTH: &str = concat!(
+        "Usage: claude [options] [command] [prompt]\n\n",
+        "Options:\n",
+        "  -h, --help   Display help for command\n\n",
+        "Commands:\n",
+        "  auth         Manage authentication\n",
+        "  doctor       Check the health of your Claude Code auto-updater\n",
+        "  update       Check for updates and install if available\n",
+    );
+
+    /// Captured from `claude --help` on 2.1.31, which has no `auth` at all:
+    /// `claude auth login` there is a prompt, not a command, and the sign-in
+    /// hangs on `Starting` forever. tech.md 6.16.
+    const HELP_WITHOUT_AUTH: &str = concat!(
+        "Usage: claude [options] [command] [prompt]\n\n",
+        "Commands:\n",
+        "  doctor       Check the health of your Claude Code auto-updater\n",
+        "  install      Install Claude Code native build\n",
+        "  mcp          Configure and manage MCP servers\n",
+        "  setup-token  Set up a long-lived authentication token\n",
+        "  update       Check for updates and install if available\n",
+    );
+
+    #[test]
+    fn the_command_list_decides_whether_a_login_can_be_driven() {
+        assert!(supports_login(HELP_WITH_AUTH));
+        assert!(!supports_login(HELP_WITHOUT_AUTH));
+    }
+
+    /// A word that only looks like the command does not count: `auth` has to
+    /// be a command in the command list, not a mention in a description or an
+    /// option in the block above it.
+    #[test]
+    fn only_a_command_named_auth_counts() {
+        assert!(!supports_login(""));
+        assert!(!supports_login("  auth  Manage authentication\n"));
+        assert!(!supports_login(
+            "Options:\n  --auth <mode>  something\n\nCommands:\n  update  x\n"
+        ));
+        assert!(!supports_login(
+            "Commands:\n  doctor  x\n\nExamples:\n  auth login\n"
+        ));
+        assert!(!supports_login(
+            "Commands:\n  authorize  not the same command\n"
+        ));
+    }
+
+    /// The CLI paints its help, and a colour code in front of the name would
+    /// hide the command from a plain read of the first word.
+    #[test]
+    fn colours_in_the_help_do_not_hide_the_command() {
+        let painted = "Commands:\n  \u{1b}[1mauth\u{1b}[0m  Manage authentication\n";
+        assert!(supports_login(painted));
+    }
+
+    /// Each platform is told to use its own shell, and neither command is
+    /// empty: a panel that hands over a blank line is worse than one that
+    /// hands over nothing. tech.md 6.16.
+    #[test]
+    fn every_platform_gets_a_command_and_a_shell_for_it() {
+        for fix in [install_fix(), update_fix()] {
+            assert!(!fix.shell.is_empty());
+            assert!(!fix.command.is_empty());
+        }
+        assert_eq!(update_fix().command, "claude update");
+        assert_eq!(install_fix().shell, update_fix().shell);
+        assert_eq!(install_fix().need, SignInNeed::Install);
+        assert_eq!(update_fix().need, SignInNeed::Update);
     }
 
     /// Ordinary output is neither an address nor a prompt. Reading a stray

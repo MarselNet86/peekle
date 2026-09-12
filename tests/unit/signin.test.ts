@@ -17,7 +17,7 @@ import {
   needsSignIn,
   outOfReach,
 } from '$lib/features/usage/usage.svelte';
-import { accountCopy, canAct, runCopy } from '$lib/logic/signin';
+import { accountCopy, canAct, fixCopy, runCopy } from '$lib/logic/signin';
 import { barred } from '$lib/logic/sessions';
 import SignInPanel from '$lib/ui/SignInPanel.svelte';
 import type { SignInState } from '$lib/types/generated/SignInState';
@@ -44,6 +44,7 @@ const state = (over: Partial<SignInState> = {}): SignInState => ({
   url: null,
   needs_code: false,
   error: null,
+  fix: null,
   ...over,
 });
 
@@ -439,5 +440,53 @@ describe('canAct', () => {
     expect(canAct(state({ stage: 'Failed' }))).toBe(true);
     expect(canAct(state({ stage: 'Waiting' }))).toBe(true);
     expect(canAct(state({ stage: 'Refused' }))).toBe(false);
+  });
+
+  /// The command is the first half of the fix and the press is the second:
+  /// somebody who has just run `claude update` has to be able to say so.
+  /// tech.md 6.16.
+  it('keeps the press while the next move is a command', () => {
+    expect(canAct(state({ stage: 'Failed', fix: UPDATE }))).toBe(true);
+  });
+});
+
+const INSTALL = {
+  need: 'Install',
+  shell: 'Terminal',
+  command: 'curl -fsSL https://claude.ai/install.sh | bash',
+} as const;
+
+const UPDATE = { need: 'Update', shell: 'PowerShell', command: 'claude update' } as const;
+
+describe('when Claude Code itself is what is missing', () => {
+  it('names the two cases apart and says where the command is typed', () => {
+    expect(fixCopy(INSTALL).title).toBe('Claude Code is not installed');
+    expect(fixCopy(UPDATE).title).toBe('Claude Code is out of date');
+    expect(fixCopy(INSTALL).label).toBe('Run this in Terminal');
+    expect(fixCopy(UPDATE).label).toBe('Run this in PowerShell');
+  });
+
+  it('puts the command on screen instead of a button', async () => {
+    render(SignInPanel, { signIn: state({ stage: 'Failed', fix: UPDATE }), reason: 'NotLoggedIn' });
+
+    expect(screen.getByText('Claude Code is out of date')).toBeInTheDocument();
+    expect(screen.getByText('claude update')).toBeInTheDocument();
+    expect(screen.getByText('Run this in PowerShell')).toBeInTheDocument();
+    // And the way back once the command has been run. tech.md 6.16.
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('hands the command to the clipboard on one press', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    render(SignInPanel, {
+      signIn: state({ stage: 'Failed', fix: INSTALL }),
+      reason: 'NotLoggedIn',
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    expect(writeText).toHaveBeenCalledWith(INSTALL.command);
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 });

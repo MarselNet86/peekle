@@ -715,6 +715,36 @@ pub enum SignInStage {
     Refused,
 }
 
+/// One command the person runs themselves, because the island cannot run it
+/// for them: Claude Code is not on the machine, or the one that is has no
+/// login to drive. tech.md 6.16.
+///
+/// A command and the shell it belongs in, and nothing else. The panel says
+/// what is wrong in one line and then hands over the one line that fixes it;
+/// a screen that explains a problem without handing over the fix is a screen
+/// that sends the reader to a search engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum SignInNeed {
+    /// There is no Claude Code on this machine.
+    Install,
+    /// There is one, and it is older than the command the island drives.
+    Update,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SignInFix {
+    /// Which of the two it is. The words are the frontend's, in
+    /// `logic/signin.ts` with the rest of the copy (section 9); this says only
+    /// what the machine is missing.
+    pub need: SignInNeed,
+    /// Where it is typed, in the name the platform uses for it: `Terminal`
+    /// on macOS and Linux, `PowerShell` on Windows.
+    pub shell: String,
+    pub command: String,
+}
+
 /// What the island knows about a sign-in in progress. tech.md 6.16.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -730,6 +760,10 @@ pub struct SignInState {
     /// credential and the other carries `code_challenge` and `state`.
     /// tech.md 6.16 and rule 11.
     pub error: Option<String>,
+    /// The command that puts this right, when nothing the island can press
+    /// will. Present only where the island has run out of moves, and the
+    /// panel offers no button at all while it is. tech.md 6.16.
+    pub fix: Option<SignInFix>,
 }
 
 impl SignInState {
@@ -739,6 +773,7 @@ impl SignInState {
             url: None,
             needs_code: false,
             error: None,
+            fix: None,
         }
     }
 
@@ -748,6 +783,16 @@ impl SignInState {
             url: None,
             needs_code: false,
             error: Some(error.into()),
+            fix: None,
+        }
+    }
+
+    /// Failed, and there is exactly one thing that fixes it: a command the
+    /// person runs. tech.md 6.16.
+    pub fn needs(error: impl Into<String>, fix: SignInFix) -> Self {
+        Self {
+            fix: Some(fix),
+            ..Self::failed(error)
         }
     }
 
@@ -758,6 +803,7 @@ impl SignInState {
             url: None,
             needs_code: false,
             error: Some(error.into()),
+            fix: None,
         }
     }
 }

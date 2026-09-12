@@ -10,7 +10,13 @@ import { commands, events } from '$lib/bridge';
 import type { SignInState } from '$lib/types/generated/SignInState';
 import type { SignInStage } from '$lib/types/generated/SignInStage';
 
-const IDLE: SignInState = { stage: 'Idle', url: null, needs_code: false, error: null };
+const IDLE: SignInState = {
+  stage: 'Idle',
+  url: null,
+  needs_code: false,
+  error: null,
+  fix: null,
+};
 
 /** The stages where a process is up and the panel must stay open. */
 const OPEN: SignInStage[] = ['Starting', 'Waiting', 'Finishing'];

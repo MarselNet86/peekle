@@ -3,6 +3,7 @@
  * thing to read off a screenshot. tech.md 6.16.
  */
 
+import type { SignInFix } from '$lib/types/generated/SignInFix';
 import type { SignInState } from '$lib/types/generated/SignInState';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 
@@ -62,7 +63,37 @@ export function accountCopy(reason: UsageUnavailable | null | undefined): Accoun
  * moment the endpoint answers. tech.md 6.16.
  */
 export function canAct(state: SignInState): boolean {
+  // A screen handing over a command keeps its button. The command is the
+  // first half of the fix and the press is the second: somebody who has just
+  // run `claude update` has to be able to say so, and a screen that ends in a
+  // dead end sends them to relaunch the app to try again. Only a refusal
+  // offers nothing, because there the press has already been made.
+  // tech.md 6.16.
   return state.stage !== 'Refused';
+}
+
+/**
+ * What the screen says when Claude Code itself is what is missing.
+ *
+ * Two sentences and a command, in that order: what is true, what to do, and
+ * the line that does it. No link, no list of install methods, no apology --
+ * the person came here to sign in, and the shortest way back to that is one
+ * line they can paste. The words live here rather than in Rust, with the rest
+ * of the copy; Rust says only which of the two it is. tech.md 6.16.
+ */
+export function fixCopy(fix: SignInFix): { title: string; line: string; label: string } {
+  const label = `Run this in ${fix.shell}`;
+  return fix.need === 'Update'
+    ? {
+        title: 'Claude Code is out of date',
+        line: 'This version cannot sign in from the island. Update it, then press Sign in again.',
+        label,
+      }
+    : {
+        title: 'Claude Code is not installed',
+        line: 'The island signs in through Claude Code. Install it, then press Sign in again.',
+        label,
+      };
 }
 
 export function runCopy(state: SignInState): { title: string; line: string } | null {
