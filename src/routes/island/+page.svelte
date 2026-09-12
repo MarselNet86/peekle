@@ -622,8 +622,20 @@
     };
   });
 
+  /**
+   * How long between two readings of the shape while it is moving.
+   *
+   * A timer and not an animation frame, on purpose. The measurement does not
+   * have to sit on a frame -- `getBoundingClientRect` lays the page out and
+   * reads what is there -- and the frame loop is the one thing that cannot be
+   * relied on: where it goes quiet, as it does in the Windows webview, a
+   * sampler riding it never measures again and Rust keeps the resting
+   * rectangle as the island's hotspot forever. tech.md 6.7 and 6.27.
+   */
+  const SAMPLE_MS = 32;
+
   // Rust records what the shape actually measured and changes nothing with it:
-  // the window never resizes. Sampled until the spring stops moving, because a
+  // the window never resizes. Sampled until the shape stops moving, because a
   // size read mid flight describes a frame that no longer exists. tech.md 6.7.
   //
   // Watched rather than tied to the view: content moves the shape too. A row
@@ -636,11 +648,12 @@
     const box = host?.querySelector('.shape');
     if (!(box instanceof HTMLElement)) return;
 
-    let frame = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let last = { width: -1, height: -1 };
     let still = 0;
 
     const sample = () => {
+      timer = undefined;
       // The whole rectangle, offset included: a shape floating off the edge
       // (6.7) is where it is drawn, not where a rectangle pinned to the top
       // would put it, and Rust builds nothing of its own. tech.md 6.5.
@@ -649,9 +662,8 @@
       still = size.width === last.width && size.height === last.height ? still + 1 : 0;
       last = size;
 
-      // Two identical frames mean the spring has come to rest.
+      // Two identical readings mean the shape has come to rest.
       if (still >= 2) {
-        frame = 0;
         commands.islandBounds({
           left: rect.left,
           top: rect.top,
@@ -660,14 +672,14 @@
         });
         return;
       }
-      frame = requestAnimationFrame(sample);
+      timer = setTimeout(sample, SAMPLE_MS);
     };
 
-    // Idle until something moves, so a resting island costs no frames.
+    // Idle until something moves, so a resting island costs nothing.
     const measure = () => {
-      if (frame) return;
+      if (timer) return;
       still = 0;
-      frame = requestAnimationFrame(sample);
+      timer = setTimeout(sample, SAMPLE_MS);
     };
 
     const watch = new ResizeObserver(measure);
@@ -676,7 +688,7 @@
 
     return () => {
       watch.disconnect();
-      if (frame) cancelAnimationFrame(frame);
+      if (timer) clearTimeout(timer);
     };
   });
 </script>

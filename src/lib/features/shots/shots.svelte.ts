@@ -18,13 +18,19 @@ export function createShots() {
   let left = $state(1);
   let secs = $state(0);
   let attached = $state<Record<string, string[]>>({});
-  let frame = 0;
+  let ticker: ReturnType<typeof setInterval> | undefined;
 
-  // A frame of the screen and not a timer of a hundred milliseconds: fifty
-  // steps across a five second bar are visible as steps. tech.md 6.13.
+  /** How often the bar and the number are redrawn while the offer stands.
+   *
+   * Short enough that five seconds read as a slide rather than as fifty steps
+   * (tech.md 6.13), and a timer rather than an animation frame: the Windows
+   * webview stops handing frames out, and a countdown that freezes says the
+   * offer is still there long after it is gone. tech.md 6.27. */
+  const DRAW_MS = 20;
+
   function stop() {
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
+    if (ticker) clearInterval(ticker);
+    ticker = undefined;
   }
 
   function show(next: ShotOffer | null) {
@@ -40,9 +46,9 @@ export function createShots() {
       const now = Date.now();
       left = timeLeft(next, now);
       secs = secondsLeft(next, now);
-      frame = requestAnimationFrame(draw);
     };
     draw();
+    ticker = setInterval(draw, DRAW_MS);
   }
 
   async function start(): Promise<() => void> {
