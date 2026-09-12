@@ -1165,6 +1165,13 @@
   .top {
     margin-top: calc(-1 * var(--notch-h, 0px));
     min-height: var(--notch-h, 0px);
+    /* And with no cutout to be lifted into, the row is dropped instead. A
+       shape rounded on every corner cuts the ends off a row flush with its
+       edge, and that is where the gear, the bug and the usage dials were
+       sitting. Zero under a notch, where the lift above already puts the row
+       beside the cutout. The shape carries the same pixels in its height, so
+       nothing below the row loses them. tech.md 6.7. */
+    padding-top: var(--band-top, 0px);
   }
 
   /* Neither end of the row reaches past its own side of the cutout, however

@@ -45,6 +45,19 @@ export const REST_FLOAT = { width: 104, height: 28 } as const;
 export const FLOAT_TOP = 6;
 
 /**
+ * The band the top row of a list or a dialogue stands in, on a display with no
+ * notch.
+ *
+ * Under a cutout that band is the cutout: the row is lifted into it and costs
+ * the content below nothing. Without one there is nothing to lift into, and a
+ * row flush with the edge of a shape rounded on every corner has its ends cut
+ * off by the corners -- the gear and the bug of the list sat in the curve, and
+ * so did the usage dials of a dialogue. So the row gets a band of its own
+ * here, and the shape grows by exactly it. tech.md 6.7.
+ */
+export const FLOAT_HEAD = 12;
+
+/**
  * How much wider a resting shape gets on each side while the usage badge
  * stands.
  *
@@ -133,6 +146,12 @@ export function shapeBounds(
   // a wide radius. A shape that grows out of nothing needs no straight top.
   // tech.md 6.7.
   const floating = height === 0;
+
+  // The band the top row stands in. The same pixels under a notch, where they
+  // are the cutout; without one they are a plain inset, and only the two views
+  // carrying such a row take them -- a pill and a permission panel have no top
+  // row to keep out of the corners. tech.md 6.7.
+  const band = floating ? FLOAT_HEAD : height;
   const bounds =
     view === 'Collapsed'
       ? floating
@@ -156,10 +175,10 @@ export function shapeBounds(
           view === 'Ask'
           ? { width: 460, height: height + 62, radius: floating ? 31 : 22 }
           : view === 'Sessions'
-            ? { width: 460, height: height + 380, radius: floating ? 28 : 24 }
+            ? { width: 460, height: band + 380, radius: floating ? 28 : 24 }
             : {
                 width: 560,
-                height: asking ? WINDOW.height : height + 420,
+                height: asking ? WINDOW.height : band + 420,
                 radius: floating ? 28 : 24,
               };
 

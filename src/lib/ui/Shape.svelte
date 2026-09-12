@@ -2,7 +2,13 @@
   import { Spring } from 'svelte/motion';
   import { untrack, type Snippet } from 'svelte';
 
-  import { shapeBounds, shapeInset, type Notch, type ShapeBounds } from '$lib/logic/shape';
+  import {
+    FLOAT_HEAD,
+    shapeBounds,
+    shapeInset,
+    type Notch,
+    type ShapeBounds,
+  } from '$lib/logic/shape';
   import type { IslandView } from '$lib/types/generated/IslandView';
 
   let {
@@ -128,6 +134,7 @@
       style:padding-top="{notch.height}px"
       style:--notch-h="{notch.height}px"
       style:--notch-w="{hasNotch ? notch.width : 0}px"
+      style:--band-top="{hasNotch ? 0 : FLOAT_HEAD}px"
     >
       {@render children()}
     </div>
