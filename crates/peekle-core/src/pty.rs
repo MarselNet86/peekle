@@ -171,6 +171,29 @@ pub fn message_writes(text: &str) -> Vec<Vec<u8>> {
 /// tech.md 6.5.
 pub const ENTER_GAP: std::time::Duration = std::time::Duration::from_millis(120);
 
+/// What a pseudoconsole asks the terminal before it will pump anything.
+///
+/// Windows opens a ConPTY with `PSEUDOCONSOLE_INHERIT_CURSOR`: conhost writes
+/// `ESC [ 6 n` -- report the cursor position -- and waits for the answer, so
+/// that the screen it starts drawing continues from wherever the terminal
+/// already was. A real terminal answers in milliseconds. Peekle did not answer
+/// at all, and so every session it started on Windows hung before its child
+/// produced a single byte: four bytes out of the master, nothing after, no
+/// transcript, and a reply that failed for want of a hook the agent was never
+/// alive to fire. tech.md 6.27.
+pub const CURSOR_QUERY: &str = "\u{1b}[6n";
+
+/// The answer: the home position. There is no screen behind this pty to
+/// inherit, so there is nothing else it could truthfully be.
+pub const CURSOR_REPORT: &[u8] = b"\x1b[1;1R";
+
+/// Whether a chunk of the master carries that question. Pure, and compiled
+/// everywhere, so the rule is tested on every platform even though only one
+/// of them asks. tech.md 6.27.
+pub fn asks_for_the_cursor(chunk: &str) -> bool {
+    chunk.contains(CURSOR_QUERY)
+}
+
 /// How long a setting written ahead of a message waits before the message.
 ///
 /// `/model` and `/effort` are local commands: the TUI runs one and redraws
@@ -561,6 +584,7 @@ impl PtyHost {
             .master
             .take_writer()
             .map_err(|err| PtyError::Pty(err.to_string()))?;
+        let writer: Writer = Arc::new(Mutex::new(writer));
         let mut reader = pair
             .master
             .try_clone_reader()
@@ -584,16 +608,31 @@ impl PtyHost {
         });
 
         let id = spec.session_id.clone();
+        #[cfg(target_os = "windows")]
+        let answering = Arc::clone(&writer);
         std::thread::spawn(move || {
             let mut buffer = [0u8; 8192];
             // A window over the last two chunks, so the mark is still found
             // when a read splits it in half.
             let mut tail = String::new();
             let mut ask = Some(on_trust);
+            #[cfg(target_os = "windows")]
+            let mut asked = false;
             let started = std::time::Instant::now();
             while let Ok(read) = reader.read(&mut buffer) {
                 if read == 0 {
                     break;
+                }
+                // Answered once, and only where it is asked: this is the
+                // pseudoconsole's opening handshake, not a program's own
+                // question, and a terminal that keeps answering one would be
+                // typing into every TUI that ever asks. tech.md 6.27.
+                #[cfg(target_os = "windows")]
+                if !asked && asks_for_the_cursor(&String::from_utf8_lossy(&buffer[..read])) {
+                    asked = true;
+                    let mut writer = lock_writer(&answering);
+                    let _ = writer.write_all(CURSOR_REPORT);
+                    let _ = writer.flush();
                 }
                 if ask.is_some() && started.elapsed() < TRUST_WINDOW {
                     tail.push_str(&squeeze(&String::from_utf8_lossy(&buffer[..read])));
@@ -612,7 +651,7 @@ impl PtyHost {
         self.lock().insert(
             spec.session_id.clone(),
             Owned {
-                writer: Arc::new(Mutex::new(writer)),
+                writer,
                 killer,
                 _master: pair.master,
             },
@@ -793,6 +832,26 @@ pub type SharedPtyHost = Arc<PtyHost>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pseudoconsole's opening question, and the one answer that is true
+    /// when there is no screen behind the pty. Without it every Windows
+    /// session hung before its child wrote a byte. tech.md 6.27.
+    #[test]
+    fn the_cursor_query_is_recognised_and_answered_from_the_home_position() {
+        assert!(asks_for_the_cursor(CURSOR_QUERY));
+        assert!(asks_for_the_cursor("\u{1b}[?25l\u{1b}[6n\u{1b}[m"));
+        assert_eq!(CURSOR_REPORT, b"\x1b[1;1R");
+    }
+
+    /// Ordinary output is not the question. Answering one that was never
+    /// asked would type an escape sequence into whatever is running.
+    #[test]
+    fn nothing_else_reads_as_the_cursor_query() {
+        assert!(!asks_for_the_cursor(""));
+        assert!(!asks_for_the_cursor("[6n"));
+        assert!(!asks_for_the_cursor("\u{1b}[6m"));
+        assert!(!asks_for_the_cursor("\u{1b}[2J\u{1b}[H"));
+    }
 
     fn screen(name: &str) -> String {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
