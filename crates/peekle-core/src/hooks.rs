@@ -31,8 +31,8 @@ pub const HOOK_SCRIPT_NAME: &str = "peekle-hook.py";
 
 /// Where the script lives, under the user's Claude directory.
 pub fn hook_script_path() -> std::path::PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    std::path::Path::new(&home)
+    crate::home_dir()
+        .unwrap_or_default()
         .join(".claude")
         .join("peekle")
         .join(HOOK_SCRIPT_NAME)

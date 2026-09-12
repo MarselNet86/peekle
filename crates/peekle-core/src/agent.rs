@@ -221,11 +221,7 @@ fn step(tokens: u32) -> u32 {
 
 /// Where Claude Code keeps the model and the effort a new session starts with.
 pub fn settings_path() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").map(|home| {
-        std::path::Path::new(&home)
-            .join(".claude")
-            .join("settings.json")
-    })
+    crate::home_dir().map(|home| home.join(".claude").join("settings.json"))
 }
 
 /// What a session that has not answered yet is running as.

@@ -166,7 +166,7 @@ fn unwrap_peer_tag(text: &str) -> Option<&str> {
 
 /// Where Claude Code keeps them, under the user's home.
 pub fn default_root() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|home| Path::new(&home).join(".claude").join("projects"))
+    crate::home_dir().map(|home| home.join(".claude").join("projects"))
 }
 
 /// What the transcript says the session is answering with, gathered as the

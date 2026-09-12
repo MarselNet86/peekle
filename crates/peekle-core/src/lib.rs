@@ -42,8 +42,14 @@ const CLI_CANDIDATES: &[&str] = &[
 #[cfg(windows)]
 const CLI_CANDIDATES: &[&str] = &[".local/bin/claude.exe", "AppData/Roaming/npm/claude.exe"];
 
-/// The home directory, under the name each platform keeps it. tech.md 6.27.
-fn home_dir() -> Option<std::path::PathBuf> {
+/// The home directory, under the name each platform keeps it.
+///
+/// The one place the core asks where the user lives. `HOME` is a unix name and
+/// Windows does not set it, so everything that went looking for `~/.claude` by
+/// that name alone -- the transcripts, the session registry, Claude Code's own
+/// settings, the hook script -- found nothing there and said so by showing an
+/// empty list. tech.md 6.27.
+pub fn home_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(std::path::PathBuf::from)

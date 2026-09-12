@@ -60,7 +60,7 @@ struct Record {
 
 /// Where Claude Code keeps the records, under the user's home.
 pub fn default_root() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|home| Path::new(&home).join(".claude").join("sessions"))
+    crate::home_dir().map(|home| home.join(".claude").join("sessions"))
 }
 
 /// One record, or nothing for a file that is not one. A registry directory
