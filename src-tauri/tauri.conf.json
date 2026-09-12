@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm bundle",
     "frontendDist": "../build"
   },
   "app": {
@@ -39,6 +39,7 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg", "msi", "nsis", "deb", "appimage"],
+    "externalBin": ["binaries/peekle"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

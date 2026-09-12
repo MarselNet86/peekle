@@ -128,6 +128,21 @@ hangs on a dead overlay.
 
 ## Install it into Claude Code
 
+Peekle sees nothing until Claude Code is told to call it: the spinner, the feed
+and the confirmation that a reply was delivered all arrive as hooks. `peekle
+init` writes them.
+
+The CLI ships beside the app, so an installed Peekle already has it: the
+bundler puts `peekle` next to `peekle-app` wherever the installer lands. On
+Windows that is `C:\Program Files\Peekle\peekle.exe`, on macOS
+`Peekle.app/Contents/MacOS/peekle`.
+
+```sh
+"C:\Program Files\Peekle\peekle.exe" init
+```
+
+From a checkout it is built rather than installed:
+
 ```sh
 cargo build -p peekle-cli --bin peekle
 ./target/debug/peekle init

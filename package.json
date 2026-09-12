@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "cli": "node scripts/build-cli.mjs",
+    "bundle": "pnpm build && pnpm cli",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint . && prettier --check .",
