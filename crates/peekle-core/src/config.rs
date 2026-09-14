@@ -58,6 +58,8 @@ pub struct Config {
     pub shots: ShotsConfig,
     #[serde(default)]
     pub notify: NotifyConfig,
+    #[serde(default)]
+    pub update: UpdateConfig,
 
     /// Sections this build does not know. Kept so a round trip does not delete
     /// a newer Peekle's settings.
@@ -220,6 +222,32 @@ impl Default for UsageConfig {
     }
 }
 
+/// Where new versions come from and how often to look. tech.md 6.30.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateConfig {
+    pub enabled: bool,
+    /// `owner/name` on GitHub. Empty means nothing is checked: an address
+    /// nobody set is not an address to download from.
+    pub repo: String,
+    /// How often GitHub is asked. Zero means only when asked by hand.
+    pub check_interval_hours: u32,
+    /// Prereleases are never offered. The key exists to say so out loud;
+    /// `releases/latest` does not serve them in the first place.
+    pub prerelease: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            repo: "MarselNet86/peekle".to_string(),
+            check_interval_hours: 6,
+            prerelease: false,
+        }
+    }
+}
+
 impl Default for ShotsConfig {
     fn default() -> Self {
         Self {
@@ -375,6 +403,33 @@ mod tests {
         assert_eq!(partial.hotkey.quit, "Alt+Command+KeyQ");
         let off = Config::from_toml("[hotkey]\nquit = \"\"\n").unwrap();
         assert_eq!(off.hotkey.quit, "");
+    }
+
+    /// Checking is on out of the box, every six hours, against the owner's
+    /// repository, and a file that says nothing about it keeps all three. An
+    /// empty repo is the off switch that still leaves the section on: there is
+    /// no address to ask, so nothing is asked. tech.md 6.30.
+    #[test]
+    fn updates_are_checked_every_six_hours_until_a_file_says_otherwise() {
+        let out_of_the_box = Config::default().update;
+        assert!(out_of_the_box.enabled);
+        assert_eq!(out_of_the_box.repo, "MarselNet86/peekle");
+        assert_eq!(out_of_the_box.check_interval_hours, 6);
+        assert!(!out_of_the_box.prerelease);
+
+        let partial = Config::from_toml("[update]\ncheck_interval_hours = 24\n").unwrap();
+        assert_eq!(partial.update.check_interval_hours, 24);
+        assert_eq!(
+            partial.update.repo, "MarselNet86/peekle",
+            "one key set is not the section replaced"
+        );
+
+        let nowhere = Config::from_toml("[update]\nrepo = \"\"\n").unwrap();
+        assert!(nowhere.update.enabled);
+        assert_eq!(nowhere.update.repo, "");
+
+        let by_hand = Config::from_toml("[update]\ncheck_interval_hours = 0\n").unwrap();
+        assert_eq!(by_hand.update.check_interval_hours, 0);
     }
 
     /// No language until someone picks one: a fresh install and an old file

@@ -193,6 +193,74 @@ pub enum TaskLabel {
     Research,
 }
 
+/// Where this copy of Peekle came from, which decides how it updates.
+/// tech.md 6.30.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum InstallKind {
+    /// Dragged out of the dmg, wherever it now sits. A new dmg replaces it.
+    Bundle,
+    /// `brew install --cask peekle`. Homebrew owns the bundle, so replacing it
+    /// by hand leaves its receipt behind on the old version.
+    Homebrew,
+}
+
+/// A release already known to be newer than this build. tech.md 6.30.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Update {
+    /// The tag without its `v`, exactly as it will be shown: "0.1.2".
+    pub version: String,
+    /// The release page, for whoever would rather read before installing.
+    pub notes_url: String,
+    /// Bytes of the dmg. Zero when the release named no size.
+    pub size: u64,
+    pub install: InstallKind,
+}
+
+/// Why a check or a download came back with nothing. tech.md 6.30.
+///
+/// None of these reaches the screen: nobody asked for the check, and telling
+/// someone that something they never started did not finish is noise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum UpdateError {
+    /// No network, or GitHub never answered.
+    Offline,
+    /// 403 from api.github.com. Anonymous callers get 60 requests an hour.
+    RateLimited,
+    /// The release exists and carries no asset under the expected name.
+    NoAsset,
+    /// The file did not come down whole, or came down the wrong size.
+    Download,
+}
+
+/// What the updater is doing. Exactly one of these at a time. tech.md 6.30.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum UpdateState {
+    /// Nothing asked yet, or the last check found this build current.
+    #[default]
+    Idle,
+    /// Asking GitHub.
+    Checking,
+    /// Newer release, dmg on its way into the cache. The island says nothing
+    /// while this stands: a question you then have to wait out is worse than
+    /// no question.
+    Downloading(Update),
+    /// The file is on disk and the question can be asked.
+    Ready(Update),
+    /// The check or the download failed. The next check tries again.
+    Failed(UpdateError),
+}
+
+impl UpdateState {
+    /// Whether this state is the one that raises the question. tech.md 6.30.
+    pub fn asks(&self) -> bool {
+        matches!(self, Self::Ready(_))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum TaskStatus {
@@ -216,6 +284,9 @@ pub enum IslandView {
     /// The quit question: open just enough for one line and two buttons,
     /// raised by ⌥⌘Q or the button beside the gear. tech.md 6.29.
     Quit,
+    /// The update question, in the same shape: a release is already on disk
+    /// and the last step is the person's. tech.md 6.30.
+    Update,
     /// The list of sessions.
     Sessions,
     /// The feed of one session, by its session_id.

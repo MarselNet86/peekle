@@ -1,0 +1,22 @@
+[package]
+name = "peekle-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+directories = "6.0.0"
+peekle-core = { version = "0.1.0", path = "../peekle-core" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tracing = "0.1.44"
+ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+proptest = "1.11.0"
+ulid = "3.0.0"

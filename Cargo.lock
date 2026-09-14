@@ -2829,6 +2829,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "peekle-update"
+version = "0.1.1"
+dependencies = [
+ "directories",
+ "peekle-core",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tracing",
+ "ulid",
+ "ureq",
+]
+
+[[package]]
 name = "peekle-usage"
 version = "0.1.1"
 dependencies = [
