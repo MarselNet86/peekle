@@ -36,6 +36,22 @@ pub const STATUS_ARGS: &[&str] = &["auth", "status", "--json"];
 /// reworded.
 const CODE_PROMPT: &str = "Paste code here";
 
+/// What the CLI prints once the code, from the browser or from the field, has
+/// been traded for tokens. From the 2.1.263 binary: `Login successful.`
+/// tech.md 6.16.
+const SUCCESS_MARK: &str = "Login successful";
+
+/// The OAuth error the CLI's callback receives when access is declined in the
+/// browser, printed inside its `Login failed:` line. tech.md 6.16.
+const DENIAL_MARK: &str = "access_denied";
+
+/// How the CLI begins the line it prints for any login that did not finish.
+const FAILURE_MARK: &str = "Login failed:";
+
+/// The longest reason carried to the screen. A failure line is one sentence;
+/// anything longer is output that is not one.
+const FAILURE_LIMIT: usize = 160;
+
 /// Everything the terminal draws that is not text.
 ///
 /// The URL arrives wrapped in an OSC 8 hyperlink, which puts the same address
@@ -103,6 +119,68 @@ pub fn wants_code(chunk: &str) -> bool {
     strip_escapes(chunk).contains(CODE_PROMPT)
 }
 
+/// Whether the CLI said the sign-in went through.
+pub fn saw_success(chunk: &str) -> bool {
+    strip_escapes(chunk).contains(SUCCESS_MARK)
+}
+
+/// Whether the CLI said access was declined in the browser.
+pub fn saw_denial(chunk: &str) -> bool {
+    strip_escapes(chunk).contains(DENIAL_MARK)
+}
+
+/// The reason in the last `Login failed:` line, if the output carries one.
+///
+/// Any `https://` run is cut out first: the reason goes to the screen and to
+/// nothing else, and an address there could carry `state`. tech.md 6.16 and
+/// rule 11.
+pub fn failure_line(chunk: &str) -> Option<String> {
+    let plain = strip_escapes(chunk);
+    let at = plain.rfind(FAILURE_MARK)?;
+    let rest = &plain[at + FAILURE_MARK.len()..];
+    let line = rest.split(['\r', '\n']).next().unwrap_or("");
+    let words: Vec<&str> = line
+        .split_whitespace()
+        .filter(|word| !word.contains("https://") && !word.contains("http://"))
+        .collect();
+    let reason: String = words.join(" ").chars().take(FAILURE_LIMIT).collect();
+    (!reason.is_empty()).then_some(reason)
+}
+
+/// Everything the reader thread saw of one run, handed over when the process
+/// is gone. tech.md 6.16.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginReport {
+    /// The run this is about. A report from a run that was cancelled or
+    /// replaced settles nothing.
+    pub generation: u64,
+    pub succeeded: bool,
+    pub denied: bool,
+    pub failure: Option<String>,
+}
+
+/// The one verdict of a run, from what it printed and what `auth status` says
+/// afterwards. tech.md 6.16.
+///
+/// The status file has the last word when it has one: it is what Claude Code
+/// will act on. Without it, the CLI's own line decides.
+pub fn verdict(report: &LoginReport, signed_in: Option<bool>) -> (SignInStage, Option<String>) {
+    match signed_in {
+        Some(true) => (SignInStage::Done, None),
+        _ if report.denied => (SignInStage::Denied, None),
+        None if report.succeeded => (SignInStage::Done, None),
+        _ => (
+            SignInStage::Failed,
+            Some(
+                report
+                    .failure
+                    .clone()
+                    .unwrap_or_else(|| "Claude Code did not finish signing in.".to_string()),
+            ),
+        ),
+    }
+}
+
 /// What `claude auth status --json` says about being signed in.
 ///
 /// `None` for anything that is not an object with that field: a CLI too old
@@ -138,6 +216,16 @@ pub enum SignInError {
     Pty(String),
 }
 
+/// What the output of the current run has said so far. Recorded when seen,
+/// because the carried tail is trimmed and a line can leave it before the
+/// process exits.
+#[derive(Debug, Default)]
+struct Seen {
+    succeeded: bool,
+    denied: bool,
+    failure: Option<String>,
+}
+
 /// The one sign-in process, and the handles that keep it alive.
 struct Running {
     writer: Box<dyn Write + Send>,
@@ -163,6 +251,7 @@ pub struct SignInHost {
     /// that took its place -- and a process dying from its own `kill` cannot
     /// reopen a panel the user just closed. Rule 10.
     generation: Mutex<u64>,
+    seen: Mutex<Seen>,
 }
 
 impl SignInHost {
@@ -174,24 +263,35 @@ impl SignInHost {
         self.lock_state().clone()
     }
 
+    /// The run the host is describing now. tech.md 6.16.
+    pub fn generation(&self) -> u64 {
+        *self.lock_generation()
+    }
+
     /// Starts `claude auth login` in a pty and reports every step through
     /// `on_state`.
     ///
     /// Claude Code opens the browser itself; nothing here does. The output is
-    /// read, unlike an owned session's, because the authorize address and the
-    /// paste prompt exist nowhere else. tech.md 6.16.
-    pub fn start<F>(
+    /// read, unlike an owned session's, because the authorize address, the
+    /// paste prompt and the outcome exist nowhere else. `on_exit` gets the
+    /// report once the process is gone, and only for a run nobody cancelled or
+    /// replaced: the verdict is the caller's, and it is given once. tech.md
+    /// 6.16 and rule 10.
+    pub fn start<F, E>(
         self: &Arc<Self>,
         binary: &Path,
         on_state: F,
+        on_exit: E,
     ) -> Result<SignInState, SignInError>
     where
         F: Fn(SignInState) + Send + 'static,
+        E: FnOnce(LoginReport) + Send + 'static,
     {
         // A press while one is already up replaces it. Two of them would be
         // two processes fighting over one Keychain entry.
         self.cancel();
         let generation = self.bump();
+        *self.lock_seen() = Seen::default();
 
         let system = NativePtySystem::default();
         let pair = system
@@ -256,7 +356,9 @@ impl SignInHost {
                 host.saw(&tail, generation, &on_state);
                 trim_to_carry(&mut tail);
             }
-            host.exited(generation, &on_state);
+            if let Some(report) = host.exited(generation, &on_state) {
+                on_exit(report);
+            }
         });
 
         Ok(starting)
@@ -313,23 +415,30 @@ impl SignInHost {
         *self.lock_state() = SignInState::idle();
     }
 
-    /// Settles a run that the caller has decided about: signed in, or not.
+    /// Settles the run `generation` with its verdict.
     ///
-    /// The pty closing says the process is gone, not whether the account is
-    /// signed in, and an exit code read through a terminal is a poor thing to
-    /// believe. So the last word belongs to whoever asked the CLI. Resolved
-    /// exactly once per run, like every other blocking path. Rule 10.
-    pub fn settle(&self, done: bool, error: Option<String>) -> SignInState {
+    /// `None` when that run is no longer the one on screen -- cancelled or
+    /// replaced while its verdict was being asked for -- so a late answer
+    /// cannot reopen a panel the person closed. Nothing is left running either
+    /// way. tech.md 6.16 and rule 10.
+    pub fn settle(
+        &self,
+        generation: u64,
+        stage: SignInStage,
+        error: Option<String>,
+    ) -> Option<SignInState> {
+        if !self.current(generation) {
+            return None;
+        }
         self.lock_running().take();
         let mut state = self.lock_state();
-        state.stage = if done {
-            SignInStage::Done
-        } else {
-            SignInStage::Failed
+        *state = SignInState {
+            stage,
+            url: None,
+            needs_code: false,
+            error,
         };
-        state.needs_code = false;
-        state.error = error;
-        state.clone()
+        Some(state.clone())
     }
 
     /// What the output means so far, reported only when it changed something.
@@ -353,6 +462,19 @@ impl SignInHost {
             state.needs_code = true;
             state.stage = SignInStage::Waiting;
         }
+        {
+            let mut seen = self.lock_seen();
+            if saw_success(tail) {
+                seen.succeeded = true;
+                state.stage = SignInStage::Finishing;
+            }
+            if saw_denial(tail) {
+                seen.denied = true;
+            }
+            if let Some(reason) = failure_line(tail) {
+                seen.failure = Some(reason);
+            }
+        }
 
         if *state != before {
             let next = state.clone();
@@ -361,21 +483,34 @@ impl SignInHost {
         }
     }
 
-    /// The process is gone. Whether that was a success is not decided here.
-    fn exited<F: Fn(SignInState)>(&self, generation: u64, on_state: &F) {
+    /// The process is gone. Whether that was a success is not decided here:
+    /// the report goes to whoever asks the CLI. tech.md 6.16.
+    fn exited<F: Fn(SignInState)>(&self, generation: u64, on_state: &F) -> Option<LoginReport> {
         if !self.current(generation) {
-            return;
+            return None;
         }
         let next = {
             let mut state = self.lock_state();
-            if matches!(state.stage, SignInStage::Done | SignInStage::Failed) {
-                return;
-            }
             state.stage = SignInStage::Finishing;
+            state.needs_code = false;
             state.clone()
         };
-        tracing::debug!("the sign-in process exited");
+        let report = {
+            let seen = self.lock_seen();
+            LoginReport {
+                generation,
+                succeeded: seen.succeeded,
+                denied: seen.denied,
+                failure: seen.failure.clone(),
+            }
+        };
+        tracing::debug!(
+            succeeded = report.succeeded,
+            denied = report.denied,
+            "the sign-in process exited"
+        );
         on_state(next);
+        Some(report)
     }
 
     /// Whether this run is still the one the host is describing.
@@ -397,6 +532,12 @@ impl SignInHost {
 
     fn lock_state(&self) -> std::sync::MutexGuard<'_, SignInState> {
         self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn lock_seen(&self) -> std::sync::MutexGuard<'_, Seen> {
+        self.seen
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -489,6 +630,78 @@ mod tests {
         assert_eq!(logged_in("{}"), None);
         assert_eq!(logged_in(r#"{"loggedIn":"yes"}"#), None);
         assert_eq!(logged_in(""), None);
+    }
+
+    /// The lines as the 2.1.263 binary writes them: `Login successful.` on
+    /// success, and `Login failed: ` followed by the OAuth error's display
+    /// message on a refusal. Read out of the binary, not captured from a live
+    /// run -- a live refusal needs a person pressing Deny. tech.md 6.16.
+    #[test]
+    fn knows_a_sign_in_that_went_through() {
+        assert!(saw_success("\r\nLogin successful.\r\n"));
+        assert!(!saw_success("Opening browser to sign in"));
+    }
+
+    #[test]
+    fn knows_access_that_was_declined() {
+        let line = "\r\nLogin failed: access_denied: The user denied the request\r\n";
+        assert!(saw_denial(line));
+        assert_eq!(
+            failure_line(line).as_deref(),
+            Some("access_denied: The user denied the request")
+        );
+    }
+
+    /// The reason goes to the screen, and an address never does.
+    #[test]
+    fn a_failure_line_carries_no_address() {
+        let line = "Login failed: Please visit https://claude.com/x?state=abc to retry\r\n";
+        assert_eq!(failure_line(line).as_deref(), Some("Please visit to retry"));
+        assert_eq!(failure_line("nothing failed here"), None);
+        assert_eq!(failure_line("Login failed:   \r\n"), None);
+    }
+
+    fn report(succeeded: bool, denied: bool, failure: Option<&str>) -> LoginReport {
+        LoginReport {
+            generation: 1,
+            succeeded,
+            denied,
+            failure: failure.map(str::to_string),
+        }
+    }
+
+    /// The status file has the last word; the CLI's own line decides only when
+    /// the file could not be asked. tech.md 6.16.
+    #[test]
+    fn the_verdict_of_every_ending() {
+        assert_eq!(
+            verdict(&report(true, false, None), Some(true)).0,
+            SignInStage::Done
+        );
+        assert_eq!(
+            verdict(&report(true, false, None), None).0,
+            SignInStage::Done
+        );
+        assert_eq!(
+            verdict(&report(false, false, None), Some(true)).0,
+            SignInStage::Done
+        );
+        assert_eq!(
+            verdict(&report(false, true, Some("access_denied")), Some(false)),
+            (SignInStage::Denied, None)
+        );
+        assert_eq!(
+            verdict(&report(false, false, Some("Invalid code")), Some(false)),
+            (SignInStage::Failed, Some("Invalid code".to_string()))
+        );
+        let (stage, error) = verdict(&report(false, false, None), None);
+        assert_eq!(stage, SignInStage::Failed);
+        assert!(error.is_some(), "a failure always says something");
+        // A line that claims success is not believed over the file.
+        assert_eq!(
+            verdict(&report(true, false, None), Some(false)).0,
+            SignInStage::Failed
+        );
     }
 
     #[test]

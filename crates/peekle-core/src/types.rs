@@ -691,6 +691,55 @@ mod tests {
     }
 }
 
+/// Whether the `claude` command is on this Mac and can sign in. tech.md 6.16.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum CliState {
+    /// No `claude` anywhere Peekle looks, known install places or `PATH`.
+    Missing,
+    /// A `claude` that ran and did not understand `auth status --json`.
+    Outdated,
+    /// A `claude` that answered `auth status --json`.
+    Ready,
+}
+
+/// How `claude` got onto this Mac, which decides the command that updates it.
+/// tech.md 6.16.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum InstallMethod {
+    Native,
+    Homebrew,
+    Npm,
+    Unknown,
+}
+
+/// A page the account screen may send a person to. The addresses are Rust's,
+/// so the webview can name a page and cannot supply one. tech.md 6.16.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum AccountLink {
+    InstallGuide,
+    UpdateGuide,
+    Changelog,
+}
+
+/// What Claude Code on this Mac can do for the account. tech.md 6.16.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AccountState {
+    pub cli: CliState,
+    /// `2.1.263`, when `claude --version` said so.
+    pub version: Option<String>,
+    pub install: InstallMethod,
+    /// What `auth status --json` said. `None` is "do not know" and is never
+    /// read as signed out.
+    pub signed_in: Option<bool>,
+    /// The command that fixes `cli`: the install command when `Missing`, the
+    /// update command for this install when `Outdated`, nothing when `Ready`.
+    pub command: Option<String>,
+}
+
 /// How far the island's own sign-in has got. tech.md 6.16.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -704,15 +753,15 @@ pub enum SignInStage {
     Waiting,
     /// The code went into stdin and the CLI is trading it for tokens.
     Finishing,
-    /// The process exited zero.
+    /// The process exited and Claude Code says it is signed in.
     Done,
-    /// It exited non-zero, would not start, or was cancelled.
+    /// Access was declined in the browser: the CLI's callback came back with
+    /// `access_denied`. Kept apart from `Failed` because nothing went wrong --
+    /// the person said no, and the screen says so in those words. tech.md 6.16.
+    Denied,
+    /// It exited without signing in and without a refusal, would not start,
+    /// or was cancelled.
     Failed,
-    /// Nothing was started at all: Claude Code is signed in and the endpoint
-    /// refused anyway, so a login is not what fixes this. Kept apart from
-    /// `Failed` because a failure to start is worth pressing again and this
-    /// is not. tech.md 6.16.
-    Refused,
 }
 
 /// What the island knows about a sign-in in progress. tech.md 6.16.
@@ -751,13 +800,23 @@ impl SignInState {
         }
     }
 
-    /// Signed in, and the endpoint refused anyway. tech.md 6.16.
-    pub fn refused(error: impl Into<String>) -> Self {
+    /// Access declined in the browser. tech.md 6.16.
+    pub fn denied() -> Self {
         Self {
-            stage: SignInStage::Refused,
+            stage: SignInStage::Denied,
             url: None,
             needs_code: false,
-            error: Some(error.into()),
+            error: None,
+        }
+    }
+
+    /// Signed in, with nothing left running. tech.md 6.16.
+    pub fn done() -> Self {
+        Self {
+            stage: SignInStage::Done,
+            url: None,
+            needs_code: false,
+            error: None,
         }
     }
 }
