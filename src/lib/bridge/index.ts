@@ -187,7 +187,8 @@ export const commands = {
   // "Install": Rust hands the dmg to Finder and stands aside, or copies the
   // brew command for a copy Homebrew owns. tech.md 6.30.
   installUpdate: () => call<void>('install_update'),
-  // "Later": this version does not come back until the app is restarted.
+  // "Later": this version is not asked about for a day, then the question
+  // comes back on its own over a resting island. tech.md 6.30.
   dismissUpdate: () => call<void>('dismiss_update'),
   // The release page. No argument: the address is Rust's, as in 6.16 and 6.22.
   openUpdateNotes: () => call<void>('open_update_notes'),
