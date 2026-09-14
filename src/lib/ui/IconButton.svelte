@@ -93,8 +93,7 @@
      is rather than only how they got there. */
   .pressed {
     color: var(--text);
-    border-color: var(--hairline);
-    background: var(--bubble);
+    background: rgba(255, 255, 255, 0.12);
   }
 
   /* Under the button and pinned to its right edge, because the buttons that

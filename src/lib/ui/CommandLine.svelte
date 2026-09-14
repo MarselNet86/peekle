@@ -19,11 +19,10 @@
 <div class="command">
   <span class="prompt" aria-hidden="true">$</span>
   <code class="line">{command}</code>
-  <Button
-    label={copied ? 'Copied' : 'Copy'}
-    variant={copied ? 'connect' : 'ghost'}
-    onclick={() => oncopy?.()}
-  />
+  <!-- Quiet in both states, the way a macOS copy button answers: the word
+       changes and nothing lights up. A green fill for `Copied` was louder
+       than the command it copied. -->
+  <Button label={copied ? 'Copied' : 'Copy'} onclick={() => oncopy?.()} />
 </div>
 
 <style>
@@ -33,7 +32,7 @@
     gap: 6px;
     width: 100%;
     box-sizing: border-box;
-    padding: 5px 5px 5px 12px;
+    padding: 5px 5px 5px 10px;
     border: 1px solid var(--hairline);
     border-radius: 10px;
     background: var(--bubble);
@@ -65,5 +64,12 @@
 
   .line::-webkit-scrollbar {
     display: none;
+  }
+
+  /* One width for `Copy` and `Copied`, so the word changing does not take
+     width from the command beside it. */
+  .command :global(button) {
+    min-width: 64px;
+    padding: 7px 10px;
   }
 </style>

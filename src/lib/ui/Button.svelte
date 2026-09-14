@@ -45,10 +45,15 @@
     justify-content: center;
     gap: 7px;
     flex: none;
-    border: 1px solid var(--hairline);
+    /* No outline. A ring around a plain button is a web control, and a pale
+       one lit on hover read as a white frame over black: the button is a
+       quiet fill that gets brighter instead, the way a macOS button does.
+       The border stays, transparent, so every variant keeps one box size.
+       tech.md 9. */
+    border: 1px solid transparent;
     border-radius: 8px;
-    background: transparent;
-    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.86);
     font: inherit;
     font-size: 12px;
     line-height: 1;
@@ -60,9 +65,17 @@
       background 120ms ease;
   }
 
-  button:hover:not(:disabled) {
+  /* The plain button only. On a bare `button:hover` the grey fill outranks
+     every coloured variant whose own hover sets no ground of its own, and a
+     green `Copied` under the pointer came out grey with a green ring.
+     tech.md 9. */
+  button[data-variant='ghost']:hover:not(:disabled) {
     color: var(--text);
-    border-color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  button[data-variant='ghost']:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
   }
 
   button[data-variant='primary'] {
@@ -88,10 +101,13 @@
     font-weight: 600;
   }
 
+  /* Solid under the pointer, and no border of its own. A translucent border
+     lies on top of the translucent fill it sits over, so the edge came out
+     brighter than the middle: a white ring around a grey button. tech.md 9. */
   button[data-variant='prominent']:hover:not(:disabled) {
     color: var(--notch);
-    background: rgba(255, 255, 255, 0.88);
-    border-color: rgba(255, 255, 255, 0.88);
+    background: #ececf0;
+    border-color: transparent;
   }
 
   button[data-variant='muted'] {

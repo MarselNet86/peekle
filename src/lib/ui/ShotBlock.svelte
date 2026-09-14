@@ -74,8 +74,10 @@
     cursor: pointer;
   }
 
+  /* Brighter, not outlined: a pale frame lit on hover is a web control.
+     tech.md 9. */
   .shot-block:hover {
-    border-color: var(--text-dim);
+    background: rgba(40, 40, 46, 0.95);
   }
 
   /* Enough to recognise the shot by, and no more: what is on it is read in
