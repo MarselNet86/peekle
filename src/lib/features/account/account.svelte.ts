@@ -16,6 +16,8 @@ export function createAccount() {
   let state = $state<AccountState | null>(null);
   let checking = $state(false);
   let copied = $state(false);
+  let signingOut = $state(false);
+  let signOutError = $state<string | null>(null);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function start(): Promise<() => void> {
@@ -55,6 +57,22 @@ export function createAccount() {
     }
   }
 
+  /** Signs Claude Code out. True when it went through. tech.md 6.16. */
+  async function signOut(): Promise<boolean> {
+    signingOut = true;
+    signOutError = null;
+    try {
+      const next = await commands.signOut();
+      if (next) state = next;
+      return true;
+    } catch (err) {
+      signOutError = String(err);
+      return false;
+    } finally {
+      signingOut = false;
+    }
+  }
+
   async function openLink(link: AccountLink) {
     try {
       await commands.openAccountLink(link);
@@ -73,6 +91,13 @@ export function createAccount() {
     get copied() {
       return copied;
     },
+    get signingOut() {
+      return signingOut;
+    },
+    get signOutError() {
+      return signOutError;
+    },
+    signOut,
     start,
     refresh,
     copy,

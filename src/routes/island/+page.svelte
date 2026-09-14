@@ -50,6 +50,7 @@
   import IconButton from '$lib/ui/IconButton.svelte';
   import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
+  import ActionRow from '$lib/ui/ActionRow.svelte';
   import AuthPanel from '$lib/ui/AuthPanel.svelte';
   import ReachPanel from '$lib/ui/ReachPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
@@ -419,6 +420,13 @@
       untrack(() => account.refresh({ quiet: true }));
     }
   });
+
+  // Out of the settings and into the sign-in window: the fresh account says
+  // signed out, and the gate raises the window by itself. Settings close, so
+  // the list is what comes back after signing in again. tech.md 6.16.
+  async function signOut() {
+    if (await account.signOut()) settingsOpen = false;
+  }
 
   // And while the screen waits on a terminal, it keeps asking. tech.md 6.16.
   $effect(() => {
@@ -907,6 +915,17 @@
                 busy={badge.busy}
                 onchange={(next) => badge.set(next, hourWindow)}
               />
+              {#if account.state?.signed_in === true}
+                <ActionRow
+                  label="Claude account"
+                  hint="Signed in to Claude Code on this Mac."
+                  action="Sign out"
+                  confirm="Signs Claude Code out on this Mac, the terminal included."
+                  busy={account.signingOut}
+                  error={account.signOutError}
+                  onaction={signOut}
+                />
+              {/if}
             </div>
           {:else}
             <!-- Only once there is a list worth searching. tech.md S14. -->

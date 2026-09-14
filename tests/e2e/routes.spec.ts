@@ -130,6 +130,7 @@ test.describe('overlay routes', () => {
       'Toast',
       'Kbd',
       'AuthPanel',
+      'ActionRow',
       'CommandLine',
       'ReachPanel',
     ]) {

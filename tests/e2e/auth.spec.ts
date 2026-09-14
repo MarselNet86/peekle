@@ -127,6 +127,9 @@ async function stub(
             return { ...idle, stage: 'Finishing' };
           case 'copy_account_command':
             return current.command;
+          case 'sign_out':
+            current = { ...current, signed_in: false };
+            return current;
           case 'get_models':
             return [];
           default:
@@ -356,6 +359,27 @@ test.describe('the sign-in window', () => {
 
     await page.getByRole('button', { name: 'Check again' }).click();
     await expect.poll(async () => (await calls(page, 'refresh_account')).length).toBeGreaterThan(0);
+  });
+
+  /// v83.1: out of the settings and straight into the sign-in window, with a
+  /// second press standing between, because the terminal signs out too.
+  test('signs out from the settings and shows the sign-in window', async ({ page }) => {
+    await stub(page, signedIn);
+    await page.goto(ROUTE);
+    await expect(page.getByText(HISTORY_TITLE)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(
+      page.getByText('Signs Claude Code out on this Mac, the terminal included.'),
+    ).toBeVisible();
+    expect(await calls(page, 'sign_out')).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    expect(await calls(page, 'sign_out')).toHaveLength(1);
+    await expect(page.getByRole('heading', { name: 'Sign in to Peekle' })).toBeVisible();
+    await expect(page.getByText(HISTORY_TITLE)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
   });
 
   test('is not there for a signed-in account', async ({ page }) => {

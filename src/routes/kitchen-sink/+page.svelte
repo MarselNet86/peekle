@@ -16,6 +16,7 @@
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import WorkLine from '$lib/ui/WorkLine.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
+  import ActionRow from '$lib/ui/ActionRow.svelte';
   import AuthPanel from '$lib/ui/AuthPanel.svelte';
   import CommandLine from '$lib/ui/CommandLine.svelte';
   import ReachPanel from '$lib/ui/ReachPanel.svelte';
@@ -407,6 +408,24 @@
       <AuthPanel
         account={signedOut}
         signIn={{ stage: 'Failed', url: null, needs_code: false, error: 'Invalid code' }}
+      />
+    </div>
+
+    <h2>ActionRow</h2>
+    <div class="frame">
+      <ActionRow
+        label="Claude account"
+        hint="Signed in to Claude Code on this Mac."
+        action="Sign out"
+        confirm="Signs Claude Code out on this Mac, the terminal included."
+      />
+    </div>
+    <div class="frame">
+      <ActionRow
+        label="Claude account"
+        action="Sign out"
+        confirm="Signs Claude Code out on this Mac, the terminal included."
+        error="Claude Code could not sign out."
       />
     </div>
 

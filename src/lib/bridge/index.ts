@@ -84,6 +84,9 @@ export const commands = {
   copyAccountCommand: () => call<string>('copy_account_command'),
   // A page is named, never supplied: the addresses live in Rust. tech.md 6.16.
   openAccountLink: (link: AccountLink) => call<void>('open_account_link', { link }),
+  // Claude Code's own sign-out, which signs the terminal out too. The fresh
+  // account comes back, and `signed_in: false` raises the window. tech.md 6.16.
+  signOut: () => call<AccountState>('sign_out'),
   // The address lives in Rust and this takes no argument, so a page cannot
   // point it anywhere of its own. tech.md 6.22.
   openBugReport: () => call<void>('open_bug_report'),

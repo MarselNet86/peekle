@@ -8,7 +8,7 @@
     onclick,
   }: {
     label: string;
-    variant?: 'primary' | 'ghost' | 'connect' | 'prominent' | 'muted';
+    variant?: 'primary' | 'ghost' | 'connect' | 'prominent' | 'muted' | 'danger';
     disabled?: boolean;
     /** Fills the row it sits in. For a control that is the only thing there. */
     wide?: boolean;
@@ -117,6 +117,20 @@
 
   button[data-variant='connect']:hover:not(:disabled) {
     color: var(--notch);
+    filter: brightness(1.08);
+  }
+
+  /* Red, and only on the second press of something one press must not do:
+     signing Claude Code out of this Mac. tech.md 9 and 6.16. */
+  button[data-variant='danger'] {
+    color: #fff;
+    background: var(--danger);
+    border-color: var(--danger);
+    font-weight: 600;
+  }
+
+  button[data-variant='danger']:hover:not(:disabled) {
+    color: #fff;
     filter: brightness(1.08);
   }
 
