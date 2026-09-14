@@ -1123,6 +1123,79 @@ fn a_hidden_session_stays_hidden_through_events_and_backfill() {
     assert!(registry.cards().is_empty(), "the backfill may not raise it");
 }
 
+fn session(id: &str) -> peekle_core::types::SessionRef {
+    peekle_core::types::SessionRef {
+        session_id: id.to_string(),
+        cwd: "/x/peekle".to_string(),
+        project: "peekle".to_string(),
+        pid: None,
+        tty: None,
+    }
+}
+
+/// v84.1: the owner deleted chats, the rows went, and after a restart the
+/// chats stood in the list again. Nothing may raise a deleted chat, including
+/// the hooks of a process that still runs it. tech.md 6.26.
+#[test]
+fn a_deleted_chat_is_not_raised_by_its_live_hooks() {
+    let mut registry = SessionRegistry::new();
+    registry.ensure(session("s"), 0);
+    registry.hide("s");
+
+    registry.assistant_turn(session("s"), "a closing line", 1);
+    assert!(registry.cards().is_empty(), "a Stop may not raise it");
+    registry.start_compact(session("s"), 2, true);
+    assert!(registry.cards().is_empty(), "a compact may not raise it");
+    registry.ensure(session("s"), 3);
+    assert!(registry.cards().is_empty(), "a prompt may not raise it");
+    assert_eq!(
+        registry.user_turn(session("s"), "typed", EntryState::Running, 4),
+        None
+    );
+    assert!(registry.cards().is_empty(), "a reply may not raise it");
+}
+
+/// The lost update behind it: each writer wrote the whole set it had read at
+/// start, and the second one erased the first one's deletions. A save merges
+/// onto the file instead. tech.md 6.26.
+#[test]
+fn saving_keeps_the_chats_another_writer_deleted() {
+    let mut disk = peekle_core::sessions::SessionOverrides::default();
+    disk.hidden.insert("deleted-elsewhere".to_string());
+    disk.titles
+        .insert("named-elsewhere".to_string(), "Theirs".to_string());
+
+    let mut ours = peekle_core::sessions::SessionOverrides::default();
+    ours.hidden.insert("deleted-here".to_string());
+    ours.titles.insert("mine".to_string(), "Mine".to_string());
+
+    let merged = ours.merged_onto(&disk, None);
+    assert!(merged.hidden.contains("deleted-elsewhere"));
+    assert!(merged.hidden.contains("deleted-here"));
+    assert_eq!(
+        merged.titles.get("named-elsewhere").map(String::as_str),
+        Some("Theirs")
+    );
+    assert_eq!(merged.titles.get("mine").map(String::as_str), Some("Mine"));
+}
+
+#[test]
+fn saving_lets_this_writer_win_a_title_and_clear_one() {
+    let mut disk = peekle_core::sessions::SessionOverrides::default();
+    disk.titles.insert("a".to_string(), "Old".to_string());
+    disk.titles.insert("b".to_string(), "Gone".to_string());
+
+    let mut ours = peekle_core::sessions::SessionOverrides::default();
+    ours.titles.insert("a".to_string(), "New".to_string());
+
+    let merged = ours.merged_onto(&disk, Some("b"));
+    assert_eq!(merged.titles.get("a").map(String::as_str), Some("New"));
+    assert!(
+        !merged.titles.contains_key("b"),
+        "a cleared title stays cleared"
+    );
+}
+
 #[test]
 fn restoring_applies_what_the_user_said_to_the_cards_already_there() {
     let mut registry = SessionRegistry::new();

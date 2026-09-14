@@ -224,6 +224,32 @@ pub struct SessionOverrides {
     pub hidden: HashSet<String>,
 }
 
+impl SessionOverrides {
+    /// What to write over a file another writer may have touched since this
+    /// process read it.
+    ///
+    /// Writing the whole set from memory is a lost update waiting to happen:
+    /// two Peekles before v82 each held the set they had read at start, and
+    /// the second one to save erased every chat the first had deleted, which
+    /// then came back on the next launch. So every hide on either side
+    /// stands, a title this process set wins, and a title it just cleared
+    /// stays cleared. tech.md 6.26.
+    pub fn merged_onto(&self, disk: &SessionOverrides, cleared: Option<&str>) -> SessionOverrides {
+        let mut hidden = disk.hidden.clone();
+        hidden.extend(self.hidden.iter().cloned());
+        let mut titles = disk.titles.clone();
+        titles.extend(
+            self.titles
+                .iter()
+                .map(|(id, title)| (id.clone(), title.clone())),
+        );
+        if let Some(id) = cleared {
+            titles.remove(id);
+        }
+        SessionOverrides { titles, hidden }
+    }
+}
+
 /// Owns every session card and the feed inside it.
 #[derive(Debug, Default)]
 pub struct SessionRegistry {
@@ -492,6 +518,11 @@ impl SessionRegistry {
     /// and never from the transcript file: that file is written asynchronously
     /// and lags the live turn. tech.md section 8 and S6.
     pub fn assistant_turn(&mut self, session: SessionRef, text: &str, at: i64) {
+        // A deleted chat stays deleted, whatever its process still says.
+        // tech.md 6.26.
+        if self.overrides.hidden.contains(&session.session_id) {
+            return;
+        }
         let trimmed = truncate(text, ASSISTANT_LIMIT);
         if trimmed.is_empty() {
             return;
@@ -536,6 +567,9 @@ impl SessionRegistry {
         state: EntryState,
         at: i64,
     ) -> Option<String> {
+        if self.overrides.hidden.contains(&session.session_id) {
+            return None;
+        }
         let trimmed = truncate(text, ASSISTANT_LIMIT);
         if trimmed.is_empty() {
             return None;
@@ -797,6 +831,11 @@ impl SessionRegistry {
     /// command, not that a turn is running, and a card invented as `Working`
     /// would spin until the stale sweep gave up on it.
     pub fn start_compact(&mut self, session: SessionRef, at: i64, manual: bool) {
+        // Not even for a compact: a card made here would raise a deleted chat.
+        // tech.md 6.26.
+        if self.overrides.hidden.contains(&session.session_id) {
+            return;
+        }
         let known = self
             .cards
             .iter()
@@ -1002,6 +1041,9 @@ impl SessionRegistry {
     /// A Stop can be the first thing that arrives if the overlay started mid
     /// turn, and a prompt with no card behind it has nothing to draw.
     pub fn ensure(&mut self, session: SessionRef, at: i64) {
+        if self.overrides.hidden.contains(&session.session_id) {
+            return;
+        }
         self.card_mut(session, at);
     }
 

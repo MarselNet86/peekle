@@ -403,11 +403,11 @@ impl AppState {
         if !sessions.rename(session_id, title) {
             return None;
         }
+        let cleared = !sessions.overrides().titles.contains_key(session_id);
         let cards = sessions.cards();
-        let overrides = sessions.overrides().clone();
         drop(sessions);
 
-        self.save_overrides(&overrides);
+        self.save_overrides(cleared.then_some(session_id));
         Some(cards)
     }
 
@@ -417,10 +417,9 @@ impl AppState {
         let mut sessions = self.lock(&self.sessions);
         sessions.hide(session_id);
         let cards = sessions.cards();
-        let overrides = sessions.overrides().clone();
         drop(sessions);
 
-        self.save_overrides(&overrides);
+        self.save_overrides(None);
         cards
     }
 
@@ -447,11 +446,32 @@ impl AppState {
         }
     }
 
-    fn save_overrides(&self, overrides: &SessionOverrides) {
+    /// Writes what the user said about sessions, merged onto what the file
+    /// holds now rather than over it: another writer's deletions must survive
+    /// this one's save, or the chats they deleted come back on the next
+    /// launch. The merge is adopted in memory too, so a hide made elsewhere
+    /// takes its row off here as well. `cleared` is a title this save removes.
+    /// tech.md 6.26.
+    fn save_overrides(&self, cleared: Option<&str>) {
         let Some(path) = overrides_path() else {
             return;
         };
-        let Ok(raw) = serde_json::to_string_pretty(overrides) else {
+        let disk = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<SessionOverrides>(&raw).ok())
+            .unwrap_or_default();
+        let overrides = {
+            let mut sessions = self.lock(&self.sessions);
+            let merged = sessions.overrides().merged_onto(&disk, cleared);
+            sessions.restore(merged.clone());
+            merged
+        };
+        tracing::debug!(
+            hidden = overrides.hidden.len(),
+            titles = overrides.titles.len(),
+            "saved what the user said about sessions"
+        );
+        let Ok(raw) = serde_json::to_string_pretty(&overrides) else {
             return;
         };
         if let Some(dir) = path.parent() {

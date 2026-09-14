@@ -1846,7 +1846,13 @@ pub fn delete_session(
 
     if let Some(path) = transcript_of(card.as_ref()) {
         if path.exists() {
-            platform::to_trash(&path)?;
+            // A refusal ends the command before the id is remembered, so the
+            // row stays and says why. Logged, because a delete that did not
+            // happen and left nothing behind is impossible to trace. 6.26.
+            platform::to_trash(&path).map_err(|err| {
+                tracing::warn!(session_id, error = %err, "the Trash refused the transcript, the chat stays");
+                err
+            })?;
             tracing::info!(session_id, "the transcript went to the Trash");
         } else {
             tracing::debug!(session_id, "no transcript on disk to delete");
