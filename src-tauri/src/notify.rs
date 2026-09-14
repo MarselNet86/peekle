@@ -9,13 +9,11 @@
 //! What decides whether to post is a free function, so the tests can hammer it
 //! without a window, a plugin or a screen.
 
-use std::sync::Arc;
-
-use tauri::{AppHandle, Manager};
+use peekle_core::types::Language;
+use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::copy;
-use crate::state::AppState;
 
 // What every banner says on top is `copy::notice_title`. It names the state
 // the person is in -- their turn to look -- rather than the event, because by
@@ -83,11 +81,23 @@ impl<R: tauri::Runtime> Notifier for SystemNotifier<'_, R> {
 }
 
 /// Posts the banner a finished turn earns, if it earns one.
-pub fn say(app: &AppHandle, enabled: bool, watching: bool, project: &str, said: &str) {
+///
+/// Everything read from the config arrives as an argument, the language
+/// included. This function takes no lock of its own: until v87.1 it read the
+/// language here, a caller held the config lock across the call, and every
+/// turn end deadlocked the hook thread -- and the main thread behind it on the
+/// next press. tech.md 6.17.
+pub fn say(
+    app: &AppHandle,
+    enabled: bool,
+    language: Language,
+    watching: bool,
+    project: &str,
+    said: &str,
+) {
     let Some(body) = notice(enabled, watching, project, said) else {
         return;
     };
-    let language = app.state::<Arc<AppState>>().language();
     if let Err(err) = SystemNotifier(app).post(copy::notice_title(language), &body) {
         // A banner that did not appear is not worth a screen of its own: the
         // island already said the same thing where the person can see it.

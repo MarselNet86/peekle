@@ -116,9 +116,17 @@ impl AppSink {
             self.state.view(),
             IslandView::Session(ref open) if open == &session.session_id
         );
+        // Read into a local, never inline. A guard made inside the argument
+        // list lives until the call returns, and `notify::say` asks the config
+        // for the language: the same lock again, on the same thread. That
+        // deadlocked every turn end, and the next press on the island blocked
+        // the main thread behind it. tech.md 6.17.
+        let enabled = self.state.lock_config().notify.enabled;
+        let language = self.state.language();
         notify::say(
             &self.app,
-            self.state.lock_config().notify.enabled,
+            enabled,
+            language,
             watching,
             &session.project,
             &said,
@@ -324,6 +332,7 @@ impl HookSink for AppSink {
             // take it away; the banner says the turn ended, the way it does
             // for a chat read elsewhere. tech.md 6.2 and 6.17.
             let notify_on = self.state.lock_config().notify.enabled;
+            let language = self.state.language();
             let project = session.project.clone();
             let said = payload
                 .get("last_assistant_message")
@@ -332,7 +341,7 @@ impl HookSink for AppSink {
                 .unwrap_or_default();
             tauri::async_runtime::spawn(async move {
                 if !windows::reveal_turn(&app, &session_id).await {
-                    notify::say(&app, notify_on, false, &project, &said);
+                    notify::say(&app, notify_on, language, false, &project, &said);
                 }
             });
         } else {
