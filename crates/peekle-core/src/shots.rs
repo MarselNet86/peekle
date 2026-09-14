@@ -114,10 +114,49 @@ pub trait Pasteboard: Send + Sync + 'static {
     fn read_png(&self) -> Option<Vec<u8>>;
 }
 
+/// How often the keyboard is asked about, while an offer stands and never
+/// otherwise. The pasteboard keeps its own `poll_ms`: reading a clipboard is
+/// work and reading a counter is not. tech.md 6.13.
+pub const KEY_POLL_MS: u64 = 50;
+
+/// How old a keystroke has to be before it counts as somebody else's.
+///
+/// The Up arrow is a keystroke too, and at the HID level it lands before
+/// Carbon calls the shortcut handler. Without this the fast tick could settle
+/// the offer in between and leave the agreement with nothing to attach, so the
+/// handler gets its turn first. tech.md 6.13.
+pub const KEY_GRACE_MS: i64 = 250;
+
+/// Whether a keystroke that is not the attach key settles the offer.
+///
+/// Two numbers, neither of which names a key: how many keystrokes the system
+/// has counted, and how long ago the last one was. A count that moved since
+/// the offer went up means somebody typed; an age past the grace means it was
+/// not the Up arrow about to be handled. tech.md 6.13.
+pub fn dismissed_by_key(counted_at_open: u32, counted_now: u32, since_key_ms: i64) -> bool {
+    // Never `>`: the counter is the system's and wraps where u32 does.
+    counted_now != counted_at_open && since_key_ms >= KEY_GRACE_MS
+}
+
+/// The keyboard, as far as an offer needs one: how many keys the system has
+/// seen and how long ago the last one landed.
+///
+/// Deliberately this narrow. Watching keystrokes is what needs Accessibility
+/// and what would let Peekle read what a person types; a counter and an idle
+/// time need no trust from the system and say nothing about which key it was.
+/// The offer does not care which key: every one of them means the same thing.
+/// tech.md 6.13 and section 7.
+pub trait Keys: Send + Sync + 'static {
+    /// Every `keyDown` the system has counted. Wraps, so only changes matter.
+    fn counted(&self) -> u32;
+    /// Milliseconds since the last `keyDown`, as the system measures it.
+    fn since_keystroke_ms(&self) -> i64;
+}
+
 /// The single offer that may stand at a time.
 ///
-/// Resolved exactly once, by agreement, by expiry, or by the next screenshot
-/// pushing it out. The discipline is the one blocking hooks get in section 8
+/// Resolved exactly once, by agreement, by any other key, by expiry, or by
+/// the next screenshot pushing it out. The discipline is the one blocking hooks get in section 8
 /// and for a comparable reason: a leaked offer holds the Up arrow away from
 /// every other application on the machine. tech.md 6.13.
 #[derive(Debug, Default)]
@@ -230,6 +269,51 @@ impl Pasteboard for FakePasteboard {
         let mut state = self.lock();
         state.reads += 1;
         state.png.clone()
+    }
+}
+
+/// Scripted keyboard. A test says how many keys were pressed and how long ago,
+/// because that is all the product may know about them. tech.md section 7.
+#[derive(Debug, Default)]
+pub struct FakeKeys {
+    inner: Mutex<(u32, i64)>,
+}
+
+impl FakeKeys {
+    /// A keyboard nobody has touched since the machine started.
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new((0, i64::MAX)),
+        }
+    }
+
+    /// One keystroke, that many milliseconds ago.
+    pub fn press(&self, ago_ms: i64) {
+        let mut state = self.lock();
+        state.0 = state.0.wrapping_add(1);
+        state.1 = ago_ms;
+    }
+
+    /// Time passes with nobody typing.
+    pub fn age(&self, by_ms: i64) {
+        let mut state = self.lock();
+        state.1 = state.1.saturating_add(by_ms);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, (u32, i64)> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+impl Keys for FakeKeys {
+    fn counted(&self) -> u32 {
+        self.lock().0
+    }
+
+    fn since_keystroke_ms(&self) -> i64 {
+        self.lock().1
     }
 }
 

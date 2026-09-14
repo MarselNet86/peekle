@@ -4,7 +4,7 @@
 use peekle_core::auth::{authorize_url, logged_in, strip_escapes, wants_code};
 use peekle_core::island::{shape_rect, Rect};
 use peekle_core::labels::classify;
-use peekle_core::shots::compose;
+use peekle_core::shots::{compose, dismissed_by_key, KEY_GRACE_MS};
 use peekle_core::types::{clamp_pct, UsageWindow, UsageWindowStat};
 use proptest::prelude::*;
 
@@ -196,5 +196,47 @@ proptest! {
         if logged_in(&raw) == Some(false) {
             prop_assert!(raw.contains("loggedIn"));
         }
+    }
+}
+
+proptest! {
+    /// The keystroke check runs twenty times a second while an offer stands,
+    /// on numbers the system hands over, so it has to be total over every
+    /// pair the system could ever report, wrapped counter included.
+    /// tech.md 6.13.
+    #[test]
+    fn dismissed_by_key_is_total(
+        at_open in proptest::num::u32::ANY,
+        now in proptest::num::u32::ANY,
+        since in proptest::num::i64::ANY,
+    ) {
+        let settled = dismissed_by_key(at_open, now, since);
+        // Two claims, and the offer stands unless both of them hold: somebody
+        // typed since the offer went up, and the shortcut handler has already
+        // had its turn at that keystroke.
+        prop_assert_eq!(settled, at_open != now && since >= KEY_GRACE_MS);
+    }
+
+    /// Inside the grace nothing settles, whatever the counter says. This is
+    /// what keeps the Up arrow answerable: it is a keystroke like any other,
+    /// and it reaches the HID counter before Carbon reaches the handler.
+    #[test]
+    fn nothing_settles_inside_the_grace(
+        at_open in proptest::num::u32::ANY,
+        now in proptest::num::u32::ANY,
+        since in i64::MIN..KEY_GRACE_MS,
+    ) {
+        prop_assert!(!dismissed_by_key(at_open, now, since));
+    }
+
+    /// A keyboard nobody touched since the offer went up leaves it alone for
+    /// any age at all, including the huge one a machine reports when nothing
+    /// has been typed since it booted.
+    #[test]
+    fn an_unmoved_counter_never_settles_an_offer(
+        counted in proptest::num::u32::ANY,
+        since in proptest::num::i64::ANY,
+    ) {
+        prop_assert!(!dismissed_by_key(counted, counted, since));
     }
 }
