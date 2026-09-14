@@ -2,6 +2,7 @@
   let notifyOn = $state(true);
   import Kbd from '$lib/ui/Kbd.svelte';
   import LanguagePicker from '$lib/ui/LanguagePicker.svelte';
+  import QuitPanel from '$lib/ui/QuitPanel.svelte';
   import SelectRow from '$lib/ui/SelectRow.svelte';
   import { LANGUAGE_CHOICES } from '$lib/logic/language';
   import LabelPill from '$lib/ui/LabelPill.svelte';
@@ -384,6 +385,12 @@
   <section>
     <h2>SearchField</h2>
     <div class="frame"><SearchField bind:value={search} /></div>
+
+    <h2>QuitPanel</h2>
+    <!-- The quit question as it stands, and on its way out after a yes.
+         tech.md 6.29. -->
+    <div class="frame"><QuitPanel /></div>
+    <div class="frame"><QuitPanel busy /></div>
 
     <h2>LanguagePicker</h2>
     <!-- The first screen of a fresh install: nothing picked, then a card

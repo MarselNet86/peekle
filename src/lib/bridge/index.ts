@@ -172,6 +172,10 @@ export const commands = {
     hasTauri() ? invoke<Language | null>('get_language') : 'en',
   setLanguage: (language: Language) => call<void>('set_language', { language }),
 
+  // A yes on the quit panel. Rust settles every waiting hook, folds the
+  // island and ends the process. tech.md 6.29.
+  quitApp: () => call<void>('quit_app'),
+
   // The permission mode, and only before the session has answered: it is a
   // spawn flag, not a line. tech.md 6.19.
   setMode: (sessionId: string, mode: PermissionMode) => call<void>('set_mode', { sessionId, mode }),

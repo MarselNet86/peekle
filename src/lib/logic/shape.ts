@@ -146,7 +146,9 @@ export function shapeBounds(
           }
         : // Two lines and two buttons, and nothing else: the answer to a
           // permission needs no feed. tech.md 6.7.
-          view === 'Ask'
+          // The quit question is the same kind of thing: one line, two
+          // buttons, the island open just enough to ask. tech.md 6.29.
+          view === 'Ask' || view === 'Quit'
           ? { width: 460, height: height + 62, radius: floating ? 31 : 22 }
           : view === 'Sessions'
             ? { width: 460, height: height + 380, radius: floating ? 28 : 24 }

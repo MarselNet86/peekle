@@ -24,6 +24,9 @@
   import { LANGUAGE_CHOICES, needsLanguage } from '$lib/logic/language';
   import { copy } from '$lib/i18n/index.svelte';
   import { ISLAND } from '$lib/i18n/island';
+  import { QUIT } from '$lib/i18n/quit';
+  import QuitPanel from '$lib/ui/QuitPanel.svelte';
+  import type { IslandView } from '$lib/types/generated/IslandView';
   import {
     contextLabel,
     noteTitle,
@@ -91,6 +94,7 @@
   const language = createLanguage();
   // Every word the route says itself, in the language in force. tech.md 6.28.
   const t = $derived(copy(ISLAND));
+  const q = $derived(copy(QUIT));
 
   let host = $state<HTMLElement | null>(null);
   // Whether the gear has the list open on settings instead. One shape, so the
@@ -484,6 +488,31 @@
     if (why) deleteFault = { id: sessionId, why };
   }
 
+  // Where No goes back to: the view the question was asked over. A pill is
+  // not a place to go back to -- its moment has passed -- so it rests.
+  // tech.md 6.29.
+  let returnTo = $state<IslandView>('Collapsed');
+  let quitting = $state(false);
+  $effect(() => {
+    const view = island.view;
+    if (view !== 'Quit') untrack(() => (returnTo = view === 'Pill' ? 'Collapsed' : view));
+  });
+
+  function askQuit() {
+    settingsOpen = false;
+    commands.setView('Quit');
+  }
+
+  function answerQuit(yes: boolean) {
+    if (quitting) return;
+    if (!yes) {
+      commands.setView(returnTo);
+      return;
+    }
+    quitting = true;
+    commands.quitApp();
+  }
+
   async function attachFiles() {
     if (!current) return;
     const id = current.session.session_id;
@@ -799,7 +828,11 @@
     <!-- A permission asks for yes or no, and neither answer needs the feed.
          The panel carries the question; pressing it anywhere but the buttons
          lands in the session it came from. tech.md 6.7. -->
-    {#if island.view === 'Ask' && permission}
+    {#if island.view === 'Quit'}
+      <!-- The quit question, over whatever was open: ⌥⌘Q or the button beside
+           the gear. tech.md 6.29. -->
+      <QuitPanel busy={quitting} onyes={() => answerQuit(true)} onno={() => answerQuit(false)} />
+    {:else if island.view === 'Ask' && permission}
       <AskPanel
         request={permission}
         onallow={() => answerPermission('allow')}
@@ -894,10 +927,11 @@
             {#if settingsOpen}
               <IconButton name="back" title={t.backToList} onclick={() => (settingsOpen = false)} />
             {/if}
-            <!-- The bug and the gear travel together so the way back keeps
-                 the left end to itself. The gear stays in the very corner:
-                 it stood there first, and a button that arrived later does
-                 not take its place. tech.md 6.22. -->
+            <!-- The bug, the gear and the way out travel together so the way
+                 back keeps the left end to itself. Quitting stands last,
+                 after the gear, as asked: the one button here that ends
+                 everything is the one furthest from the list. tech.md 6.22
+                 and 6.29. -->
             <div class="corner">
               <IconButton
                 name="bug"
@@ -911,6 +945,7 @@
                 pressed={settingsOpen}
                 onclick={() => (settingsOpen = !settingsOpen)}
               />
+              <IconButton name="quit" title={q.button} hint={q.hint} onclick={askQuit} />
             </div>
           </div>
           {#if settingsOpen}
