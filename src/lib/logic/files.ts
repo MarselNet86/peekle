@@ -7,6 +7,9 @@
  * and which lines of a reply were paths rather than words.
  */
 
+import { CHAT } from '$lib/i18n/chat';
+import { copy } from '$lib/i18n/index.svelte';
+
 import { isShot, shotName } from './shots';
 
 /**
@@ -57,7 +60,9 @@ export function fileLines(text: string): SaidWithFiles {
  * breaks itself across two lines would arrive as two paths, neither of which
  * exists. macOS allows it in a filename; the message cannot carry it.
  */
-export const SPLIT_PATH_NOTE = 'That file cannot be attached: its name runs onto a second line';
+export function splitPathNote(): string {
+  return copy(CHAT).splitPath;
+}
 
 export function attachable(path: string): boolean {
   return path.trim().length > 0 && !/[\n\r]/.test(path);

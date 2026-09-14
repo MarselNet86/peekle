@@ -8,6 +8,8 @@
    * not here at all: the plus that attaches to the message is the composer's
    * (6.25). tech.md 6.15, 6.19 and 6.20.
    */
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import { modeIcon, modeLabel, modeOptions, noteTitle, MODE_NOTE } from '$lib/logic/agent';
   import ContextRing from '$lib/ui/ContextRing.svelte';
   import ModelBlock from '$lib/ui/ModelBlock.svelte';
@@ -88,6 +90,7 @@
   const shown = $derived(agent ?? defaults);
   const measured = $derived(agent !== null);
   const modeShown = $derived<PermissionMode>(askedMode ?? mode ?? 'Manual');
+  const t = $derived(copy(CHAT));
 </script>
 
 {#if shown}
@@ -112,7 +115,7 @@
     <ThinkingChip
       on={thinking ?? true}
       live={canSetThinking}
-      note={canSetThinking ? '' : 'Thinking is set when a session starts'}
+      note={canSetThinking ? '' : t.thinkingFixed}
       onchange={(next) => onthinking?.(next)}
       onnote={() => onnote?.()}
     />

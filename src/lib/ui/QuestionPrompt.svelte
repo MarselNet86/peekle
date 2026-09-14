@@ -7,6 +7,8 @@
    * shortcut to whatever is on screen, and two mounted together would answer
    * the same keystroke twice.
    */
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
   import type { Question } from '$lib/types/generated/Question';
   import type { QuestionAnswer } from '$lib/types/generated/QuestionAnswer';
@@ -51,9 +53,11 @@
       })),
       // Last, where an escape hatch belongs: what Claude offered is read
       // first, and this is what to do when none of it is the answer.
-      { id: OWN, label: 'Other', hint: 'Write your own answer', kind: 'Custom' },
+      { id: OWN, label: t.other, hint: t.writeOwn, kind: 'Custom' },
     ];
   }
+
+  const t = $derived(copy(CHAT));
 
   let index = $state(0);
   let selected = $state('');
@@ -106,7 +110,7 @@
          answers. Without it the only way past a question with nothing right
          in it is to answer it wrongly. tech.md 6.14. -->
     {#if onclose}
-      <IconButton name="close" title="Close the question" onclick={onclose} />
+      <IconButton name="close" title={t.closeQuestion} onclick={onclose} />
     {/if}
   </div>
   <p class="text">{question.question}</p>
@@ -134,19 +138,14 @@
        filled in and Enter in a field means done everywhere else in the
        product. tech.md 6.14. -->
   {#if writing}
-    <PromptInput
-      compact
-      bind:value={own}
-      placeholder="Type your answer…"
-      onsubmit={() => advance()}
-    />
+    <PromptInput compact bind:value={own} placeholder={t.typeAnswer} onsubmit={() => advance()} />
   {/if}
   <!-- Checked boxes need an explicit confirm: unlike a click, nothing about
        checking one says the user is done choosing. tech.md 6.14. -->
   {#if question.multi_select}
     <div class="actions">
       <Button
-        label={last ? 'Submit' : 'Next'}
+        label={last ? t.submit : t.next}
         variant="primary"
         disabled={!answered}
         onclick={advance}

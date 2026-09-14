@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { FEED } from '$lib/i18n/feed';
+  import { copy } from '$lib/i18n/index.svelte';
   import { elapsedLabel } from '$lib/logic/work';
 
   /** How long a letter takes to appear, how long a finished word holds, and
@@ -11,18 +13,23 @@
     running,
     from = null,
     to = null,
-    words = ['Working', 'Reading', 'Thinking', 'Writing', 'Checking'],
+    words,
     tone = 'work',
   }: {
     running: boolean;
     from?: number | null;
     to?: number | null;
+    /** What the line types. Absent types the working words. A word handed in
+     * English that the copy knows is said in the language in force. 6.28. */
     words?: string[];
     /** `compact` is the same line about a different pause: not the agent
      * working through a turn but the CLI folding the chat up, which is why
      * it wears the colour the resting sign wears. tech.md 6.21. */
     tone?: 'work' | 'compact';
   } = $props();
+
+  const t = $derived(copy(FEED));
+  const typed = $derived((words ?? t.workWords).map((word) => t.words[word] ?? word));
 
   let shown = $state('');
   let now = $state(Date.now());
@@ -35,12 +42,13 @@
       return;
     }
 
+    const said = typed;
     let word = 0;
     let letters = 0;
     let timer: ReturnType<typeof setTimeout>;
 
     const step = () => {
-      const current = words[word % words.length] ?? '';
+      const current = said[word % said.length] ?? '';
       letters += 1;
       shown = current.slice(0, letters);
 
@@ -86,7 +94,7 @@
       ><span class="word">{shown}</span><span class="caret" aria-hidden="true"></span></span
     >
   {:else}
-    <span class="word">{clock ? `Worked for ${clock}` : 'Worked'}</span>
+    <span class="word">{clock ? t.workedFor(clock) : t.worked}</span>
   {/if}
 </div>
 

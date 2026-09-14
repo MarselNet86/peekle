@@ -8,6 +8,8 @@
  * signed-in person to sign in.
  */
 
+import { ACCOUNT } from '$lib/i18n/account';
+import { copy } from '$lib/i18n/index.svelte';
 import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 
 export type ReachCopy = {
@@ -22,19 +24,12 @@ export type ReachCopy = {
  * Null for every reason that does not stop an agent working. tech.md 6.16.
  */
 export function reachCopy(reason: UsageUnavailable | null | undefined): ReachCopy | null {
+  const t = copy(ACCOUNT);
   switch (reason) {
     case 'Offline':
-      return {
-        title: 'No connection',
-        line: 'Peekle cannot reach Anthropic.',
-        action: 'Try again',
-      };
+      return { title: t.offlineTitle, line: t.offlineLine, action: t.tryAgain };
     case 'Network':
-      return {
-        title: 'No answer',
-        line: 'Anthropic did not respond.',
-        action: 'Try again',
-      };
+      return { title: t.networkTitle, line: t.networkLine, action: t.tryAgain };
     default:
       return null;
   }

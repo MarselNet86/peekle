@@ -1,6 +1,9 @@
 <script lang="ts">
   let notifyOn = $state(true);
   import Kbd from '$lib/ui/Kbd.svelte';
+  import LanguagePicker from '$lib/ui/LanguagePicker.svelte';
+  import SelectRow from '$lib/ui/SelectRow.svelte';
+  import { LANGUAGE_CHOICES } from '$lib/logic/language';
   import LabelPill from '$lib/ui/LabelPill.svelte';
   import MessageBlock from '$lib/ui/MessageBlock.svelte';
   import OptionList from '$lib/ui/OptionList.svelte';
@@ -381,6 +384,25 @@
   <section>
     <h2>SearchField</h2>
     <div class="frame"><SearchField bind:value={search} /></div>
+
+    <h2>LanguagePicker</h2>
+    <!-- The first screen of a fresh install: nothing picked, then a card
+         picked and holding. tech.md 6.28. -->
+    <div class="frame"><LanguagePicker /></div>
+    <div class="frame"><LanguagePicker value="ru" /></div>
+
+    <h2>SelectRow</h2>
+    <div class="frame">
+      <SelectRow
+        label="Language"
+        options={LANGUAGE_CHOICES.map((choice) => ({
+          id: choice.id,
+          label: choice.name,
+          icon: choice.flag,
+        }))}
+        value="ru"
+      />
+    </div>
 
     <h2>AuthPanel</h2>
     <!-- The sign-in window, one frame per screen of the table in 6.16. -->

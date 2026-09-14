@@ -8,6 +8,8 @@
  * it been going. So a run of them becomes one line with a clock.
  */
 
+import { FEED } from '$lib/i18n/feed';
+import { copy } from '$lib/i18n/index.svelte';
 import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 
 /** A reply, an answer or a line about the conversation: it stands as itself. */
@@ -98,16 +100,52 @@ export function feedRows(entries: FeedEntry[], working: boolean): FeedRow[] {
  * should ever say it worked for minus four seconds.
  */
 export function elapsedLabel(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '0s';
+  const t = copy(FEED);
+  if (!Number.isFinite(ms) || ms <= 0) return t.secs(0);
 
   const secs = Math.floor(ms / 1000);
-  if (secs < 60) return `${secs}s`;
+  if (secs < 60) return t.secs(secs);
 
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  if (mins < 60) return t.minsSecs(mins, secs % 60);
 
   const hours = Math.floor(mins / 60);
-  return `${hours}h ${mins % 60}m`;
+  return t.hoursMins(hours, mins % 60);
+}
+
+/**
+ * A line Rust wrote about the conversation, in the language in force.
+ * tech.md 6.28.
+ *
+ * Rust sends these in English and in a handful of fixed shapes
+ * (`transcripts::COMPACTED`, `compact_label`, `ASKED_TO_STOP`, the model
+ * switch and the thought). Each is recognised by its exact shape and said
+ * again; anything else is the conversation's own text and comes back as it
+ * came. In English every shape comes back byte for byte.
+ */
+export function noticeText(text: string): string {
+  const t = copy(FEED);
+
+  if (text === 'Compacted') return t.compacted;
+  if (text === 'Asked Claude to stop') return t.askedClaudeToStop;
+
+  const parts = text.split(' · ');
+  if (parts[0] === 'Compacted chat' && parts.length > 1 && parts.length <= 3) {
+    const said = [t.compactedChat];
+    for (const part of parts.slice(1)) {
+      const freed = /^(\d+k?) tokens freed$/.exec(part);
+      said.push(freed ? t.tokensFreed(freed[1]) : (t.triggers[part] ?? part));
+    }
+    return said.join(' · ');
+  }
+
+  const switched = /^Switched to (.+)$/.exec(text);
+  if (switched) return t.switchedTo(switched[1]);
+
+  const thought = /^Thought for (\d+)s$/.exec(text);
+  if (thought) return t.thoughtFor(elapsedLabel(Number(thought[1]) * 1000));
+
+  return text;
 }
 
 /** How long a row has been working by `now`, or `null` with nothing to date it. */

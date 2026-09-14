@@ -7,30 +7,26 @@
  */
 
 import { commands, events } from '$lib/bridge';
+import { copy } from '$lib/i18n/index.svelte';
+import { USAGE } from '$lib/i18n/usage';
 import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
-import type { UsageUnavailable } from '$lib/types/generated/UsageUnavailable';
 import type { UsageWindow } from '$lib/types/generated/UsageWindow';
 
+/** The names of the two windows, read in the language in force. tech.md 6.28. */
+export const WINDOW_LABELS: Readonly<Record<UsageWindow, string>> = {
+  get FiveHour() {
+    return copy(USAGE).windows.FiveHour;
+  },
+  get SevenDay() {
+    return copy(USAGE).windows.SevenDay;
+  },
+};
+
 /** Why the bars are empty, in words rather than in an enum name. */
-const REASONS: Record<UsageUnavailable, string> = {
-  Disabled: 'usage is off in the config',
-  NotGranted: 'needs Keychain access',
-  Denied: 'Keychain access was denied',
-  NotLoggedIn: 'not signed in',
-  Offline: 'no internet connection',
-  Network: 'could not reach the API',
-  RateLimited: 'too many requests, it asked to wait',
-  Unsupported: 'the API stopped reporting it',
-};
-
-export const WINDOW_LABELS: Record<UsageWindow, string> = {
-  FiveHour: '5h',
-  SevenDay: 'Week',
-};
-
 export function reasonText(snapshot: UsageSnapshot | null): string {
-  if (!snapshot?.reason) return 'unavailable';
-  return REASONS[snapshot.reason] ?? 'unavailable';
+  const t = copy(USAGE);
+  if (!snapshot?.reason) return t.unavailable;
+  return t.reasons[snapshot.reason] ?? t.unavailable;
 }
 
 /** The two bars to draw, in the order of 6.3, dashes included. */
@@ -69,10 +65,10 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
   switch (snapshot?.reason) {
     case 'NotGranted':
     case 'Denied':
-      return 'Connect';
+      return copy(USAGE).connect;
     case 'Offline':
     case 'Network':
-      return 'Reconnect';
+      return copy(USAGE).reconnect;
     default:
       return null;
   }

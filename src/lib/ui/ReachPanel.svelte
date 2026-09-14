@@ -19,10 +19,10 @@
     onretry?: () => void;
   } = $props();
 
-  const copy = $derived(reachCopy(reason));
+  const words = $derived(reachCopy(reason));
 </script>
 
-{#if copy}
+{#if words}
   <!-- One screen and one strip, same markup. tech.md 6.16. -->
   <div class="reach" class:compact>
     {#if !compact}
@@ -46,11 +46,11 @@
       </svg>
     {/if}
 
-    <h2>{copy.title}</h2>
-    <p>{copy.line}</p>
+    <h2>{words.title}</h2>
+    <p>{words.line}</p>
 
     <div class="row">
-      <Button label={copy.action} variant="connect" wide {busy} onclick={() => onretry?.()} />
+      <Button label={words.action} variant="connect" wide {busy} onclick={() => onretry?.()} />
     </div>
   </div>
 {/if}

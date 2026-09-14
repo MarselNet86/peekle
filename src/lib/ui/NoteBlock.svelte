@@ -18,8 +18,12 @@
    * be guessed at. Hovering holds both the hairline and the clock, because a
    * person who is reading it is not spending it.
    */
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import { NOTE_EXIT_MS, NOTE_TTL } from '$lib/logic/agent';
   import IconButton from './IconButton.svelte';
+
+  const t = $derived(copy(CHAT));
 
   let {
     fact,
@@ -86,7 +90,7 @@
     <span class="fact">{fact}</span>
     {#if how}<span class="how">{how}</span>{/if}
   </div>
-  <IconButton name="close" title="Dismiss" onclick={leave} />
+  <IconButton name="close" title={t.dismiss} onclick={leave} />
   {#if ttl > 0}
     <span class="leak" aria-hidden="true"></span>
   {/if}

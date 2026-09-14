@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import Button from './Button.svelte';
+
+  const t = $derived(copy(CHAT));
 
   let {
     request,
@@ -46,8 +50,8 @@
   <div class="actions">
     <!-- The same two buttons the panel carries, because it is the same
          question in a second place. tech.md 9 and 6.7. -->
-    <Button label="Deny" variant="muted" onclick={() => ondeny?.()} />
-    <Button label="Allow" variant="prominent" onclick={() => onallow?.()} />
+    <Button label={t.deny} variant="muted" onclick={() => ondeny?.()} />
+    <Button label={t.allow} variant="prominent" onclick={() => onallow?.()} />
   </div>
 </div>
 

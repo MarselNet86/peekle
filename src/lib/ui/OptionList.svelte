@@ -6,8 +6,12 @@
   // forcing the second through a single-select control would silently drop
   // every pick but the last. tech.md 6.14.
   import { Checkbox, RadioGroup } from 'bits-ui';
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import { parseLabel } from '$lib/logic/options';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
+
+  const t = $derived(copy(CHAT));
 
   let {
     options,
@@ -74,7 +78,7 @@
       <!-- Claude's own pick, marked the way a recommended AskUserQuestion
            answer already is: a trailing "(Recommended)" in the label. -->
       {#if parseLabel(option.label).recommended}
-        <span class="recommended">Recommended</span>
+        <span class="recommended">{t.recommended}</span>
       {/if}
     </span>
     {#if option.hint}

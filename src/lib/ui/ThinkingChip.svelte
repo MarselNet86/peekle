@@ -5,7 +5,11 @@
    * is read once at startup, so this is set on a session before it runs and
    * read afterwards. tech.md 6.20.
    */
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import Toggle from './Toggle.svelte';
+
+  const t = $derived(copy(CHAT));
 
   let {
     on = true,
@@ -46,20 +50,20 @@
     class="chip"
     class:off={!on}
     class:dim={!live}
-    title={live ? 'Thinking' : note}
+    title={live ? t.thinking : note}
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={toggle}
   >
-    Thinking
-    {#if !on}<span class="state">off</span>{/if}
+    {t.thinking}
+    {#if !on}<span class="state">{t.thinkingOff}</span>{/if}
   </button>
 
   {#if open}
     <span class="pop" role="menu">
       <Toggle
-        label="Thinking"
-        hint="Set when the session starts"
+        label={t.thinking}
+        hint={t.thinkingHint}
         checked={on}
         onchange={(next) => {
           open = false;

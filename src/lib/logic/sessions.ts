@@ -1,5 +1,7 @@
 /** Searching the session list. Pure, so the property tests can hammer it. */
 
+import { CHAT } from '$lib/i18n/chat';
+import { copy } from '$lib/i18n/index.svelte';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 /**
@@ -89,8 +91,14 @@ export function replyReachable(state: {
  * conversation now is: the id changed, and a person who is not told reads it
  * as the island having lost their chat. tech.md 6.5. */
 export const FORKED_NOTE = {
-  fact: 'Another app is holding that chat, so this is a copy of it.',
-  how: 'Everything said so far came along. The original stays open where it was.',
+  // Read when drawn, so a note already standing follows a language switch.
+  // tech.md 6.28.
+  get fact(): string {
+    return copy(CHAT).forked.fact;
+  },
+  get how(): string {
+    return copy(CHAT).forked.how;
+  },
 };
 
 /**
@@ -120,15 +128,22 @@ export function stopAvailable(state: {
  * broken button, and a press answered by a second message starts a second
  * turn in somebody else's chat. tech.md 6.5. */
 export const STOP_ASKED_NOTE = {
-  fact: 'Peekle has already asked this chat to stop.',
-  how: 'It runs in another app, so the request waits until the agent reads it. Asking again would only queue a second message.',
+  get fact(): string {
+    return copy(CHAT).stopAsked.fact;
+  },
+  get how(): string {
+    return copy(CHAT).stopAsked.how;
+  },
 };
 
 /** The one word the work line says while a stop request stands.
  *
  * Not `Stopping`: the agent may finish its tool call first, or ignore the
  * request altogether, and the island does not make promises it cannot keep.
- * That it was asked stays true either way. tech.md 6.5 and 6.12. */
+ * That it was asked stays true either way. tech.md 6.5 and 6.12.
+ *
+ * English, as a key: `WorkLine` says it in the language in force (`FEED.words`).
+ * tech.md 6.28. */
 export const ASKED_TO_STOP = 'Asked to stop';
 
 /** What one attempt at continuing a chat came back with. */

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
   import Button from './Button.svelte';
 
   let {
@@ -11,6 +13,8 @@
     copied?: boolean;
     oncopy?: () => void;
   } = $props();
+
+  const t = $derived(copy(COMMON));
 </script>
 
 <!-- A line of a terminal, not a paragraph: the command scrolls sideways
@@ -22,7 +26,7 @@
   <!-- Quiet in both states, the way a macOS copy button answers: the word
        changes and nothing lights up. A green fill for `Copied` was louder
        than the command it copied. -->
-  <Button label={copied ? 'Copied' : 'Copy'} onclick={() => oncopy?.()} />
+  <Button label={copied ? t.copied : t.copy} onclick={() => oncopy?.()} />
 </div>
 
 <style>

@@ -8,7 +8,9 @@ import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { NOTIFY_HINT } from '$lib/features/notify/notify.svelte';
+import { notifyHint } from '$lib/features/notify/notify.svelte';
+
+const NOTIFY_HINT = notifyHint();
 import IconButton from '$lib/ui/IconButton.svelte';
 import Toggle from '$lib/ui/Toggle.svelte';
 

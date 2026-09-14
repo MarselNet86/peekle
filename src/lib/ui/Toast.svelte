@@ -16,6 +16,8 @@
    * first, which was always the words. Two lines cost nothing here: the pill
    * is drawn for this and grows to fit it.
    */
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
   import { elapsedLabel } from '$lib/logic/work';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import type { ToastTone } from '$lib/types/generated/ToastTone';
@@ -46,6 +48,7 @@
     ttlMs?: number | null;
   } = $props();
 
+  const c = $derived(copy(COMMON));
   const took = $derived(
     tookMs !== null && Number.isFinite(tookMs) && tookMs > 0 ? elapsedLabel(tookMs) : null,
   );
@@ -71,7 +74,7 @@
   class:pressable={onopen !== null}
   role={onopen ? 'button' : undefined}
   tabindex={onopen ? 0 : undefined}
-  aria-label={onopen ? `Open ${text}` : undefined}
+  aria-label={onopen ? c.open(text) : undefined}
   onclick={onopen ?? undefined}
   onkeydown={onopen ? press : undefined}
 >

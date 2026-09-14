@@ -1,5 +1,8 @@
 /** Usage bar math. Pure, so the property tests can hammer it. */
 
+import { copy } from '$lib/i18n/index.svelte';
+import { USAGE } from '$lib/i18n/usage';
+
 export type UsageTone = 'accent' | 'warn' | 'orange' | 'danger';
 
 /** Thresholds from tech.md section 9. */
@@ -57,19 +60,20 @@ export function usageTone(pct: number): UsageTone {
  */
 export function resetCountdown(resetsAt: number | null, nowSeconds: number): string {
   if (resetsAt === null || !Number.isFinite(resetsAt)) return '';
+  const t = copy(USAGE);
   const seconds = Math.max(0, Math.round(resetsAt - nowSeconds));
-  if (seconds < 60) return 'resets in <1m';
+  if (seconds < 60) return t.resetsIn(t.underMinute);
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `resets in ${minutes}m`;
+  if (minutes < 60) return t.resetsIn(t.minutes(minutes));
 
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     const rest = minutes % 60;
-    return rest === 0 ? `resets in ${hours}h` : `resets in ${hours}h ${rest}m`;
+    return t.resetsIn(rest === 0 ? t.hours(hours) : t.pair(t.hours(hours), t.minutes(rest)));
   }
 
   const days = Math.floor(hours / 24);
   const restHours = hours % 24;
-  return restHours === 0 ? `resets in ${days}d` : `resets in ${days}d ${restHours}h`;
+  return t.resetsIn(restHours === 0 ? t.days(days) : t.pair(t.days(days), t.hours(restHours)));
 }

@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { PromptRequest } from '$lib/types/generated/PromptRequest';
   import { ASK_SECS, secsLeft } from '$lib/features/permission/permission.svelte';
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import Button from './Button.svelte';
+
+  const t = $derived(copy(CHAT));
 
   let {
     request,
@@ -63,7 +67,7 @@
   tabindex="-1"
   onclick={() => onopen?.()}
   onkeydown={() => {}}
-  aria-label="Open the session this is asking about"
+  aria-label={t.openAsking}
 >
   <div class="what">
     <span class="title">{request.title}</span>
@@ -71,14 +75,14 @@
       {#if request.detail}
         <span class="detail">{request.detail}</span>
       {/if}
-      <span class="clock" aria-hidden="true">{left}s</span>
+      <span class="clock" aria-hidden="true">{t.secsLeft(left)}</span>
     </span>
   </div>
 
   <!-- Stops the press from also opening the session underneath. -->
   <div class="answers" role="none" onclick={(event) => event.stopPropagation()}>
-    <Button label="Deny" variant="muted" onclick={() => ondeny?.()} />
-    <Button label="Allow" variant="prominent" onclick={() => onallow?.()} />
+    <Button label={t.deny} variant="muted" onclick={() => ondeny?.()} />
+    <Button label={t.allow} variant="prominent" onclick={() => onallow?.()} />
   </div>
 
   <span class="leak" style:--secs="{ASK_SECS}s"></span>

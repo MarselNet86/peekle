@@ -1,5 +1,10 @@
 <script lang="ts">
+  import { FEED } from '$lib/i18n/feed';
+  import { copy } from '$lib/i18n/index.svelte';
+
   let { visible = false, onclick }: { visible?: boolean; onclick?: () => void } = $props();
+
+  const t = $derived(copy(FEED));
 </script>
 
 <!-- A control, not a picture. Pressing it was the first thing anyone tried,
@@ -9,7 +14,7 @@
   class:visible
   type="button"
   tabindex={visible ? 0 : -1}
-  aria-label="Scroll to the newest message"
+  aria-label={t.scrollNewest}
   onclick={() => onclick?.()}
 >
   <svg viewBox="0 0 12 8" width="11" height="7" aria-hidden="true">

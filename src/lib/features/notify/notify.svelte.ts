@@ -5,14 +5,17 @@
  */
 
 import { commands } from '$lib/bridge';
+import { ACCOUNT } from '$lib/i18n/account';
+import { copy } from '$lib/i18n/index.svelte';
 
 /** What the row says under the switch, whichever way it stands.
  *
  * macOS keeps its refusal to itself: banners forbidden in system settings are
  * swallowed silently and the app is never told. So the line names where that
  * is checked rather than claiming everything works. tech.md 6.17. */
-export const NOTIFY_HINT =
-  'macOS decides whether banners appear. Check System Settings › Notifications.';
+export function notifyHint(): string {
+  return copy(ACCOUNT).notifyHint;
+}
 
 export function createNotify() {
   let on = $state(false);

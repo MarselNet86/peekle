@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
 
   let {
     size = 56,
-    label = 'Nothing said in this chat yet',
+    label,
     caption = null,
   }: {
     /** How wide the sign is drawn. The height follows the box, because the
@@ -15,13 +17,14 @@
     caption?: string | null;
   } = $props();
 
+  const said = $derived(label ?? copy(COMMON).emptyChat);
   const height = $derived(Math.round((size * SIGN_BOX.height) / SIGN_BOX.width));
 </script>
 
 <!-- The product's sign, standing still in a place that has nothing to show.
      Still on purpose: movement in the island means the agent is working
      (6.12), and here nobody is. tech.md 9. -->
-<span class="blank" role="img" aria-label={label}>
+<span class="blank" role="img" aria-label={said}>
   <span class="sign">
     <svg viewBox="0 0 {SIGN_BOX.width} {SIGN_BOX.height}" width={size} {height} aria-hidden="true">
       {#each SIGN_STROKES as stroke (stroke)}

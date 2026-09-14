@@ -11,6 +11,8 @@
    * the numbers say what will open -- and the picture opens in full, which is
    * where it was always going to be read.
    */
+  import { copy } from '$lib/i18n/index.svelte';
+  import { SHOTS } from '$lib/i18n/shots';
   import { shotSize } from '$lib/logic/shots';
 
   let {
@@ -29,6 +31,7 @@
     onbroken?: () => void;
   } = $props();
 
+  const t = $derived(copy(SHOTS));
   let size = $state<string | null>(null);
 
   function measured(event: Event) {
@@ -41,11 +44,11 @@
   type="button"
   class="shot-block"
   title={name}
-  aria-label="Open the screenshot{size ? `, ${size}` : ''}"
+  aria-label={t.openScreenshot(size)}
   onclick={() => onopen?.()}
 >
   <img {src} alt="" onload={measured} onerror={() => onbroken?.()} />
-  <span class="what">Screenshot</span>
+  <span class="what">{t.screenshot}</span>
   <!-- The one thing about a picture that can be said in a line, and the one
        thing that tells two of them apart at this size. -->
   {#if size}

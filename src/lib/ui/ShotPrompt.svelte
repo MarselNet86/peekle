@@ -7,6 +7,9 @@
    * the project says so in words, for the person who is already reading.
    * tech.md 6.13 and 9.
    */
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
+  import { SHOTS } from '$lib/i18n/shots';
   import Kbd from '$lib/ui/Kbd.svelte';
 
   let {
@@ -25,6 +28,9 @@
     onopen?: () => void;
   } = $props();
 
+  const t = $derived(copy(SHOTS));
+  const c = $derived(copy(COMMON));
+
   function press(event: KeyboardEvent) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -40,7 +46,7 @@
   class:pressable={onopen !== undefined}
   role={onopen ? 'button' : undefined}
   tabindex={onopen ? 0 : undefined}
-  aria-label={onopen ? `Open ${project}` : undefined}
+  aria-label={onopen ? c.open(project) : undefined}
   onclick={onopen}
   onkeydown={onopen ? press : undefined}
 >
@@ -62,14 +68,14 @@
   </span>
 
   <span class="what">
-    <span class="text">Screenshot to {project}</span>
+    <span class="text">{t.offer(project)}</span>
     <span class="under">
-      <span class="how">Press the up arrow to attach it</span>
+      <span class="how">{t.how}</span>
       <!-- The one question of the moment is whether there is time to reach
            the key, and only a number answers it. Zero is never shown: at zero
            there is no offer left to show it on. tech.md 6.13. -->
       {#if secs > 0}
-        <span class="secs">{secs}s</span>
+        <span class="secs">{t.secs(secs)}</span>
       {/if}
     </span>
   </span>

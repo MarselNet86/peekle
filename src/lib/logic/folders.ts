@@ -8,6 +8,8 @@
  * inside a route can only be read by rendering it.
  */
 
+import { CHAT } from '$lib/i18n/chat';
+import { copy } from '$lib/i18n/index.svelte';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
 import type { PickOption } from './agent';
@@ -21,7 +23,8 @@ import type { PickOption } from './agent';
  */
 export const CHOOSE = 'choose-folder';
 
-/** What the last row says. */
+/** What the last row says in English. The menu says it in the language in
+ * force (`CHAT.openFolder`). tech.md 6.28. */
 export const CHOOSE_LABEL = 'Open folder…';
 
 export type Folder = { cwd: string; project: string };
@@ -78,7 +81,7 @@ export function folderOptions(cards: SessionCard[], cwd: string): PickOption[] {
 
   return [
     ...rows.map((folder) => ({ id: folder.cwd, label: folder.project, hint: folder.cwd })),
-    { id: CHOOSE, label: CHOOSE_LABEL, icon: 'folder' as const },
+    { id: CHOOSE, label: copy(CHAT).openFolder, icon: 'folder' as const },
   ];
 }
 

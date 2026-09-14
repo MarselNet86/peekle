@@ -8,6 +8,8 @@
    * acts on is being written. These two stay: they are about the account, not
    * about this conversation. tech.md 6.12 and 6.15.
    */
+  import { copy } from '$lib/i18n/index.svelte';
+  import { USAGE } from '$lib/i18n/usage';
   import UsageDial from './UsageDial.svelte';
 
   let {
@@ -17,11 +19,13 @@
     hour: number | null;
     week: number | null;
   } = $props();
+
+  const t = $derived(copy(USAGE));
 </script>
 
 <div class="corner">
-  <UsageDial pct={hour} label="5h" size={13} />
-  <UsageDial pct={week} label="7d" size={13} />
+  <UsageDial pct={hour} label={t.hour} size={13} />
+  <UsageDial pct={week} label={t.week} size={13} />
 </div>
 
 <style>

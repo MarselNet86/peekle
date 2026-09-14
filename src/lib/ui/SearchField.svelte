@@ -1,8 +1,10 @@
 <script lang="ts">
-  let {
-    value = $bindable(''),
-    placeholder = 'Search sessions…',
-  }: { value?: string; placeholder?: string } = $props();
+  import { copy } from '$lib/i18n/index.svelte';
+  import { LIST } from '$lib/i18n/list';
+
+  let { value = $bindable(''), placeholder }: { value?: string; placeholder?: string } = $props();
+
+  const t = $derived(copy(LIST));
 </script>
 
 <!-- No autofocus. The island opens without the keyboard and keeps it that way
@@ -13,7 +15,13 @@
     <circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" />
     <path d="M9.2 9.2L12.6 12.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
   </svg>
-  <input type="text" bind:value {placeholder} aria-label="Search sessions" spellcheck="false" />
+  <input
+    type="text"
+    bind:value
+    placeholder={placeholder ?? t.search}
+    aria-label={t.searchLabel}
+    spellcheck="false"
+  />
 </div>
 
 <style>

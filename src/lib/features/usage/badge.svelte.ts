@@ -11,6 +11,8 @@
  */
 
 import { commands } from '$lib/bridge';
+import { copy } from '$lib/i18n/index.svelte';
+import { USAGE } from '$lib/i18n/usage';
 import { steppedUp } from '$lib/logic/usage';
 
 /** How long the number stands before it goes. */
@@ -19,8 +21,10 @@ export const BADGE_HOLD_MS = 3500;
 /** How long it takes to go, and how long the shape waits for it. */
 export const BADGE_FADE_MS = 180;
 
-/** What the row says under the switch. */
-export const BADGE_HINT = 'The island shows it each time the 5h window crosses a ten.';
+/** What the row says under the switch, in the language in force. */
+export function badgeHint(): string {
+  return copy(USAGE).badgeHint;
+}
 
 export function createBadge() {
   let on = $state(true);

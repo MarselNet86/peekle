@@ -14,8 +14,10 @@
     modelLabel,
     modelOptions,
     ULTRACODE,
-    ULTRACODE_HINT,
+    ultracodeHint,
   } from '$lib/logic/agent';
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import type { AgentSetup } from '$lib/types/generated/AgentSetup';
   import type { Effort } from '$lib/types/generated/Effort';
   import type { ModelChoice } from '$lib/types/generated/ModelChoice';
@@ -65,7 +67,8 @@
   const shownEffort = $derived(askedEffort ?? agent?.effort ?? null);
   // While a pick travels the block stands on it: the choice is the freshest
   // true thing about the session, even before it applies. tech.md 6.15.
-  const name = $derived(askedLabel(askedModel, models) || modelLabel(agent) || 'Model');
+  const t = $derived(copy(CHAT));
+  const name = $derived(askedLabel(askedModel, models) || modelLabel(agent) || t.model);
   const weight = $derived(ultra ? 'Ultracode' : effortLabel(shownEffort));
 
   /** Where the knob stands: the level's place on the track, ultracode past
@@ -111,7 +114,7 @@
     class="chip"
     class:ultra
     class:dim={!live}
-    title={live ? 'Model and effort' : note}
+    title={live ? t.modelAndEffort : note}
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={toggle}
@@ -124,7 +127,7 @@
 
   {#if open}
     <span class="menu" role="menu">
-      <span class="head">Select a model</span>
+      <span class="head">{t.selectModel}</span>
       {#each rows as row (row.id)}
         <button
           class="option"
@@ -146,7 +149,7 @@
              the end, in its own colour. tech.md 6.15. -->
         <div class="effort" class:ultra>
           <span class="label">
-            Effort <span class="which">({ultra ? ULTRACODE_HINT : (weight ?? '')})</span>
+            {t.effort} <span class="which">({ultra ? t.ultracodeHint : (weight ?? '')})</span>
           </span>
           <span class="track">
             {#each stops as stop, index (stop)}
@@ -155,7 +158,7 @@
                 class:on={index <= at}
                 class:knob={index === at}
                 class:top={stop === ULTRACODE}
-                title={stop === ULTRACODE ? ULTRACODE_HINT : effortHint(stop as Effort)}
+                title={stop === ULTRACODE ? ultracodeHint() : effortHint(stop as Effort)}
                 aria-label={stop}
                 onclick={() => pickStop(stop)}
               ></button>

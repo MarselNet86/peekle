@@ -4,6 +4,8 @@
  * things to read off a screenshot. tech.md 6.16.
  */
 
+import { ACCOUNT } from '$lib/i18n/account';
+import { copy } from '$lib/i18n/index.svelte';
 import type { AccountState } from '$lib/types/generated/AccountState';
 import type { SignInState } from '$lib/types/generated/SignInState';
 
@@ -75,44 +77,44 @@ export function authCopy(
   account: AccountState | null,
   signIn: SignInState,
 ): { title: string; line: string } {
+  const t = copy(ACCOUNT);
   switch (screen) {
     case 'install':
       return {
-        title: 'Install Claude Code',
-        line: 'Peekle runs on top of Claude Code. Install it in Terminal, then come back.',
+        title: t.installTitle,
+        line: t.installLine,
       };
     case 'update':
       return {
-        title: 'Update Claude Code',
-        line: account?.version
-          ? `Claude Code ${account.version} is too old to sign in from Peekle.`
-          : 'This version of Claude Code is too old to sign in from Peekle.',
+        title: t.updateTitle,
+        line: account?.version ? t.tooOld(account.version) : t.tooOldUnknown,
       };
     case 'signin':
       return {
-        title: 'Sign in to Peekle',
-        line: 'Peekle uses your Claude account through Claude Code.',
+        title: t.signinTitle,
+        line: t.signinLine,
       };
     case 'starting':
-      return { title: 'Opening your browser', line: '' };
+      return { title: t.startingTitle, line: '' };
     case 'waiting':
       return {
-        title: 'Continue in your browser',
-        line: 'Approve access on claude.ai. Peekle picks it up on its own.',
+        title: t.waitingTitle,
+        line: t.waitingLine,
       };
     case 'finishing':
-      return { title: 'Signing in', line: '' };
+      return { title: t.finishingTitle, line: '' };
     case 'done':
-      return { title: "You're signed in", line: '' };
+      return { title: t.doneTitle, line: '' };
     case 'denied':
       return {
-        title: 'Access declined',
-        line: "Nothing was shared with Peekle. Try again whenever you're ready.",
+        title: t.deniedTitle,
+        line: t.deniedLine,
       };
     case 'failed':
       return {
-        title: "Sign-in didn't finish",
-        line: signIn.error ?? 'Claude Code did not finish signing in.',
+        title: t.failedTitle,
+        // The error is Rust's, already in the language of the interface. 6.28.
+        line: signIn.error ?? t.failedLine,
       };
   }
 }

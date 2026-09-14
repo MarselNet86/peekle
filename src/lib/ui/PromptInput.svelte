@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import { looksLikeImagePaste } from '$lib/logic/shots';
   import IconButton from './IconButton.svelte';
+
+  const t = $derived(copy(CHAT));
 
   let {
     value = $bindable(''),
@@ -122,7 +126,7 @@
         <!-- The start of the row belongs to what adds to the message. The
              original puts its plus here for the same reason. tech.md 6.25. -->
         {#if onattach && !disabled}
-          <IconButton name="plus" title="Attach files" onclick={() => onattach?.()} />
+          <IconButton name="plus" title={t.attachFiles} onclick={() => onattach?.()} />
         {/if}
         {#if tools}{@render tools()}{/if}
       </div>
@@ -139,7 +143,7 @@
     class:stop={stops}
     type="button"
     disabled={stops ? false : !sendable}
-    aria-label={stops ? 'Stop' : 'Send'}
+    aria-label={stops ? t.stop : t.send}
     onmousedown={(event) => event.preventDefault()}
     onclick={() => (stops ? onstop?.() : send())}
   >

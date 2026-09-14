@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { ACCOUNT } from '$lib/i18n/account';
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
   import { authCopy, authScreen } from '$lib/logic/account';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import Button from './Button.svelte';
@@ -47,7 +50,9 @@
   let code = $state('');
 
   const screen = $derived(authScreen(account, signIn));
-  const copy = $derived(authCopy(screen, account, signIn));
+  const words = $derived(authCopy(screen, account, signIn));
+  const t = $derived(copy(ACCOUNT));
+  const c = $derived(copy(COMMON));
   const signHeight = Math.round((28 * SIGN_BOX.height) / SIGN_BOX.width);
 
   // A code field belongs to the run it was opened in. tech.md 6.16.
@@ -108,9 +113,9 @@
         {/if}
       </div>
 
-      <h2>{copy.title}</h2>
-      {#if copy.line}
-        <p>{copy.line}</p>
+      <h2>{words.title}</h2>
+      {#if words.line}
+        <p>{words.line}</p>
       {/if}
 
       {#if screen === 'install' || screen === 'update'}
@@ -120,38 +125,32 @@
           </div>
         {/if}
         <div class="action second">
-          <Button label="Check again" busy={checking} onclick={() => oncheck?.()} />
+          <Button label={t.checkAgain} busy={checking} onclick={() => oncheck?.()} />
         </div>
         <div class="links">
           {#if screen === 'install'}
             <button type="button" class="link" onclick={() => onlink?.('InstallGuide')}>
-              Installation guide
+              {t.installGuide}
             </button>
           {:else}
             <button type="button" class="link" onclick={() => onlink?.('Changelog')}>
-              What's new
+              {t.whatsNew}
             </button>
             <button type="button" class="link" onclick={() => onlink?.('UpdateGuide')}>
-              Update guide
+              {t.updateGuide}
             </button>
           {/if}
         </div>
       {:else if screen === 'signin'}
         <div class="action">
-          <Button
-            label="Sign in with Claude"
-            variant="prominent"
-            wide
-            {busy}
-            onclick={() => onsignin?.()}
-          />
+          <Button label={t.signIn} variant="prominent" wide {busy} onclick={() => onsignin?.()} />
         </div>
       {:else if screen === 'starting'}
-        <div class="dots" role="status" aria-label="Opening your browser">
+        <div class="dots" role="status" aria-label={t.startingTitle}>
           <span></span><span></span><span></span>
         </div>
         <div class="links">
-          <button type="button" class="link" onclick={() => oncancel?.()}>Cancel</button>
+          <button type="button" class="link" onclick={() => oncancel?.()}>{c.cancel}</button>
         </div>
       {:else if screen === 'waiting'}
         {#if codeOpen}
@@ -168,13 +167,13 @@
             <input
               type="text"
               bind:value={code}
-              placeholder="Paste the code"
-              aria-label="Paste the code"
+              placeholder={t.pasteCode}
+              aria-label={t.pasteCode}
               spellcheck="false"
               autocomplete="off"
             />
             <Button
-              label="Continue"
+              label={t.continue}
               variant="connect"
               disabled={!code.trim()}
               {busy}
@@ -182,28 +181,28 @@
             />
           </form>
         {:else}
-          <div class="dots" role="status" aria-label="Waiting for your browser">
+          <div class="dots" role="status" aria-label={t.waitingBrowser}>
             <span></span><span></span><span></span>
           </div>
         {/if}
         <div class="links">
           {#if signIn.url}
             <button type="button" class="link" onclick={() => onopen?.()}>
-              Open the page again
+              {t.openAgain}
             </button>
           {/if}
           {#if !codeOpen}
             <button type="button" class="link" onclick={() => (codeOpen = true)}>
-              Have a code?
+              {t.haveCode}
             </button>
           {/if}
-          <button type="button" class="link" onclick={() => oncancel?.()}>Cancel</button>
+          <button type="button" class="link" onclick={() => oncancel?.()}>{c.cancel}</button>
         </div>
       {:else if screen === 'finishing'}
-        <span class="spinner" role="status" aria-label="Signing in"></span>
+        <span class="spinner" role="status" aria-label={t.finishingTitle}></span>
       {:else if screen === 'denied' || screen === 'failed'}
         <div class="action">
-          <Button label="Try again" variant="prominent" wide {busy} onclick={() => onsignin?.()} />
+          <Button label={t.tryAgain} variant="prominent" wide {busy} onclick={() => onsignin?.()} />
         </div>
       {/if}
     </div>

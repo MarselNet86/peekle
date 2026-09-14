@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { CHAT } from '$lib/i18n/chat';
+  import { copy } from '$lib/i18n/index.svelte';
   import type { TaskLabel } from '$lib/types/generated/TaskLabel';
 
   let { label }: { label: TaskLabel } = $props();
+
+  const t = $derived(copy(CHAT));
 </script>
 
-<span class="pill" data-label={label}>{label}</span>
+<span class="pill" data-label={label}>{t.taskLabels[label]}</span>
 
 <style>
   .pill {

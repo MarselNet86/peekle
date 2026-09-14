@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
+  import { copy } from '$lib/i18n/index.svelte';
+  import { LIST } from '$lib/i18n/list';
   import type { RestStatus } from '$lib/logic/rest';
   import { SIGN_BOX, SIGN_STROKES, SIGN_WEIGHT } from '$lib/logic/sign';
   import { REST_SIDE } from '$lib/logic/shape';
@@ -34,13 +36,8 @@
 
   const known = $derived(pct !== null);
   const value = $derived(known ? Math.round(Math.min(100, Math.max(0, pct as number))) : 0);
-  const labels: Record<RestStatus, string> = {
-    idle: 'Peekle is running',
-    working: 'Claude is working',
-    waiting: 'Claude is waiting on you',
-    compacting: 'Claude is compacting the chat',
-  };
-  const usageLabel = $derived(known ? `, ${value}% of the 5h window used` : '');
+  const t = $derived(copy(LIST));
+  const usageLabel = $derived(known ? t.restUsed(value) : '');
 
   /** How long the strokes hop for when the state changes under them. Long
    * enough to be seen from across a screen, short enough not to be a state of
@@ -105,7 +102,7 @@
   class:turned
   data-status={status}
   style:--side="{REST_SIDE}px"
-  aria-label="{labels[status]}{usageLabel}. Open the session list"
+  aria-label={t.restOpen(`${t.rest[status]}${usageLabel}`)}
   onclick={onopen}
 >
   <!-- Two strokes in every state but one. While the agent works they give way

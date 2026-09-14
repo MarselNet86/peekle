@@ -132,6 +132,10 @@ async function stub(
             return current;
           case 'get_models':
             return [];
+          // Chosen already: these runs are about sign-in, not the language
+          // screen that stands ahead of it. tech.md 6.28.
+          case 'get_language':
+            return 'en';
           default:
             return null;
         }

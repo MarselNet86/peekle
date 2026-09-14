@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { copy } from '$lib/i18n/index.svelte';
+  import { USAGE } from '$lib/i18n/usage';
   import { clampPct, usageTone } from '$lib/logic/usage';
 
   let {
@@ -17,6 +19,7 @@
     track?: boolean;
   } = $props();
 
+  const t = $derived(copy(USAGE));
   const known = $derived(pct !== null);
   const value = $derived(known ? clampPct(pct as number) : 0);
   const tone = $derived(usageTone(value));
@@ -24,10 +27,7 @@
 
 <!-- Never call this a `ring`: Tailwind owns that class name and paints its own
      box-shadow over anything wearing it. tech.md 9. -->
-<span
-  class="usage-dial"
-  title={known ? `${Math.round(value)}% of ${label ?? 'the window'}` : label}
->
+<span class="usage-dial" title={known ? t.dialTitle(Math.round(value), label) : label}>
   <span
     class="dial"
     data-tone={known ? tone : undefined}

@@ -1,5 +1,8 @@
 /** How long ago something happened, in the shortest true form. Pure. */
 
+import { copy } from '$lib/i18n/index.svelte';
+import { LIST } from '$lib/i18n/list';
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -21,14 +24,12 @@ const CAP = 99;
 export function ageLabel(at: number, now: number): string {
   if (!Number.isFinite(at) || !Number.isFinite(now)) return '';
 
+  const t = copy(LIST);
   const elapsed = now - at;
-  if (elapsed < MINUTE) return 'now';
-  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)}m`;
-  if (elapsed < DAY) return `${Math.floor(elapsed / HOUR)}h`;
-  if (elapsed < YEAR) return `${Math.floor(elapsed / DAY)}d`;
-  return capped(Math.floor(elapsed / YEAR), 'y');
-}
-
-function capped(value: number, unit: string): string {
-  return value > CAP ? `${CAP}${unit}+` : `${value}${unit}`;
+  if (elapsed < MINUTE) return t.now;
+  if (elapsed < HOUR) return t.minutes(Math.floor(elapsed / MINUTE));
+  if (elapsed < DAY) return t.hours(Math.floor(elapsed / HOUR));
+  if (elapsed < YEAR) return t.days(Math.floor(elapsed / DAY));
+  const years = Math.floor(elapsed / YEAR);
+  return years > CAP ? t.years(CAP, true) : t.years(years, false);
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
   import Button from './Button.svelte';
 
   let {
@@ -28,6 +30,8 @@
    * to read, short enough that a row left alone is never found asking. The
    * same as the bin in the session list. tech.md 6.26. */
   const CONFIRM_FOR = 4000;
+
+  const t = $derived(copy(COMMON));
 
   let asking = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -75,7 +79,7 @@
   </div>
   <div class="buttons">
     {#if asking && !busy}
-      <Button label="Cancel" onclick={forget} />
+      <Button label={t.cancel} onclick={forget} />
     {/if}
     <Button label={action} variant={asking || busy ? 'danger' : 'ghost'} {busy} onclick={press} />
   </div>

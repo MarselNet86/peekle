@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { copy } from '$lib/i18n/index.svelte';
+  import { LIST } from '$lib/i18n/list';
   import { ageLabel } from '$lib/logic/age';
   import type { SessionCard } from '$lib/types/generated/SessionCard';
 
@@ -35,6 +37,7 @@
   let asking = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  const t = $derived(copy(LIST));
   const age = $derived(ageLabel(card.updated_at, now));
 
   function forget() {
@@ -87,14 +90,6 @@
       editing = false;
     }
   }
-
-  /** One line of status, in the words a person would use. */
-  const STATUS: Record<string, string> = {
-    Working: 'working',
-    WaitingOnUser: 'waiting on you',
-    Idle: 'idle',
-    Ended: 'ended',
-  };
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -115,7 +110,7 @@
       bind:value={draft}
       onkeydown={keydown}
       onblur={() => (editing = false)}
-      aria-label="Rename this session"
+      aria-label={t.rename}
       spellcheck="false"
     />
   {:else}
@@ -127,16 +122,17 @@
         {#if fault}
           <span class="status bad">{fault}</span>
         {:else if asking}
-          <span class="status warn">Delete this chat and its transcript?</span>
+          <span class="status warn">{t.deleteAsk}</span>
         {:else}
-          <span class="status">{card.session.project} · {STATUS[card.status] ?? card.status}</span>
+          <span class="status">{card.session.project} · {t.status[card.status] ?? card.status}</span
+          >
         {/if}
       </span>
     </button>
 
     <span class="age">{age}</span>
     <span class="tools">
-      <button class="tool" onclick={edit} aria-label="Rename this session">
+      <button class="tool" onclick={edit} aria-label={t.rename}>
         <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true">
           <path
             d="M9.4 1.8l2.8 2.8L4.9 12H2.1V9.2z"
@@ -151,7 +147,7 @@
         class="tool"
         class:armed={asking}
         onclick={press}
-        aria-label={asking ? 'Delete this chat for good' : 'Delete this chat'}
+        aria-label={asking ? t.deleteForGood : t.delete}
       >
         <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true">
           <path

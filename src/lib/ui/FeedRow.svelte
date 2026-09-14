@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { FEED } from '$lib/i18n/feed';
+  import { copy } from '$lib/i18n/index.svelte';
   import { blocks } from '$lib/logic/markdown';
   import { FOLD_AT } from '$lib/logic/feed';
+  import { noticeText } from '$lib/logic/work';
   import { fileLines } from '$lib/logic/files';
   import { shotLines, shotName } from '$lib/logic/shots';
   import FileBlock from './FileBlock.svelte';
@@ -20,6 +23,7 @@
     onopenshot?: (path: string) => void;
   } = $props();
 
+  const t = $derived(copy(FEED));
   const spoken = $derived(entry.kind === 'User' || entry.kind === 'Assistant');
   // Not a message and not an object with a body: a line the conversation
   // records about itself. tech.md 6.15.
@@ -102,7 +106,7 @@
   <!-- Centred between two rules, the way Claude Code marks the same thing in
        its own transcript: it belongs to the conversation but nobody said it,
        so it takes neither side. tech.md 9. -->
-  <div class="notice"><span>{entry.text}</span></div>
+  <div class="notice"><span>{noticeText(entry.text)}</span></div>
 {:else if spoken}
   <div class="line" data-kind={entry.kind} data-state={entry.state}>
     <!-- It is a button exactly when it folds, and the checker cannot see a
@@ -115,7 +119,7 @@
       role={folds ? 'button' : undefined}
       tabindex={folds ? 0 : undefined}
       aria-expanded={folds ? unfolded : undefined}
-      aria-label={folds ? (unfolded ? 'Fold this message' : 'Open this message') : undefined}
+      aria-label={folds ? (unfolded ? t.foldMessage : t.openMessage) : undefined}
       onclick={folds ? toggleFold : undefined}
       onkeydown={folds ? foldKey : undefined}
     >
@@ -209,7 +213,7 @@
       {#if entry.tool}
         <span class="tool">{entry.tool}</span>
       {/if}
-      <span class="text">{entry.text}</span>
+      <span class="text">{entry.kind === 'Thought' ? noticeText(entry.text) : entry.text}</span>
       {#if entry.detail}
         <span class="chevron" class:open aria-hidden="true">
           <svg viewBox="0 0 8 12" width="7" height="10">

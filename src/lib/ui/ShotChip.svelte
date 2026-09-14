@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
+
   // The picture and not its name: the file is a ulid, and which of two shots
   // this one is cannot be read off `01M0ZKJ7...`. tech.md 6.13.
   let {
@@ -21,6 +24,7 @@
 
   // No src outside the app shell, and a cache the user may empty at any
   // moment. Either way the attachment stays visible and stays removable.
+  const t = $derived(copy(COMMON));
   let broken = $state(false);
   const thumb = $derived(kind === 'shot' && src !== '' && !broken);
 </script>
@@ -32,7 +36,7 @@
     <button
       type="button"
       class="open"
-      aria-label="Open {name}"
+      aria-label={t.open(name)}
       onmousedown={(event) => event.preventDefault()}
       onclick={() => onopen?.()}
     >
@@ -70,7 +74,7 @@
        caret out of the field beside it. tech.md 6.7. -->
   <button
     type="button"
-    aria-label="Remove {name}"
+    aria-label={t.remove(name)}
     onmousedown={(event) => event.preventDefault()}
     onclick={() => onremove?.()}
   >

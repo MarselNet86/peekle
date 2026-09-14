@@ -3,8 +3,8 @@
 
   import { commands, fileSrc } from '$lib/bridge';
   import { createAgent } from '$lib/features/agent/agent.svelte';
-  import { createNotify, NOTIFY_HINT } from '$lib/features/notify/notify.svelte';
-  import { createBadge, BADGE_HINT } from '$lib/features/usage/badge.svelte';
+  import { createNotify, notifyHint } from '$lib/features/notify/notify.svelte';
+  import { createBadge, badgeHint } from '$lib/features/usage/badge.svelte';
   import { createFeed } from '$lib/features/feed/feed.svelte';
   import { createIsland } from '$lib/features/island/island.svelte';
   import { choiceFor, isPermission, isQuestion } from '$lib/features/permission/permission.svelte';
@@ -19,7 +19,11 @@
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { createSignIn } from '$lib/features/signin/signin.svelte';
   import { createAccount } from '$lib/features/account/account.svelte';
+  import { createLanguage } from '$lib/features/language/language.svelte';
   import { ACCOUNT_POLL, authScreen, needsAuth, polls } from '$lib/logic/account';
+  import { LANGUAGE_CHOICES, needsLanguage } from '$lib/logic/language';
+  import { copy } from '$lib/i18n/index.svelte';
+  import { ISLAND } from '$lib/i18n/island';
   import {
     contextLabel,
     noteTitle,
@@ -28,7 +32,7 @@
     type SettingsNote,
   } from '$lib/logic/agent';
   import { scrollAim, scrollState } from '$lib/logic/feed';
-  import { attachable, fileName, SPLIT_PATH_NOTE } from '$lib/logic/files';
+  import { attachable, fileName, splitPathNote } from '$lib/logic/files';
   import { canPickFolder, CHOOSE, folderOptions } from '$lib/logic/folders';
   import { feedRows } from '$lib/logic/work';
   import {
@@ -52,6 +56,8 @@
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import ActionRow from '$lib/ui/ActionRow.svelte';
   import AuthPanel from '$lib/ui/AuthPanel.svelte';
+  import LanguagePicker from '$lib/ui/LanguagePicker.svelte';
+  import SelectRow from '$lib/ui/SelectRow.svelte';
   import ReachPanel from '$lib/ui/ReachPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
@@ -82,6 +88,9 @@
   const agent = createAgent();
   const notify = createNotify();
   const badge = createBadge();
+  const language = createLanguage();
+  // Every word the route says itself, in the language in force. tech.md 6.28.
+  const t = $derived(copy(ISLAND));
 
   let host = $state<HTMLElement | null>(null);
   // Whether the gear has the list open on settings instead. One shape, so the
@@ -323,9 +332,9 @@
   // Two words, and neither is an excuse: every chat takes text since v66, so
   // the field never has a reason to say it cannot. tech.md 6.5.
   const replyHint = $derived.by(() => {
-    if (island.prompt) return 'Reply to Claude';
-    if (continuing) return 'Sending…';
-    return 'Message Claude';
+    if (island.prompt) return t.replyToClaude;
+    if (continuing) return t.sending;
+    return t.messageClaude;
   });
   // Starting a session is what makes one talkable-to, so the island needs a
   // way to do it. The folder comes from a project the island already knows,
@@ -407,8 +416,14 @@
   // stands beside it. The window also stays for a run in flight and for the
   // tick of one that just went through. Never in front of a waiting hook.
   // tech.md 6.16.
+  // The language comes first of all on a fresh install, sign-in included,
+  // and never in front of a waiting hook. tech.md 6.28.
+  const languageGated = $derived(
+    needsLanguage(language.loaded, language.chosen, island.prompt !== null),
+  );
+  const languageOpen = $derived(languageGated && island.view !== 'Collapsed');
   const accountGated = $derived(
-    island.prompt === null && (needsAuth(account.state, false) || signIn.showing),
+    island.prompt === null && !languageGated && (needsAuth(account.state, false) || signIn.showing),
   );
   const authOpen = $derived(accountGated && island.view !== 'Collapsed');
 
@@ -483,7 +498,7 @@
     // with no Tauri under it, which answers null. tech.md 6.25.
     if (!picked || picked.length === 0) return;
     for (const path of picked.filter(attachable)) shots.attach(id, path);
-    startError = picked.every(attachable) ? null : SPLIT_PATH_NOTE;
+    startError = picked.every(attachable) ? null : splitPathNote();
   }
 
   // What is waiting in the field of the session on screen. tech.md 6.13.
@@ -619,6 +634,7 @@
       agent.start(),
       notify.start().then(() => () => {}),
       badge.start(),
+      language.start(),
     ]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
@@ -739,7 +755,7 @@
     <div class="usage">
       {#if usage.connectLabel}
         <Button
-          label={usage.connecting ? 'Connecting' : usage.connectLabel}
+          label={usage.connecting ? t.connecting : usage.connectLabel}
           variant="connect"
           busy={usage.connecting}
           wide
@@ -812,6 +828,14 @@
           onopen={island.toast.session ? () => openSession(island.toast!.session!) : null}
         />
       {/key}
+    {:else if languageOpen}
+      <!-- The language and nothing else, ahead of the sign-in window: every
+           word after this one is in the language picked here. tech.md 6.28. -->
+      <div class="feed">
+        <div class="auth">
+          <LanguagePicker value={language.picked} onpick={(next) => language.pick(next)} />
+        </div>
+      </div>
     {:else if authOpen}
       <!-- The sign-in window and nothing else: no rows, no search, no New
            session, no gear. tech.md 6.16. -->
@@ -846,7 +870,7 @@
               {@render reachPanel()}
             {:else}
               <Button
-                label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
+                label={usage.connecting ? t.connecting : (usage.connectLabel ?? t.connect)}
                 variant="connect"
                 busy={usage.connecting}
                 wide
@@ -868,11 +892,7 @@
                  view that can be entered and not left is a trap, however
                  small the view. -->
             {#if settingsOpen}
-              <IconButton
-                name="back"
-                title="Back to the session list"
-                onclick={() => (settingsOpen = false)}
-              />
+              <IconButton name="back" title={t.backToList} onclick={() => (settingsOpen = false)} />
             {/if}
             <!-- The bug and the gear travel together so the way back keeps
                  the left end to itself. The gear stays in the very corner:
@@ -881,13 +901,13 @@
             <div class="corner">
               <IconButton
                 name="bug"
-                title="Report a bug"
-                hint="Tell the developer what broke. Opens Telegram."
+                title={t.reportBug}
+                hint={t.reportBugHint}
                 onclick={() => commands.openBugReport()}
               />
               <IconButton
                 name="settings"
-                title="Settings"
+                title={t.settings}
                 pressed={settingsOpen}
                 onclick={() => (settingsOpen = !settingsOpen)}
               />
@@ -896,8 +916,8 @@
           {#if settingsOpen}
             <div class="settings">
               <Toggle
-                label="Notify when a turn ends"
-                hint={NOTIFY_HINT}
+                label={t.notifyTurn}
+                hint={notifyHint()}
                 checked={notify.on}
                 busy={notify.busy}
                 onchange={(next) => notify.set(next)}
@@ -909,18 +929,31 @@
                    hour away, and a switch nobody can see work is a switch
                    nobody believes. tech.md 6.18. -->
               <Toggle
-                label="Show usage on the island"
-                hint={BADGE_HINT}
+                label={t.showUsage}
+                hint={badgeHint()}
                 checked={badge.on}
                 busy={badge.busy}
                 onchange={(next) => badge.set(next, hourWindow)}
               />
+              <!-- Third, as asked: after the two switches, before the account.
+                   Each language named in itself. tech.md 6.28. -->
+              <SelectRow
+                label={t.language}
+                options={LANGUAGE_CHOICES.map((choice) => ({
+                  id: choice.id,
+                  label: choice.name,
+                  icon: choice.flag,
+                }))}
+                value={language.chosen ?? 'en'}
+                busy={language.busy}
+                onchange={(id) => language.change(id === 'ru' ? 'ru' : 'en')}
+              />
               {#if account.state?.signed_in === true}
                 <ActionRow
-                  label="Claude account"
-                  hint="Signed in to Claude Code on this Mac."
-                  action="Sign out"
-                  confirm="Signs Claude Code out on this Mac, the terminal included."
+                  label={t.account}
+                  hint={t.accountHint}
+                  action={t.signOut}
+                  confirm={t.signOutConfirm}
                   busy={account.signingOut}
                   error={account.signOutError}
                   onaction={signOut}
@@ -938,7 +971,7 @@
                stands at the bottom of this list instead. tech.md 6.16. -->
             {#if newestCwd && !barred}
               <div class="start">
-                <Button label="New session" onclick={() => startSession(newestCwd)} wide />
+                <Button label={t.newSession} onclick={() => startSession(newestCwd)} wide />
               </div>
             {/if}
             <div class="rows" bind:this={scroller} onscroll={readScroll}>
@@ -955,9 +988,7 @@
                  click the user just made reads as a broken island. tech.md S12. -->
               {#if cards.length === 0}
                 <p class="empty">
-                  {query
-                    ? 'Nothing matches that.'
-                    : 'No sessions yet. Run Claude Code once in a project and Peekle picks it up.'}
+                  {query ? t.nothingMatches : t.noSessions}
                 </p>
               {/if}
               {#if startError}
@@ -976,7 +1007,7 @@
            screen that has room for one. tech.md 6.16. -->
       <div class="feed">
         <div class="head">
-          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+          <button class="back" onclick={() => openList()} aria-label={t.backToList}>
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
               <path
                 d="M6.5 1L1.5 6l5 5"
@@ -1003,7 +1034,7 @@
           />
         {/if}
         <div class="head">
-          <button class="back" onclick={() => openList()} aria-label="Back to the session list">
+          <button class="back" onclick={() => openList()} aria-label={t.backToList}>
             <svg viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
               <path d="M6.5 1l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
             </svg>
@@ -1048,7 +1079,7 @@
                runs for minutes, the agent answers nothing through it, and a
                feed that says nothing reads as a feed that died. tech.md 6.21. -->
           {#if compacting}
-            <WorkLine running tone="compact" words={['Compacting']} from={compacting.since} />
+            <WorkLine running tone="compact" words={[t.compacting]} from={compacting.since} />
           {/if}
         </div>
         {@render connect()}
@@ -1112,17 +1143,17 @@
                  whether they vouch for what is in the folder. tech.md 6.24. -->
             {#if askingTrust}
               <div class="trust">
-                <p class="asked">Claude Code asks whether you trust this folder</p>
+                <p class="asked">{t.trustAsk}</p>
                 <p class="where">{current.session.cwd}</p>
                 <div class="answers">
                   <Button
-                    label="Trust it"
+                    label={t.trustIt}
                     variant="prominent"
                     busy={answeringTrust}
                     onclick={() => answerTrust(true)}
                   />
                   <Button
-                    label="Not here"
+                    label={t.notHere}
                     variant="muted"
                     disabled={answeringTrust}
                     onclick={() => answerTrust(false)}
@@ -1162,7 +1193,7 @@
                   models={agent.models}
                   live={owned}
                   note={noteTitle(settingsNote(current))}
-                  contextTitle={contextLabel(setup, owned) || 'Nothing in the context yet'}
+                  contextTitle={contextLabel(setup, owned) || t.emptyContext}
                   askedModel={asked.model}
                   askedEffort={asked.effort}
                   askedMode={asked.mode}

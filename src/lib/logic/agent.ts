@@ -7,6 +7,8 @@ import type { AgentSetup } from '$lib/types/generated/AgentSetup';
 import type { Effort } from '$lib/types/generated/Effort';
 import type { ModelChoice } from '$lib/types/generated/ModelChoice';
 import type { PermissionMode } from '$lib/types/generated/PermissionMode';
+import { CHAT } from '$lib/i18n/chat';
+import { copy } from '$lib/i18n/index.svelte';
 
 /** One row of a menu. */
 /** Which sign a row wears, when it wears one. The names are the icon set's,
@@ -69,20 +71,14 @@ export function effortOptions(agent: AgentSetup | null): PickOption[] {
  * menu, and a session already in one still reads as it. tech.md 6.19.
  */
 const MODE_ROWS: ReadonlyArray<{
-  id: PermissionMode;
+  id: 'Manual' | 'AcceptEdits' | 'Plan' | 'Auto';
   label: string;
-  hint: string;
   icon: PickIcon;
 }> = [
-  { id: 'Manual', label: 'Manual', hint: 'Asks before every edit', icon: 'hand' },
-  {
-    id: 'AcceptEdits',
-    label: 'Edit automatically',
-    hint: 'Edits go through, everything else asks',
-    icon: 'code',
-  },
-  { id: 'Plan', label: 'Plan', hint: 'Reads and plans, changes nothing', icon: 'plan' },
-  { id: 'Auto', label: 'Auto', hint: 'Approves what passes its safety check', icon: 'bolt' },
+  { id: 'Manual', label: 'Manual', icon: 'hand' },
+  { id: 'AcceptEdits', label: 'Edit automatically', icon: 'code' },
+  { id: 'Plan', label: 'Plan', icon: 'plan' },
+  { id: 'Auto', label: 'Auto', icon: 'bolt' },
 ];
 
 /** What each mode is called on screen, including the two never offered. */
@@ -95,33 +91,30 @@ const MODE_LABELS: Record<PermissionMode, string> = {
   DontAsk: 'Never asks',
 };
 
-/**
- * What each effort level is for, in Claude Code's own words: the five lines
- * its `/effort` slider carries, read out of 2.1.263. tech.md 6.15.
- */
-const EFFORT_HINTS: Record<Effort, string> = {
-  Low: 'Quick, straightforward implementation',
-  Medium: 'Balanced approach with standard testing',
-  High: 'Comprehensive implementation with extensive testing',
-  XHigh: 'Extended reasoning with thorough analysis',
-  Max: 'Maximum capability with deepest reasoning',
-};
-
 /** The stop past the last one. Not an `Effort`: `--effort` does not take it,
  * `/effort ultracode` does, and it holds for the running session only.
- * tech.md 6.15. */
+ * tech.md 6.15. Its name is the CLI's and stays as it is. */
 export const ULTRACODE = 'Ultracode';
-export const ULTRACODE_HINT = 'xhigh + dynamic workflows, this session only';
 
+/** What ultracode is, in the language in force. tech.md 6.28. */
+export function ultracodeHint(): string {
+  return copy(CHAT).ultracodeHint;
+}
+
+/**
+ * What each effort level is for, in Claude Code's own words: the five lines
+ * its `/effort` slider carries, read out of 2.1.263. tech.md 6.15 and 6.28.
+ */
 export function effortHint(level: Effort): string {
-  return EFFORT_HINTS[level];
+  return copy(CHAT).effortHints[level];
 }
 
 export function modeOptions(): PickOption[] {
+  const hints = copy(CHAT).modeHints;
   return MODE_ROWS.map((row) => ({
     id: row.id,
     label: row.label,
-    hint: row.hint,
+    hint: hints[row.id],
     icon: row.icon,
   }));
 }
@@ -160,8 +153,9 @@ export function contextLabel(agent: AgentSetup | null, canCompact = true): strin
   const pct = Math.round(agent.context_pct);
   const used = Math.round(agent.context_tokens / 1000);
   const window = Math.round(agent.context_window / 1000);
-  const reading = `${pct}% of context used, ${used}k of ${window}k`;
-  return canCompact ? `${reading}. Click to compact.` : `${reading}.`;
+  const t = copy(CHAT);
+  const reading = t.contextUsed(pct, used, window);
+  return canCompact ? `${reading}. ${t.clickToCompact}` : `${reading}.`;
 }
 
 /**
@@ -218,11 +212,23 @@ export const NOTE_TTL = 10_000;
 /** How long the way out plays, in milliseconds. tech.md 9. */
 export const NOTE_EXIT_MS = 180;
 
+// The notes are one object each, and their words are read at the moment they
+// are drawn: a note held in a rune and shown after a language switch speaks
+// the new language, and `settingsNote` still answers with the same object.
+// tech.md 6.28.
 export const ELSEWHERE_NOTE: SettingsNote = {
-  fact: 'Another app is running this chat, so its model and effort are set there.',
-  how: 'Close it there and your next message brings the chat here, controls and all.',
+  get fact() {
+    return copy(CHAT).elsewhere.fact;
+  },
+  get how() {
+    return copy(CHAT).elsewhere.how;
+  },
 };
-export const FINISHED_NOTE: SettingsNote = { fact: 'This session has finished.' };
+export const FINISHED_NOTE: SettingsNote = {
+  get fact() {
+    return copy(CHAT).finished;
+  },
+};
 
 /**
  * Why the mode reads rather than picks once a session is under way.
@@ -234,8 +240,12 @@ export const FINISHED_NOTE: SettingsNote = { fact: 'This session has finished.' 
  * says where the switch is instead of pretending to be it. tech.md 6.19.
  */
 export const MODE_NOTE: SettingsNote = {
-  fact: 'The mode is chosen when a session starts.',
-  how: 'Claude Code switches it with Shift+Tab in its own window.',
+  get fact() {
+    return copy(CHAT).modeNote.fact;
+  },
+  get how() {
+    return copy(CHAT).modeNote.how;
+  },
 };
 
 export function settingsNote(

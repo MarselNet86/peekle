@@ -100,6 +100,9 @@ async function stub(
         retry_after_ms: null,
       };
       const answers: Record<string, unknown> = {
+        // Chosen already: these runs are not about the language screen.
+        // tech.md 6.28.
+        get_language: 'en',
         get_state: {
           enabled: true,
           view,

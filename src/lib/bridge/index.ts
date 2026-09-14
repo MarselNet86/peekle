@@ -28,6 +28,7 @@ import type { ShotOffer } from '$lib/types/generated/ShotOffer';
 import type { SignInState } from '$lib/types/generated/SignInState';
 import type { AccountLink } from '$lib/types/generated/AccountLink';
 import type { AccountState } from '$lib/types/generated/AccountState';
+import type { Language } from '$lib/types/generated/Language';
 
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
@@ -162,6 +163,14 @@ export const commands = {
   // ask for the permission at all. tech.md 6.17.
   notifyEnabled: () => call<boolean>('notify_enabled'),
   setNotifyEnabled: (on: boolean) => call<void>('set_notify_enabled', { on }),
+
+  // The language the island speaks, null until the person has chosen one:
+  // that null is what puts the language screen ahead of sign-in. Outside the
+  // shell the answer is English rather than null, so a route rendered on its
+  // own does not come up asking. tech.md 6.28.
+  getLanguage: async (): Promise<Language | null> =>
+    hasTauri() ? invoke<Language | null>('get_language') : 'en',
+  setLanguage: (language: Language) => call<void>('set_language', { language }),
 
   // The permission mode, and only before the session has answered: it is a
   // spawn flag, not a line. tech.md 6.19.

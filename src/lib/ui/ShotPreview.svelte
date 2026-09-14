@@ -6,7 +6,14 @@
    * picture is not a state Rust decides, and taking the view for it would put
    * the reply the user is writing behind a photo.
    */
+  import { COMMON } from '$lib/i18n/common';
+  import { copy } from '$lib/i18n/index.svelte';
+  import { SHOTS } from '$lib/i18n/shots';
+
   let { name, src, onclose }: { name: string; src: string; onclose?: () => void } = $props();
+
+  const t = $derived(copy(SHOTS));
+  const c = $derived(copy(COMMON));
 
   function keydown(event: KeyboardEvent) {
     if (event.key !== 'Escape') return;
@@ -23,7 +30,7 @@
   class="preview"
   role="button"
   tabindex="-1"
-  aria-label="Close the shot"
+  aria-label={t.closeShot}
   onclick={() => onclose?.()}
   onkeydown={keydown}
 >
@@ -36,7 +43,7 @@
          look pressable and a cross does. -->
     <button
       type="button"
-      aria-label="Close {name}"
+      aria-label={c.close(name)}
       onmousedown={(event) => event.preventDefault()}
       onclick={(event) => {
         // The layer under it closes on a click too, and one press is one close.
