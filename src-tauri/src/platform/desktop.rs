@@ -103,6 +103,13 @@ pub fn to_trash(path: &Path) -> Result<(), String> {
     trash::delete(path).map_err(|err| err.to_string())
 }
 
+/// Puts plain text on the clipboard. tech.md 6.16.
+pub fn write_text(text: &str) -> Result<(), String> {
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text.to_string()))
+        .map_err(|err| err.to_string())
+}
+
 /// Hands a URL to the browser the person chose. tech.md 6.16 and 6.22.
 ///
 /// Windows through `rundll32 url.dll` rather than `cmd /c start`: `start`

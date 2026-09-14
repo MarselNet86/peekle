@@ -160,6 +160,15 @@ pub fn run() {
 
             poll_usage(app.handle(), Arc::clone(&state));
 
+            // Who is signed in is Claude Code's to say, and asking it raises no
+            // dialog of Peekle's: the island knows before it is first opened
+            // whether to show the sign-in window. tech.md 6.16.
+            let account_handle = app.handle().clone();
+            let account_state = Arc::clone(&state);
+            tauri::async_runtime::spawn(async move {
+                commands::probe_account(&account_handle, &account_state).await;
+            });
+
             let sink = Arc::new(hooks::AppSink::new(app.handle().clone(), state));
             serve(port, token, sink);
             Ok(())
@@ -227,6 +236,10 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::submit_sign_in_code,
             commands::open_sign_in_page,
             commands::cancel_sign_in,
+            commands::get_account,
+            commands::refresh_account,
+            commands::copy_account_command,
+            commands::open_account_link,
             commands::set_usage_enabled,
             commands::window_ready,
             commands::set_view,
@@ -275,6 +288,10 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::submit_sign_in_code,
             commands::open_sign_in_page,
             commands::cancel_sign_in,
+            commands::get_account,
+            commands::refresh_account,
+            commands::copy_account_command,
+            commands::open_account_link,
             commands::set_usage_enabled,
             commands::window_ready,
             commands::set_view,

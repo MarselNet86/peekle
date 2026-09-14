@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use peekle_core::types::{
-    IslandView, PeekleState, PromptAnswer, PromptOutcome, SignInState, ToastRequest, ToastTone,
-    UsageSnapshot,
+    AccountLink, AccountState, CliState, IslandView, PeekleState, PromptAnswer, PromptOutcome,
+    SignInStage, SignInState, ToastRequest, ToastTone, UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -367,62 +367,6 @@ pub async fn request_usage_access(
     Ok(stamped)
 }
 
-/// How long `claude auth status --json` is given to answer.
-///
-/// It reads a file and prints; it does not go to the network. A CLI that takes
-/// longer than this is one that is not going to answer, and blocking a press
-/// on it would be worse than not knowing.
-const STATUS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// Whether Claude Code itself thinks it is signed in.
-///
-/// `None` means the question could not be answered -- no binary, a CLI too old
-/// for the command, output that is not JSON -- and it must never be read as a
-/// "no": telling someone they are signed out on the strength of a parse
-/// failure is exactly the pointless login this is here to prevent.
-/// tech.md 6.16.
-fn cli_signed_in() -> Option<bool> {
-    let binary = peekle_core::claude_path()?;
-    let mut child = std::process::Command::new(binary)
-        .args(peekle_core::auth::STATUS_ARGS)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-
-    // Bounded by hand rather than by `output()`: a CLI that never returns
-    // would otherwise hold this thread for the life of the process.
-    let deadline = std::time::Instant::now() + STATUS_TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                tracing::warn!("claude auth status did not answer in time");
-                return None;
-            }
-            Err(err) => {
-                tracing::warn!(error = %err, "could not wait on claude auth status");
-                return None;
-            }
-        }
-    }
-
-    let mut raw = String::new();
-    {
-        use std::io::Read;
-        child.stdout.take()?.read_to_string(&mut raw).ok()?;
-    }
-    // The outcome, never the body: it carries the account's email and org.
-    let answer = peekle_core::auth::logged_in(&raw);
-    tracing::debug!(?answer, "claude auth status");
-    answer
-}
-
 /// Publishes a sign-in state and remembers it.
 fn publish_sign_in(app: &AppHandle, next: SignInState) -> SignInState {
     // The stage, never the address and never the code. tech.md 6.16, rule 11.
@@ -433,55 +377,111 @@ fn publish_sign_in(app: &AppHandle, next: SignInState) -> SignInState {
     next
 }
 
-/// Starts the sign-in Claude Code performs for itself. tech.md 6.16.
-///
-/// Why the endpoint said no, in the words that fit that reason. tech.md 6.16.
-///
-/// One sentence for every cause was the bug this fixes: a rate limit was
-/// reported as a network problem, so the panel told somebody with a working
-/// connection to check their connection. The causes are already told apart in
-/// 6.4; this is only the place that stopped using the distinction.
-fn refusal(snapshot: &UsageSnapshot) -> String {
-    use peekle_core::types::UsageUnavailable;
+/// Publishes an account state and remembers it. tech.md 6.16.
+fn publish_account(app: &AppHandle, state: &Arc<AppState>, next: AccountState) -> AccountState {
+    // The outcome, never the CLI's output: status carries the email and org.
+    tracing::debug!(cli = ?next.cli, signed_in = ?next.signed_in, "account");
+    state.set_account(next.clone());
+    if let Err(err) = app.emit(events::ACCOUNT, &next) {
+        tracing::warn!(error = %err, "failed to emit the account");
+    }
+    next
+}
 
-    match snapshot.reason {
-        Some(UsageUnavailable::RateLimited) => match snapshot.retry_after_ms {
-            // The server named the wait, so the wait is named here: "a moment"
-            // for twenty four minutes is a sentence that gets pressed again in
-            // thirty seconds.
-            Some(ms) if ms > 0 => format!(
-                "Too many requests to the usage endpoint. It asked to wait {}.",
-                about_now(ms)
-            ),
-            _ => "Too many requests to the usage endpoint. Give it a few minutes.".to_string(),
-        },
-        Some(UsageUnavailable::Offline) => {
-            "Nothing answered at api.anthropic.com. Check your connection or VPN.".to_string()
+/// Asks the CLI on this Mac about the account, off the async runtime, and
+/// publishes the answer. tech.md 6.16.
+pub async fn probe_account(app: &AppHandle, state: &Arc<AppState>) -> AccountState {
+    match tauri::async_runtime::spawn_blocking(peekle_core::account::probe).await {
+        Ok(next) => publish_account(app, state, next),
+        Err(err) => {
+            tracing::warn!(error = %err, "the account probe panicked");
+            // What was known stays known. With nothing known, "do not know"
+            // is the honest answer, and it raises no sign-in window.
+            state.account().unwrap_or_else(|| {
+                peekle_core::account::assemble(
+                    Some(std::path::Path::new("claude")),
+                    None,
+                    peekle_core::account::StatusAnswer::NoAnswer,
+                )
+            })
         }
-        Some(UsageUnavailable::Network) => {
-            "The usage endpoint did not answer in time. Check your connection or VPN.".to_string()
-        }
-        // Everything else is the endpoint refusing a credential that Claude
-        // Code says is good, which is not a thing the person can fix from
-        // here beyond waiting.
-        _ => "Claude Code is signed in and the endpoint refused anyway.".to_string(),
     }
 }
 
-/// A wait a person can act on: minutes once it is minutes, seconds below that.
-fn about_now(ms: i64) -> String {
-    let secs = ms / 1000;
-    if secs < 90 {
-        return format!("{secs} seconds");
+/// The last known account, asking the CLI when nothing is known yet.
+/// tech.md 6.16.
+#[tauri::command]
+pub async fn get_account(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<AccountState, ()> {
+    let state = state.inner().clone();
+    match state.account() {
+        Some(known) => Ok(known),
+        None => Ok(probe_account(&app, &state).await),
     }
-    let mins = (secs + 30) / 60;
-    format!("about {mins} minutes")
+}
+
+/// Asks the CLI again: after an install, an update, or a sign-in from a
+/// terminal. tech.md 6.16.
+#[tauri::command]
+pub async fn refresh_account(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<AccountState, ()> {
+    let state = state.inner().clone();
+    Ok(probe_account(&app, &state).await)
+}
+
+/// Copies the command the account screen shows. No argument on purpose: the
+/// text is the one Rust put in `AccountState`, so a page inside the webview
+/// cannot use this to put something of its own on the pasteboard.
+/// tech.md 6.16.
+#[tauri::command]
+pub fn copy_account_command(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let Some(command) = state.account().and_then(|account| account.command) else {
+        return Err("there is no command to copy".to_string());
+    };
+    platform::write_text(&command).map_err(|err| {
+        tracing::warn!(error = %err, "could not copy the account command");
+        "could not copy the command".to_string()
+    })?;
+    Ok(command)
+}
+
+/// Opens one of the account screen's pages. The addresses are Rust's.
+/// tech.md 6.16.
+#[tauri::command]
+pub fn open_account_link(link: AccountLink) -> Result<(), String> {
+    platform::open_url(peekle_core::account::link_url(link)).map_err(|err| {
+        tracing::warn!(error = %err, ?link, "could not open the account link");
+        "could not open your browser".to_string()
+    })
+}
+
+/// The verdict of a run whose process has exited. Asks the CLI first, because
+/// the status file is what Claude Code will act on, and settles once: a run
+/// that was cancelled while this asked settles nothing. tech.md 6.16, rule 10.
+async fn conclude(app: &AppHandle, state: &Arc<AppState>, report: peekle_core::auth::LoginReport) {
+    let account = probe_account(app, state).await;
+    let (stage, error) = peekle_core::auth::verdict(&report, account.signed_in);
+    let Some(settled) = state.sign_in().settle(report.generation, stage, error) else {
+        tracing::debug!("a sign-in verdict arrived for a run that is gone");
+        return;
+    };
+    let settled = publish_sign_in(app, settled);
+    // The point of signing in is that the bars fill. tech.md 6.16.
+    if settled.stage == SignInStage::Done {
+        fetch_usage(app, state).await;
+    }
 }
 
 /// Only ever from a press. Nothing here raises the Keychain dialog -- that is
 /// still `request_usage_access` alone (rule 12) -- and nothing here writes a
 /// credential: the token this ends with is Claude Code's, written by Claude
-/// Code, and Peekle goes on only reading it.
+/// Code, and Peekle goes on only reading it. The verdict is not given here: the
+/// process's exit gives it, in `conclude`, whichever way the person answered.
+/// tech.md 6.16.
 #[tauri::command]
 pub async fn start_sign_in(
     app: AppHandle,
@@ -489,41 +489,55 @@ pub async fn start_sign_in(
 ) -> Result<SignInState, String> {
     let state = state.inner().clone();
 
-    // Asked before the process is spawned, because the answer decides whether
-    // spawning one is the right thing at all. A CLI that is signed in while
-    // the endpoint refuses is not a login problem: the credential is there and
-    // valid, and driving the user through `auth login` would repeat the
-    // mistake Reconnect made under a new name. tech.md 6.16.
-    if tauri::async_runtime::spawn_blocking(cli_signed_in)
-        .await
-        .ok()
-        .flatten()
-        == Some(true)
-    {
-        // Almost always the snapshot is simply old: Claude Code refreshes the
-        // Keychain entry as it runs, and the reason on screen was written
-        // before that happened. Asking again is the whole fix, and it is what
-        // the press should have done rather than explaining a dead end. Only
-        // if it still fails is there anything to say. tech.md 6.16.
-        let fresh = fetch_usage(&app, &state).await;
-        if fresh.reason.is_none() {
-            return Ok(publish_sign_in(&app, SignInState::idle()));
+    // Asked fresh: the person may have installed, updated or signed in from
+    // a terminal a moment ago, and a login is only the answer to one of the
+    // things the CLI can say. tech.md 6.16.
+    let account = probe_account(&app, &state).await;
+    match account.cli {
+        CliState::Missing => {
+            return Ok(publish_sign_in(
+                &app,
+                SignInState::failed("Claude Code is not installed on this Mac."),
+            ));
         }
-        return Ok(publish_sign_in(&app, SignInState::refused(refusal(&fresh))));
+        CliState::Outdated => {
+            return Ok(publish_sign_in(
+                &app,
+                SignInState::failed("This version of Claude Code cannot sign in from Peekle."),
+            ));
+        }
+        CliState::Ready => {}
+    }
+    // Already in. There is nothing to start, and the stage that used to stand
+    // here -- signed in, but the API refused -- was a screen with no way out.
+    if account.signed_in == Some(true) {
+        let done = publish_sign_in(&app, SignInState::done());
+        fetch_usage(&app, &state).await;
+        return Ok(done);
     }
 
     let Some(binary) = peekle_core::claude_path() else {
         return Ok(publish_sign_in(
             &app,
-            SignInState::failed("no claude command found on this Mac"),
+            SignInState::failed("Claude Code is not installed on this Mac."),
         ));
     };
 
     let host = state.sign_in().clone();
     let reporter = app.clone();
-    let started = host.start(&binary, move |next| {
-        publish_sign_in(&reporter, next);
-    });
+    let finisher = app.clone();
+    let settling = Arc::clone(&state);
+    let started = host.start(
+        &binary,
+        move |next| {
+            publish_sign_in(&reporter, next);
+        },
+        move |report| {
+            tauri::async_runtime::spawn(async move {
+                conclude(&finisher, &settling, report).await;
+            });
+        },
+    );
 
     match started {
         Ok(next) => Ok(publish_sign_in(&app, next)),
@@ -531,7 +545,7 @@ pub async fn start_sign_in(
             tracing::warn!(error = %err, "could not start the sign-in");
             Ok(publish_sign_in(
                 &app,
-                SignInState::failed("could not start claude auth login"),
+                SignInState::failed("Claude Code could not start the sign-in."),
             ))
         }
     }
@@ -539,49 +553,25 @@ pub async fn start_sign_in(
 
 /// Hands the code from the authorize page to the waiting process.
 ///
-/// The code is a credential: only its length is ever logged, and it goes
-/// straight into the process's stdin and nowhere else. tech.md 6.16, rule 11.
+/// Only the write happens here. The CLI trades the code and exits either way,
+/// and the exit gives the verdict, exactly as it does when the browser answered
+/// by itself. The code is a credential: only its length is ever logged, and it
+/// goes straight into the process's stdin and nowhere else. tech.md 6.16,
+/// rule 11.
 #[tauri::command]
 pub async fn submit_sign_in_code(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     code: String,
 ) -> Result<SignInState, String> {
-    let state = state.inner().clone();
     let host = state.sign_in().clone();
-
-    let submitting = match host.submit_code(&code) {
-        Ok(next) => next,
+    match host.submit_code(&code) {
+        Ok(next) => Ok(publish_sign_in(&app, next)),
         Err(err) => {
             tracing::warn!(error = %err, "the sign-in code went nowhere");
-            return Ok(publish_sign_in(&app, SignInState::failed(err.to_string())));
+            Ok(publish_sign_in(&app, SignInState::failed(err.to_string())))
         }
-    };
-    publish_sign_in(&app, submitting);
-
-    // The CLI has the code; whether it worked is a question for the CLI, not
-    // for an exit status read through a terminal. Asked once it has had time
-    // to write, and settled exactly once either way. Rule 10.
-    let answered = tauri::async_runtime::spawn_blocking(cli_signed_in)
-        .await
-        .ok()
-        .flatten();
-
-    let settled = match answered {
-        Some(true) => host.settle(true, None),
-        Some(false) => host.settle(false, Some("that code was not accepted".into())),
-        // The login may well have worked; we simply cannot say. Refreshing
-        // below is what will tell, so this does not claim a failure.
-        None => host.settle(true, None),
-    };
-    let settled = publish_sign_in(&app, settled);
-
-    // The point of signing in is that the bars fill. Making the user press
-    // again afterwards would be one more lost click. tech.md 6.16.
-    if settled.stage == peekle_core::types::SignInStage::Done {
-        fetch_usage(&app, &state).await;
     }
-    Ok(settled)
 }
 
 /// Opens the authorize page in the user's browser.
@@ -2409,47 +2399,6 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// The bug this fixes, in one line: a rate limit told the user to check
-    /// a connection that was working. Every cause says its own thing now, and
-    /// a named wait is named rather than called "a moment". tech.md 6.16.
-    #[test]
-    fn a_refusal_says_which_refusal_it_is() {
-        use peekle_core::types::{UsageSource, UsageUnavailable};
-
-        let refused = |reason, retry_after_ms| {
-            refusal(&UsageSnapshot {
-                windows: Vec::new(),
-                source: UsageSource::Unavailable,
-                reason: Some(reason),
-                fetched_at: 0,
-                keychain_granted: true,
-                retry_after_ms,
-            })
-        };
-
-        // Captured live: `retry-after: 1456`, which is what the panel has to
-        // say instead of sending somebody to their router.
-        let limited = refused(UsageUnavailable::RateLimited, Some(1_456_000));
-        assert!(limited.contains("Too many requests"), "{limited}");
-        assert!(limited.contains("about 24 minutes"), "{limited}");
-        assert!(!limited.contains("connection"), "{limited}");
-
-        let no_header = refused(UsageUnavailable::RateLimited, None);
-        assert!(no_header.contains("few minutes"), "{no_header}");
-
-        for reason in [UsageUnavailable::Offline, UsageUnavailable::Network] {
-            let network = refused(reason, None);
-            assert!(network.contains("connection or VPN"), "{network}");
-        }
-    }
-
-    #[test]
-    fn a_wait_reads_as_minutes_once_it_is_minutes() {
-        assert_eq!(about_now(30_000), "30 seconds");
-        assert_eq!(about_now(89_000), "89 seconds");
-        assert_eq!(about_now(1_456_000), "about 24 minutes");
     }
 
     #[test]

@@ -133,6 +133,9 @@ pub struct AppState {
     /// The sessions Peekle started and can type into. tech.md 6.5.
     pty: peekle_core::pty::SharedPtyHost,
     sign_in: peekle_core::auth::SharedSignInHost,
+    /// The last answer the CLI gave about the account, or nothing before the
+    /// first question. tech.md 6.16.
+    account: Mutex<Option<peekle_core::types::AccountState>>,
     tasks: Mutex<Vec<TaskItem>>,
     usage: Mutex<UsageSnapshot>,
     ready: Mutex<HashMap<String, Arc<Notify>>>,
@@ -223,6 +226,7 @@ impl AppState {
             sessions: Mutex::new(SessionRegistry::new()),
             pty: std::sync::Arc::new(peekle_core::pty::PtyHost::new()),
             sign_in: std::sync::Arc::new(peekle_core::auth::SignInHost::new()),
+            account: Mutex::new(None),
             tasks: Mutex::new(Vec::new()),
             usage: Mutex::new(unknown(initial_reason(&usage_config))),
             ready: Mutex::new(HashMap::new()),
@@ -610,6 +614,16 @@ impl AppState {
     /// it is held. tech.md 6.16.
     pub fn sign_in(&self) -> &peekle_core::auth::SharedSignInHost {
         &self.sign_in
+    }
+
+    /// The last known account, or `None` before the CLI was first asked.
+    /// tech.md 6.16.
+    pub fn account(&self) -> Option<peekle_core::types::AccountState> {
+        self.lock(&self.account).clone()
+    }
+
+    pub fn set_account(&self, next: peekle_core::types::AccountState) {
+        *self.lock(&self.account) = Some(next);
     }
 
     /// Claims an id before the process behind it says anything, so the very

@@ -333,6 +333,23 @@ pub fn to_trash(path: &Path) -> Result<(), String> {
         .map_err(|err| err.localizedDescription().to_string())
 }
 
+/// Puts plain text on the general pasteboard, replacing what was there.
+/// tech.md 6.16.
+pub fn write_text(text: &str) -> Result<(), String> {
+    use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
+    use objc2_foundation::NSString;
+
+    let pasteboard = NSPasteboard::generalPasteboard();
+    pasteboard.clearContents();
+    // SAFETY: a static AppKit constant, read and never written.
+    let kind = unsafe { NSPasteboardTypeString };
+    if pasteboard.setString_forType(&NSString::from_str(text), kind) {
+        Ok(())
+    } else {
+        Err("the pasteboard did not take the text".to_string())
+    }
+}
+
 /// Hands a URL to the browser the person chose. tech.md 6.16 and 6.22.
 pub fn open_url(url: &str) -> Result<(), String> {
     std::process::Command::new("/usr/bin/open")
