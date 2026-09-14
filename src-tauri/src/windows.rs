@@ -235,7 +235,10 @@ pub fn ask_quit(app: &AppHandle) {
 
 /// Whether the leave clock leaves this view alone. tech.md 6.29 and 6.30.
 fn question_stands(view: &IslandView) -> bool {
-    matches!(view, IslandView::Quit | IslandView::Update)
+    matches!(
+        view,
+        IslandView::Quit | IslandView::Update | IslandView::Bug
+    )
 }
 
 /// A mouse button went down in another application.
@@ -673,6 +676,21 @@ mod tests {
         assert!(super::question_stands(&IslandView::Update));
         assert!(IslandView::Update.takes_clicks());
         assert!(click_elsewhere_collapses(&IslandView::Update, false, false));
+    }
+
+    /// v87.4: the bug question stands the same way. The hand that pressed the
+    /// button is already on its way to the answer, and a panel that goes away
+    /// under it asks nothing; a click beside it is an answer, and it is
+    /// "cancel". tech.md 6.22.
+    #[test]
+    fn the_bug_question_stands_until_answered() {
+        assert!(super::question_stands(&IslandView::Bug));
+        assert!(IslandView::Bug.takes_clicks());
+        assert!(click_elsewhere_collapses(&IslandView::Bug, false, false));
+        assert!(
+            !crate::platform::focusable_for(&IslandView::Bug),
+            "two buttons and no field: nothing to take the keyboard for"
+        );
     }
 
     #[test]

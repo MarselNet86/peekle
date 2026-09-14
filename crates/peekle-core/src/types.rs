@@ -291,6 +291,10 @@ pub enum IslandView {
     /// The update question, in the same shape: a release is already on disk
     /// and the last step is the person's. tech.md 6.30.
     Update,
+    /// The bug question, in the same shape: found a bug, tell us. Raised by the
+    /// bug button beside the gear; Write opens Telegram and puts the island
+    /// away, Cancel goes back. tech.md 6.22.
+    Bug,
     /// The list of sessions.
     Sessions,
     /// The feed of one session, by its session_id.

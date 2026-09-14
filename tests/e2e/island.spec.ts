@@ -657,7 +657,7 @@ test.describe('the island route', () => {
     await expect(hint).toHaveCount(0);
 
     await bug.hover();
-    await expect(hint).toContainText('Tell the developer what broke');
+    await expect(hint).toContainText('Asks first, then opens Telegram.');
     expect((await rows.boundingBox())!.y).toBe(before.y);
     // And it stays inside the shape rather than hanging off its side.
     const line = (await hint.boundingBox())!;
@@ -676,15 +676,18 @@ test.describe('the island route', () => {
     await gear.hover();
     await expect(hint).toHaveCount(0);
 
-    // What it sends is the contract: the address is Rust's, so the press
-    // carries no address of its own. tech.md 6.22.
+    // What it sends is the contract: since v87.4 the press asks first, so it
+    // raises the bug question and opens nothing yet. What Write sends, and that
+    // it carries no address of its own, is `bug.spec.ts`. tech.md 6.22.
     await bug.click();
     const calls = await page.evaluate(
       () => (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls,
     );
-    const sent = calls.filter((call) => call.command === 'open_bug_report');
-    expect(sent).toHaveLength(1);
-    expect(Object.keys(sent[0].args as Record<string, unknown>)).toEqual([]);
+    expect(calls.filter((call) => call.command === 'open_bug_report')).toHaveLength(0);
+    expect(calls.filter((call) => call.command === 'set_view').at(-1)).toEqual({
+      command: 'set_view',
+      args: { view: 'Bug' },
+    });
   });
 
   /// Rust puts an island away 800ms after the pointer leaves it, and a hand

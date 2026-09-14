@@ -341,6 +341,7 @@ mod tests {
             IslandView::Session("s".into()),
             IslandView::Ask,
             IslandView::Quit,
+            IslandView::Bug,
             IslandView::Pill,
         ] {
             assert!(

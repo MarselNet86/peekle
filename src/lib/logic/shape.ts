@@ -149,7 +149,8 @@ export function shapeBounds(
           // The quit question is the same kind of thing: one line, two
           // buttons, the island open just enough to ask. tech.md 6.29.
           // So is the update question, and for the same reason. tech.md 6.30.
-          view === 'Ask' || view === 'Quit' || view === 'Update'
+          // And the bug question. tech.md 6.22.
+          view === 'Ask' || view === 'Quit' || view === 'Update' || view === 'Bug'
           ? { width: 460, height: height + 62, radius: floating ? 31 : 22 }
           : view === 'Sessions'
             ? { width: 460, height: height + 380, radius: floating ? 28 : 24 }

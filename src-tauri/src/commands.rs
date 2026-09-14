@@ -2223,14 +2223,20 @@ pub fn set_session_cwd(
 /// second reason -- an anchor in an overlay webview navigates the overlay.
 pub const BUG_REPORT_URL: &str = "https://t.me/marselnet";
 
-/// Opens the developer's Telegram. tech.md 6.22.
+/// Opens the developer's Telegram, and puts the island away once it has.
+///
+/// The answer "Write" to the bug question. The person is on their way to
+/// another app to type, and an island left open over it is in the way. A
+/// Telegram that would not open leaves the question standing with the reason
+/// in its line, so the press is not lost. tech.md 6.22.
 #[tauri::command]
-pub fn open_bug_report(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub fn open_bug_report(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     tracing::debug!("opening the bug report chat");
     platform::open_url(BUG_REPORT_URL).map_err(|err| {
         tracing::warn!(error = %err, "could not open the bug report chat");
         copy::could_not_open_telegram(state.language()).to_string()
     })?;
+    windows::set_view(&app, IslandView::Collapsed);
     Ok(())
 }
 
@@ -2741,6 +2747,7 @@ mod tests {
     #[test]
     fn the_bug_button_carries_its_own_address() {
         assert_eq!(BUG_REPORT_URL, "https://t.me/marselnet");
-        let _: for<'a> fn(State<'a, Arc<AppState>>) -> Result<(), String> = open_bug_report;
+        let _: for<'a> fn(AppHandle, State<'a, Arc<AppState>>) -> Result<(), String> =
+            open_bug_report;
     }
 }

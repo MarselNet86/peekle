@@ -27,6 +27,7 @@
   import { ISLAND } from '$lib/i18n/island';
   import { QUIT } from '$lib/i18n/quit';
   import QuitPanel from '$lib/ui/QuitPanel.svelte';
+  import BugPanel from '$lib/ui/BugPanel.svelte';
   import UpdatePanel from '$lib/ui/UpdatePanel.svelte';
   import type { IslandView } from '$lib/types/generated/IslandView';
   import {
@@ -503,13 +504,43 @@
   let quitting = $state(false);
   $effect(() => {
     const view = island.view;
-    if (view !== 'Quit' && view !== 'Update')
+    if (view !== 'Quit' && view !== 'Update' && view !== 'Bug')
       untrack(() => (returnTo = view === 'Pill' ? 'Collapsed' : view));
   });
 
   function askQuit() {
     settingsOpen = false;
     commands.setView('Quit');
+  }
+
+  // The bug question: the list folds into it, Write opens Telegram and Rust
+  // puts the island away, Cancel goes back to where the button was pressed.
+  // tech.md 6.22.
+  let reporting = $state(false);
+  let reportError = $state<string | null>(null);
+
+  function askBug() {
+    settingsOpen = false;
+    reportError = null;
+    commands.setView('Bug');
+  }
+
+  async function answerBug(write: boolean) {
+    if (reporting) return;
+    if (!write) {
+      reportError = null;
+      commands.setView(returnTo);
+      return;
+    }
+    reporting = true;
+    reportError = null;
+    try {
+      await commands.openBugReport();
+    } catch (err) {
+      reportError = String(err);
+    } finally {
+      reporting = false;
+    }
   }
 
   function answerQuit(yes: boolean) {
@@ -851,6 +882,15 @@
         onlater={() => update.later()}
         onnotes={() => update.notes()}
       />
+    {:else if island.view === 'Bug'}
+      <!-- The bug question, raised by the button beside the gear. tech.md
+           6.22. -->
+      <BugPanel
+        busy={reporting}
+        error={reportError}
+        onwrite={() => answerBug(true)}
+        oncancel={() => answerBug(false)}
+      />
     {:else if island.view === 'Quit'}
       <!-- The quit question, over whatever was open: ⌥⌘Q or the button beside
            the gear. tech.md 6.29. -->
@@ -956,12 +996,7 @@
                  everything is the one furthest from the list. tech.md 6.22
                  and 6.29. -->
             <div class="corner">
-              <IconButton
-                name="bug"
-                title={t.reportBug}
-                hint={t.reportBugHint}
-                onclick={() => commands.openBugReport()}
-              />
+              <IconButton name="bug" title={t.reportBug} hint={t.reportBugHint} onclick={askBug} />
               <IconButton
                 name="settings"
                 title={t.settings}

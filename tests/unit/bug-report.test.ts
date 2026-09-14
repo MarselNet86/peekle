@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import IconButton from '$lib/ui/IconButton.svelte';
 
-const HINT = 'Tell the developer what broke. Opens Telegram.';
+const HINT = 'Asks first, then opens Telegram.';
 
 const bug = (props: Record<string, unknown> = {}) =>
   render(IconButton, { props: { name: 'bug', title: 'Report a bug', hint: HINT, ...props } });

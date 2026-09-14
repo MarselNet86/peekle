@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.4   | [The bug button asks first](#v874--the-bug-button-asks-first)                                                            | 6.22, 6.3, 6.5, 9      |
 | v87.2   | [The version in the settings](#v872--the-version-in-the-settings)                                                        | 6.5, 9                 |
 | v85     | [Quitting asks first](#v85--quitting-asks-first)                                                                         | 6.29, 6.3, 6.5, 6.9, 9 |
 | v84     | [The island speaks Russian](#v84--the-island-speaks-russian)                                                             | 6.28, 6.5, 6.8, 9      |
@@ -62,6 +63,22 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.4 — The bug button asks first
+
+2026-09-14
+
+![The bug question](shots/bug-panel.png)
+
+![The bug question, in Russian](shots/bug-panel-ru.png)
+
+Pressing the bug beside the gear no longer jumps straight to Telegram. The list
+folds into a question the shape of the quit question — `Found a bug?`, `Tell us
+about it.` — with two buttons. Write is the white one, because reporting is what
+the button was pressed for: it opens Telegram and the island closes completely,
+out of the way of the message being typed. Cancel, Escape or a click beside the
+shape go back to where the button was pressed. If Telegram will not open, the
+question stays and its second line says why.
 
 ## v87.2 — The version in the settings
 
