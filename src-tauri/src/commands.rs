@@ -2072,6 +2072,7 @@ fn transcript_of(card: Option<&peekle_core::types::SessionCard>) -> Option<std::
 /// away from. tech.md 6.7.
 #[tauri::command]
 pub fn island_bounds(
+    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     left: f64,
     top: f64,
@@ -2079,14 +2080,24 @@ pub fn island_bounds(
     height: f64,
 ) {
     tracing::debug!(left, top, width, height, "island reported its bounds");
+    // Where the hand stands against the shape as it was, read now and here:
+    // a sync command runs on the main thread, which is the one thread that
+    // may ask AppKit for the pointer. tech.md 6.7.
+    let hand = windows::hand_on_shape(&app, &state);
     if state.set_shape_bounds(peekle_core::island::Rect::new(left, top, width, height)) {
         // A shape that shrank leaves a hand that never moved outside itself,
         // and that is the island moving rather than the user walking away.
         // Clearing the clock is not enough: the next one runs out just as
-        // surely. So the pointer is pinned where it stands until it moves.
-        // tech.md 6.7.
+        // surely. So the pointer is pinned where it stands until it moves --
+        // but only a hand that was on the shape. Until v87.1 the pin was put
+        // wherever the pointer first turned up outside, which after every
+        // opening was the place the person had walked to and stopped: the
+        // island stood open over their browser tabs, its window taking every
+        // click, until the mouse moved ten pixels. tech.md 6.7.
         state.pointer_returned();
-        state.mark_shape_moved();
+        if let Some(at) = hand {
+            state.anchor_pointer(at);
+        }
     }
 }
 

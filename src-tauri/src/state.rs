@@ -112,8 +112,6 @@ pub struct AppState {
     /// that point. A shape that shrank leaves a still hand outside itself, and
     /// that is the island moving rather than the user leaving. tech.md 6.7.
     anchor: Mutex<Option<(f64, f64)>>,
-    /// A shape move waiting for the next hover tick to anchor the pointer.
-    shape_moved: AtomicBool,
     /// Whether the webview is showing a screenshot at full size. The island
     /// stays up while it is: the picture is something the user opened by hand
     /// and closes by hand, and the pointer leaving is not that. tech.md 6.13.
@@ -225,7 +223,6 @@ impl AppState {
             attach_key: AtomicBool::new(false),
             keys_at_open: AtomicU32::new(0),
             anchor: Mutex::new(None),
-            shape_moved: AtomicBool::new(false),
             preview: AtomicBool::new(false),
             composing: AtomicBool::new(false),
             dialog: AtomicBool::new(false),
@@ -281,18 +278,9 @@ impl AppState {
         self.lock(&self.shape_bounds).replace(bounds) != Some(bounds)
     }
 
-    /// The shape moved. Where the pointer stands is read on the next hover
-    /// tick, because only the main thread may ask AppKit for it.
-    pub fn mark_shape_moved(&self) {
-        self.shape_moved.store(true, Ordering::Relaxed);
-    }
-
-    /// Whether a move is waiting to be anchored, clearing it as it answers.
-    pub fn take_shape_moved(&self) -> bool {
-        self.shape_moved.swap(false, Ordering::Relaxed)
-    }
-
     /// Pins the pointer where it stands, because the shape moved under it.
+    /// Put down by `island_bounds` on the main thread, which is the one
+    /// thread that can read where the pointer stands. tech.md 6.7.
     pub fn anchor_pointer(&self, at: (f64, f64)) {
         *self.lock(&self.anchor) = Some(at);
     }
@@ -1185,15 +1173,10 @@ mod tests {
     #[test]
     fn a_pointer_the_shape_left_behind_is_not_a_pointer_walking_away() {
         let state = state();
-        assert!(!state.take_shape_moved(), "nothing moved yet");
         assert!(
             !state.pointer_pinned((100.0, 100.0), 10.0),
-            "and nothing is pinned"
+            "nothing is pinned until a shape moves under a hand"
         );
-
-        state.mark_shape_moved();
-        assert!(state.take_shape_moved());
-        assert!(!state.take_shape_moved(), "answered exactly once");
 
         state.anchor_pointer((100.0, 100.0));
         assert!(state.pointer_pinned((100.0, 100.0), 10.0), "stood still");

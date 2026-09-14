@@ -107,7 +107,7 @@ const POINTER_MOVED: f64 = 10.0;
 /// The rectangle the shape was drawn in, in physical pixels of the screen, or
 /// None before the webview has measured one. Guessing one would eat clicks
 /// next to a mark the user cannot even see. tech.md 6.7.
-fn shape_on_screen(app: &AppHandle, state: &AppState) -> Option<Rect> {
+pub(crate) fn shape_on_screen(app: &AppHandle, state: &AppState) -> Option<Rect> {
     let bounds = state.shape_bounds()?;
     let (frame, scale) = platform::island_frame(app).ok()?;
     let mark = Rect::new(
@@ -192,13 +192,10 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
-    // The shape moved under the pointer, so the point it stands on is what
-    // "did not move" means from here until it does. tech.md 6.7.
-    if state.take_shape_moved() {
-        state.anchor_pointer((pointer.x, pointer.y));
-    }
-    // Still on that point: the island shrank, the hand did not walk away, and
-    // there is nothing to charge to the leave clock. tech.md 6.7.
+    // Still where the shape left it: the island shrank, the hand did not walk
+    // away, and there is nothing to charge to the leave clock. The pin is put
+    // down by `island_bounds` as the shape settles, and only under a hand that
+    // was on the shape. tech.md 6.7.
     if state.pointer_pinned((pointer.x, pointer.y), POINTER_MOVED) {
         state.pointer_returned();
         return;
@@ -213,6 +210,20 @@ fn update_hover(app: &AppHandle) {
         tracing::debug!("the pointer left the island, putting it away");
         set_view(app, IslandView::Collapsed);
     }
+}
+
+/// Where the pointer stands, if it stands on the shape as the state knows it
+/// now. Main thread only, like everything that asks AppKit. tech.md 6.7.
+pub(crate) fn hand_on_shape(app: &AppHandle, state: &AppState) -> Option<(f64, f64)> {
+    let rect = shape_on_screen(app, state)?;
+    let pointer = app.cursor_position().ok()?;
+    pin_for(rect, (pointer.x, pointer.y))
+}
+
+/// The point to pin, or none: a hand on the shape is pinned where it is, a
+/// hand that had already left it is walking away and is not. tech.md 6.7.
+fn pin_for(shape: Rect, pointer: (f64, f64)) -> Option<(f64, f64)> {
+    shape.contains(pointer).then_some(pointer)
 }
 
 /// ⌥⌘Q: the island opens just enough to ask whether to quit. Pressed again
@@ -615,6 +626,22 @@ mod tests {
         stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+
+    /// v87.1: the pin goes under a hand that is on the shape as it settles,
+    /// and under nothing else. A pointer already outside is a person walking
+    /// away, and pinning it there kept the island open over their browser
+    /// until the mouse moved. tech.md 6.7.
+    #[test]
+    fn only_a_hand_on_the_shape_is_pinned_where_it_stands() {
+        let shape = super::Rect::new(100.0, 0.0, 400.0, 300.0);
+        assert_eq!(super::pin_for(shape, (250.0, 40.0)), Some((250.0, 40.0)));
+        assert_eq!(super::pin_for(shape, (700.0, 900.0)), None);
+        assert_eq!(
+            super::pin_for(shape, (99.0, 40.0)),
+            None,
+            "just past the edge"
+        );
+    }
 
     /// v87.1: a press on the mark that arrived before the window took the
     /// mouse still opens the island; a press anywhere else does not, and a
