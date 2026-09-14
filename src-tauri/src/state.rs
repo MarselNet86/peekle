@@ -1030,6 +1030,12 @@ impl AppState {
         self.lock(&self.config)
     }
 
+    /// The language Rust speaks in, read at the moment of speaking so a change
+    /// needs no telling. English until someone has chosen. tech.md 6.28.
+    pub fn language(&self) -> peekle_core::types::Language {
+        self.lock_config().ui.language.unwrap_or_default()
+    }
+
     /// Writes the config back. A failure is reported and swallowed: losing a
     /// remembered Keychain answer is worse than nothing, but not worth taking
     /// the overlay down for.

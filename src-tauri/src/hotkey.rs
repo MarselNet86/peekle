@@ -141,7 +141,7 @@ pub fn install(app: &AppHandle, spelling: &str) {
         Err(err) => {
             tracing::warn!(error = %err, "the configured combination does not parse");
             state.set_hotkey_ok(false);
-            crate::windows::warn_hotkey(app, "Hotkey is not a valid combination");
+            crate::windows::warn_hotkey(app, crate::copy::hotkey_invalid(state.language()));
             return;
         }
     };
@@ -151,7 +151,7 @@ pub fn install(app: &AppHandle, spelling: &str) {
         state.set_hotkey_ok(false);
         crate::windows::warn_hotkey(
             app,
-            &format!("{} is taken by another app", combination.to_display()),
+            &crate::copy::hotkey_taken(state.language(), &combination.to_display()),
         );
         return;
     }

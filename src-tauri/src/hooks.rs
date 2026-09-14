@@ -18,6 +18,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
+use crate::copy;
 use crate::events;
 use crate::notify;
 use crate::state::AppState;
@@ -445,11 +446,13 @@ impl HookSink for AppSink {
     }
 
     fn on_notification(&self, payload: &Value) {
-        let text = payload
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("Claude needs you")
-            .to_string();
+        // The message is the CLI's own English: the captured ones are
+        // translated, anything else is shown as it came. tech.md 6.28.
+        let language = self.state.language();
+        let text = match payload.get("message").and_then(Value::as_str) {
+            Some(message) => copy::hook_notice(language, message),
+            None => copy::claude_needs_you(language).to_string(),
+        };
         // "Claude needs your input" names a chat, and the point of saying so
         // is to get the person into it. tech.md 6.2.
         let session = payload

@@ -5,11 +5,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use peekle_core::types::{
-    AccountLink, AccountState, CliState, IslandView, PeekleState, PromptAnswer, PromptOutcome,
-    SignInStage, SignInState, ToastRequest, ToastTone, UsageSnapshot,
+    AccountLink, AccountState, CliState, IslandView, Language, PeekleState, PromptAnswer,
+    PromptOutcome, SignInStage, SignInState, ToastRequest, ToastTone, UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::copy;
 use crate::events;
 use crate::notify::Notifier;
 use crate::platform;
@@ -157,9 +158,9 @@ fn apply_enabled(app: &AppHandle, state: &Arc<AppState>, enabled: bool) {
         ToastRequest {
             session: None,
             text: if enabled {
-                "Peekle is ON".to_string()
+                copy::peekle_on(state.language()).to_string()
             } else {
-                "Peekle is OFF".to_string()
+                copy::peekle_off(state.language()).to_string()
             },
             detail: None,
             took_ms: None,
@@ -440,11 +441,11 @@ pub async fn refresh_account(
 #[tauri::command]
 pub fn copy_account_command(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let Some(command) = state.account().and_then(|account| account.command) else {
-        return Err("there is no command to copy".to_string());
+        return Err(copy::no_command_to_copy(state.language()).to_string());
     };
     platform::write_text(&command).map_err(|err| {
         tracing::warn!(error = %err, "could not copy the account command");
-        "could not copy the command".to_string()
+        copy::could_not_copy_command(state.language()).to_string()
     })?;
     Ok(command)
 }
@@ -452,10 +453,10 @@ pub fn copy_account_command(state: State<'_, Arc<AppState>>) -> Result<String, S
 /// Opens one of the account screen's pages. The addresses are Rust's.
 /// tech.md 6.16.
 #[tauri::command]
-pub fn open_account_link(link: AccountLink) -> Result<(), String> {
+pub fn open_account_link(state: State<'_, Arc<AppState>>, link: AccountLink) -> Result<(), String> {
     platform::open_url(peekle_core::account::link_url(link)).map_err(|err| {
         tracing::warn!(error = %err, ?link, "could not open the account link");
-        "could not open your browser".to_string()
+        copy::could_not_open_browser(state.language()).to_string()
     })
 }
 
@@ -474,7 +475,7 @@ pub async fn sign_out(
         .account()
         .is_some_and(|account| account.cli != CliState::Ready)
     {
-        return Err("This Claude Code cannot sign out from Peekle.".to_string());
+        return Err(copy::cannot_sign_out_here(state.language()).to_string());
     }
     // A sign-in still running would sign straight back in behind this.
     state.sign_in().cancel();
@@ -482,10 +483,11 @@ pub async fn sign_out(
 
     let outcome = tauri::async_runtime::spawn_blocking(peekle_core::account::logout)
         .await
-        .map_err(|_| "Claude Code could not sign out.".to_string())?;
+        .map_err(|_| copy::could_not_sign_out(state.language()).to_string())?;
     if let Err(reason) = outcome {
         tracing::warn!("claude auth logout did not go through");
-        return Err(reason);
+        // The core speaks English; the person hears it here. tech.md 6.28.
+        return Err(copy::core_message(state.language(), &reason));
     }
     Ok(probe_account(&app, &state).await)
 }
@@ -496,6 +498,8 @@ pub async fn sign_out(
 async fn conclude(app: &AppHandle, state: &Arc<AppState>, report: peekle_core::auth::LoginReport) {
     let account = probe_account(app, state).await;
     let (stage, error) = peekle_core::auth::verdict(&report, account.signed_in);
+    // The core speaks English; the person hears it here. tech.md 6.28.
+    let error = error.map(|error| copy::core_message(state.language(), &error));
     let Some(settled) = state.sign_in().settle(report.generation, stage, error) else {
         tracing::debug!("a sign-in verdict arrived for a run that is gone");
         return;
@@ -528,13 +532,13 @@ pub async fn start_sign_in(
         CliState::Missing => {
             return Ok(publish_sign_in(
                 &app,
-                SignInState::failed("Claude Code is not installed on this Mac."),
+                SignInState::failed(copy::not_installed(state.language())),
             ));
         }
         CliState::Outdated => {
             return Ok(publish_sign_in(
                 &app,
-                SignInState::failed("This version of Claude Code cannot sign in from Peekle."),
+                SignInState::failed(copy::cannot_sign_in_here(state.language())),
             ));
         }
         CliState::Ready => {}
@@ -550,7 +554,7 @@ pub async fn start_sign_in(
     let Some(binary) = peekle_core::claude_path() else {
         return Ok(publish_sign_in(
             &app,
-            SignInState::failed("Claude Code is not installed on this Mac."),
+            SignInState::failed(copy::not_installed(state.language())),
         ));
     };
 
@@ -576,7 +580,7 @@ pub async fn start_sign_in(
             tracing::warn!(error = %err, "could not start the sign-in");
             Ok(publish_sign_in(
                 &app,
-                SignInState::failed("Claude Code could not start the sign-in."),
+                SignInState::failed(copy::could_not_start_sign_in(state.language())),
             ))
         }
     }
@@ -600,7 +604,10 @@ pub async fn submit_sign_in_code(
         Ok(next) => Ok(publish_sign_in(&app, next)),
         Err(err) => {
             tracing::warn!(error = %err, "the sign-in code went nowhere");
-            Ok(publish_sign_in(&app, SignInState::failed(err.to_string())))
+            Ok(publish_sign_in(
+                &app,
+                SignInState::failed(copy::sign_in_error(state.language(), &err)),
+            ))
         }
     }
 }
@@ -616,13 +623,13 @@ pub async fn submit_sign_in_code(
 #[tauri::command]
 pub fn open_sign_in_page(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let Some(url) = state.sign_in().state().url else {
-        return Err("there is no sign-in page to open".to_string());
+        return Err(copy::no_sign_in_page(state.language()).to_string());
     };
     // The length, never the address: it carries `code_challenge` and `state`.
     tracing::debug!(url_len = url.len(), "opening the authorize page");
     platform::open_url(&url).map_err(|err| {
         tracing::warn!(error = %err, "could not open the authorize page");
-        "could not open your browser".to_string()
+        copy::could_not_open_browser(state.language()).to_string()
     })?;
     Ok(())
 }
@@ -665,7 +672,7 @@ pub fn start_session(
     // as an argument and cannot miss. The same move `continue_session` makes.
     // tech.md 6.5.
     if !std::path::Path::new(&cwd).is_dir() {
-        return Err("That folder does not exist".to_string());
+        return Err(copy::folder_missing(state.language()).to_string());
     }
     let session = peekle_core::types::SessionRef {
         session_id: peekle_core::pty::new_session_id(),
@@ -744,11 +751,11 @@ pub fn continue_session(
         .find(|c| c.session.session_id == session_id)
     else {
         tracing::warn!(session_id, "continue for a session nobody knows");
-        return Err("That session is gone".to_string());
+        return Err(copy::session_gone(state.language()).to_string());
     };
 
     if state.owns_session(&session_id) {
-        return Err("That session already has an input field".to_string());
+        return Err(copy::session_has_field(state.language()).to_string());
     }
 
     let message = peekle_core::shots::compose(text.trim(), &shots);
@@ -865,7 +872,7 @@ pub fn paste_shot(
     session_id: String,
 ) -> Result<Option<String>, String> {
     let Some(dir) = peekle_core::shots::shots_dir() else {
-        return Err("Nowhere to save the screenshot".to_string());
+        return Err(copy::shot_nowhere(state.language()).to_string());
     };
     let Some(path) = save_paste(state.inner(), &dir) else {
         return Ok(None);
@@ -953,7 +960,7 @@ fn spawn_owned(
     held: HeldSettings,
 ) -> Result<(), String> {
     let Some(binary) = peekle_core::claude_path() else {
-        return Err("Claude Code is not installed where Peekle can find it".to_string());
+        return Err(copy::not_installed_where_found(state.language()).to_string());
     };
 
     let (cols, rows) = {
@@ -1019,9 +1026,10 @@ fn spawn_owned(
         // tries again. Only the process is forgotten.
         state.pty().forget(&spec.session_id);
         tracing::warn!(error = %err, "could not start a session");
+        let language = state.language();
         return Err(match err {
-            peekle_core::pty::PtyError::NoCwd => "That folder does not exist".to_string(),
-            other => other.to_string(),
+            peekle_core::pty::PtyError::NoCwd => copy::folder_missing(language).to_string(),
+            other => copy::pty_error(language, &other),
         });
     }
 
@@ -1072,14 +1080,14 @@ pub async fn send_message(
         .find(|c| c.session.session_id == session_id)
     else {
         tracing::warn!(session_id, "a reply for a session nobody knows");
-        return Err("That session is gone".to_string());
+        return Err(copy::session_gone(state.language()).to_string());
     };
 
     // Refuse rather than swallow. An observed session has no field to type in,
     // and text that vanishes silently is exactly the lie the old ladder told.
     if !state.owns_session(&session_id) {
         tracing::warn!(session_id, "a reply for a session the island does not own");
-        return Err("Peekle can only talk to sessions it started".to_string());
+        return Err(copy::only_own_sessions(state.language()).to_string());
     }
 
     // Into the feed before anything is attempted: a message the user cannot
@@ -1150,12 +1158,12 @@ pub async fn send_message(
         Ok(Err(err)) => {
             tracing::warn!(error = %err, session_id, "the pty refused the write");
             fail_replies(&app, state.inner(), &session_id);
-            Err("That session is no longer listening".to_string())
+            Err(copy::no_longer_listening(state.language()).to_string())
         }
         Err(err) => {
             tracing::warn!(error = %err, session_id, "the write never ran");
             fail_replies(&app, state.inner(), &session_id);
-            Err("That session is no longer listening".to_string())
+            Err(copy::no_longer_listening(state.language()).to_string())
         }
     }
 }
@@ -1194,7 +1202,7 @@ pub async fn set_model(
     model: String,
 ) -> Result<(), String> {
     let line = peekle_core::agent::model_command(&model)
-        .map_err(|_| "That is not a model name".to_string())?;
+        .map_err(|_| copy::not_a_model(state.language()).to_string())?;
     command_off_thread(
         app,
         state.inner().clone(),
@@ -1223,7 +1231,7 @@ pub fn set_mode(
 ) -> Result<(), String> {
     let state = state.inner();
     if !state.owns_session(&session_id) {
-        return Err("Peekle can only set the mode of sessions it started".to_string());
+        return Err(copy::mode_only_own(state.language()).to_string());
     }
 
     // Nothing has run yet: the flag is exact, so it is used.
@@ -1233,17 +1241,17 @@ pub fn set_mode(
     }
 
     let Some(current) = state.session_mode(&session_id) else {
-        return Err("Peekle has not seen which mode this session is in yet".to_string());
+        return Err(copy::mode_unseen(state.language()).to_string());
     };
     let Some(steps) = current.steps_to(mode) else {
-        return Err("That mode is not on the cycle Shift+Tab walks".to_string());
+        return Err(copy::mode_off_cycle(state.language()).to_string());
     };
 
     tracing::debug!(session_id, ?current, ?mode, steps, "cycling the mode");
     state
         .pty()
         .cycle_mode(&session_id, steps)
-        .map_err(|err| err.to_string())
+        .map_err(|err| copy::pty_error(state.language(), &err))
 }
 
 /// Whether a session starts with thinking on. tech.md 6.20.
@@ -1262,10 +1270,10 @@ pub fn set_thinking(
 ) -> Result<(), String> {
     let state = state.inner();
     if !state.owns_session(&session_id) {
-        return Err("Peekle can only set this on sessions it starts".to_string());
+        return Err(copy::thinking_only_own(state.language()).to_string());
     }
     if state.session_has_answered(&session_id) {
-        return Err("Thinking is set when a session starts".to_string());
+        return Err(copy::thinking_at_start(state.language()).to_string());
     }
 
     state.hold_setting(
@@ -1359,7 +1367,7 @@ fn command_session(
             session_id,
             "a setting for a session the island does not own"
         );
-        return Err("Peekle can only talk to sessions it started".to_string());
+        return Err(copy::only_own_sessions(state.language()).to_string());
     }
 
     // A session that has never answered is being aimed rather than changed,
@@ -1368,7 +1376,7 @@ fn command_session(
     // the write that proves the far end is listening. tech.md 6.15.
     if !state.session_has_answered(session_id) {
         let Some((kind, value)) = held else {
-            return Err("There is nothing to compact yet".to_string());
+            return Err(copy::nothing_to_compact(state.language()).to_string());
         };
         tracing::debug!(session_id, "holding a setting for the first message");
         state.hold_setting(session_id, kind, value);
@@ -1380,7 +1388,7 @@ fn command_session(
     // written next -- the message the person types after picking. tech.md 6.15.
     write_command(state, session_id, line).map_err(|err| {
         tracing::warn!(error = %err, session_id, "the pty refused the setting");
-        "That session is no longer listening".to_string()
+        copy::no_longer_listening(state.language()).to_string()
     })?;
 
     // Claude Code writes the change into its transcript, and that record is
@@ -1407,13 +1415,15 @@ async fn command_off_thread(
     held: Option<(HeldKind, String)>,
     line: String,
 ) -> Result<(), String> {
+    // Read before the state moves into the thread.
+    let language = state.language();
     tauri::async_runtime::spawn_blocking(move || {
         command_session(Some(&app), &state, &session_id, held, &line)
     })
     .await
     .map_err(|err| {
         tracing::warn!(error = %err, "the setting never ran");
-        "That session is no longer listening".to_string()
+        copy::no_longer_listening(language).to_string()
     })?
 }
 
@@ -1547,11 +1557,11 @@ pub fn answer_trust(
     trust: bool,
 ) -> Result<(), String> {
     if !state.asking_trust(&session_id) {
-        return Err("Nothing is asking about a folder there".to_string());
+        return Err(copy::nothing_asking_folder(state.language()).to_string());
     }
     if trust {
         if !state.trust_session(&session_id) {
-            return Err("That chat is gone".to_string());
+            return Err(copy::chat_gone(state.language()).to_string());
         }
         tracing::info!(session_id, "the folder was trusted, by the person");
         let Some(cards) = state.end_trust(&session_id) else {
@@ -1574,33 +1584,24 @@ pub fn answer_trust(
     Ok(())
 }
 
-/// What `stop_session` says when there is no turn to stop. tech.md 6.5.
-pub const NOTHING_RUNNING: &str = "Nothing is running there";
-
-/// What it says about a chat another app holds and offers no way into.
-///
-/// Not `NOTHING_RUNNING`: something plainly is running there -- the process is
-/// alive and its own window says so -- and telling a person nothing is running
-/// while they watch it work is the kind of answer that makes them stop
-/// believing the rest. tech.md 6.5.
-pub const HELD_ELSEWHERE: &str = "Another app is holding that chat and takes no messages";
-
-/// And when the process does publish an inbox but would not take the request.
-pub const REFUSED_THE_STOP: &str = "That chat did not take the stop";
-
 /// What a press on Stop is answered with when the request cannot be sent.
 ///
 /// Three different facts, and until v80.7 all three said the same wrong one.
 /// `Resume` is the only one where nothing is running: no process holds the
 /// chat at all, so the turn the button was offering to stop is already over.
-/// tech.md 6.5.
-fn stop_refusal(route: &peekle_core::registry::Route) -> &'static str {
+/// The words are `copy`'s, in the person's language. tech.md 6.5 and 6.28.
+fn stop_refusal(language: Language, route: &peekle_core::registry::Route) -> &'static str {
     match route {
-        peekle_core::registry::Route::Resume => NOTHING_RUNNING,
-        peekle_core::registry::Route::Busy => HELD_ELSEWHERE,
+        peekle_core::registry::Route::Resume => copy::nothing_running(language),
+        // A chat another app holds and offers no way into. Not "nothing is
+        // running": something plainly is -- the process is alive and its own
+        // window says so -- and telling a person nothing is running while they
+        // watch it work is the kind of answer that makes them stop believing
+        // the rest.
+        peekle_core::registry::Route::Busy => copy::held_elsewhere(language),
         // Reached only when the send itself failed: the inbox was there and
         // did not take it.
-        peekle_core::registry::Route::Inbox(_) => REFUSED_THE_STOP,
+        peekle_core::registry::Route::Inbox(_) => copy::refused_the_stop(language),
     }
 }
 
@@ -1621,7 +1622,7 @@ pub fn stop_session(
     if state.owns_session(&session_id) {
         state.pty().interrupt(&session_id).map_err(|err| {
             tracing::warn!(session = %session_id, error = %err, "could not interrupt");
-            NOTHING_RUNNING.to_string()
+            copy::nothing_running(state.language()).to_string()
         })?;
 
         // Nothing reports an interrupted turn: `Stop` does not fire for one,
@@ -1653,7 +1654,7 @@ pub fn stop_session(
         .as_deref()
         .and_then(|root| peekle_core::registry::find_live(root, &session_id));
     let route = peekle_core::registry::route(live);
-    let refusal = stop_refusal(&route);
+    let refusal = stop_refusal(state.language(), &route);
     let over = matches!(route, peekle_core::registry::Route::Resume);
     let (Some(root), peekle_core::registry::Route::Inbox(live)) = (sessions_root.as_deref(), route)
     else {
@@ -1677,7 +1678,7 @@ pub fn stop_session(
     };
     peekle_core::inbox::send(root, &live, peekle_core::inbox::STOP_REQUEST).map_err(|err| {
         tracing::warn!(session = %session_id, pid = live.pid, error = %err, "stop request refused");
-        REFUSED_THE_STOP.to_string()
+        copy::refused_the_stop(state.language()).to_string()
     })?;
 
     // The press is answered here and not by the peer's hooks: the request is
@@ -1728,6 +1729,25 @@ pub fn set_usage_badge(state: State<'_, Arc<AppState>>, on: bool) {
     state.save_config();
 }
 
+/// The language the island speaks, or `None` before the person has chosen
+/// one. `None` is what puts the language screen ahead of sign-in. tech.md 6.28.
+#[tauri::command]
+pub fn get_language(state: State<'_, Arc<AppState>>) -> Option<Language> {
+    state.lock_config().ui.language
+}
+
+/// Remembers the language. The webview redraws itself; Rust reads the config
+/// at every message, so nothing else has to be told. tech.md 6.28.
+#[tauri::command]
+pub fn set_language(state: State<'_, Arc<AppState>>, language: Language) {
+    {
+        // Scoped: `save_config` takes the same lock.
+        state.lock_config().ui.language = Some(language);
+    }
+    state.save_config();
+    tracing::info!(?language, "language chosen");
+}
+
 /// Whether a finished turn puts a banner on the screen. tech.md 6.17.
 #[tauri::command]
 pub fn notify_enabled(state: State<'_, Arc<AppState>>) -> bool {
@@ -1759,11 +1779,15 @@ pub fn set_notify_enabled(
     if !on {
         return Ok(());
     }
+    let language = state.language();
     crate::notify::SystemNotifier(&app)
-        .post(crate::notify::TITLE, crate::notify::SWITCHED_ON)
+        .post(
+            copy::notice_title(language),
+            copy::notices_switched_on(language),
+        )
         .map_err(|err| {
             tracing::warn!(error = %err, "the system refused the first notice");
-            "macOS would not show a notification".to_string()
+            copy::notice_refused(language).to_string()
         })
 }
 
@@ -1896,19 +1920,19 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     let picked = platform::pick(
         &app,
         platform::Pick::Folder,
-        "Choose the folder this chat works in",
+        copy::choose_folder_title(state.language()),
     )
     .await;
     state.set_dialog(false);
     let _ = app.run_on_main_thread(platform::give_front_back);
-    let picked = picked.map_err(|_| "the folder dialog went away".to_string())?;
+    let picked = picked.map_err(|_| copy::folder_dialog_gone(state.language()).to_string())?;
 
     let Some(chosen) = picked else {
         tracing::debug!("the folder dialog was cancelled");
         return Ok(None);
     };
     let Some(path) = chosen.into_iter().next() else {
-        return Err("That folder cannot be reached".to_string());
+        return Err(copy::folder_unreachable(state.language()).to_string());
     };
     let path = path.to_string_lossy().to_string();
     tracing::info!(folder = %path, "a folder was chosen");
@@ -1930,10 +1954,15 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
     state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(platform::take_front);
-    let picked = platform::pick(&app, platform::Pick::Files, "Attach files to this message").await;
+    let picked = platform::pick(
+        &app,
+        platform::Pick::Files,
+        copy::attach_files_title(state.language()),
+    )
+    .await;
     state.set_dialog(false);
     let _ = app.run_on_main_thread(platform::give_front_back);
-    let picked = picked.map_err(|_| "the file dialog went away".to_string())?;
+    let picked = picked.map_err(|_| copy::file_dialog_gone(state.language()).to_string())?;
 
     let Some(files) = picked else {
         tracing::debug!("the file dialog was cancelled");
@@ -1955,18 +1984,19 @@ fn aim_folder(
     session_id: &str,
     cwd: &str,
 ) -> Result<Vec<peekle_core::types::SessionCard>, String> {
+    let language = state.language();
     if !std::path::Path::new(cwd).is_dir() {
-        return Err("That folder does not exist".to_string());
+        return Err(copy::folder_missing(language).to_string());
     }
     if !state.owns_session(session_id) {
-        return Err("Peekle can only aim sessions it started".to_string());
+        return Err(copy::aim_only_own(language).to_string());
     }
     if state.pty_running(session_id) {
-        return Err("This chat is already running in its folder".to_string());
+        return Err(copy::already_running_in_folder(language).to_string());
     }
     state
         .aim_session(session_id, cwd)
-        .ok_or_else(|| "This chat has already begun".to_string())
+        .ok_or_else(|| copy::already_begun(language).to_string())
 }
 
 /// Points an aimed chat at another folder. tech.md 6.23.
@@ -1996,11 +2026,11 @@ pub const BUG_REPORT_URL: &str = "https://t.me/marselnet";
 
 /// Opens the developer's Telegram. tech.md 6.22.
 #[tauri::command]
-pub fn open_bug_report() -> Result<(), String> {
+pub fn open_bug_report(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     tracing::debug!("opening the bug report chat");
     platform::open_url(BUG_REPORT_URL).map_err(|err| {
         tracing::warn!(error = %err, "could not open the bug report chat");
-        "could not open Telegram".to_string()
+        copy::could_not_open_telegram(state.language()).to_string()
     })?;
     Ok(())
 }
@@ -2121,13 +2151,24 @@ mod tests {
             inbox: Some(std::path::PathBuf::from("/tmp/cc-socks/42.sock")),
         };
 
-        assert_eq!(stop_refusal(&Route::Resume), NOTHING_RUNNING);
-        assert_eq!(stop_refusal(&Route::Busy), HELD_ELSEWHERE);
-        assert_eq!(stop_refusal(&Route::Inbox(held)), REFUSED_THE_STOP);
+        let en = Language::En;
+        assert_eq!(stop_refusal(en, &Route::Resume), "Nothing is running there");
+        assert_eq!(
+            stop_refusal(en, &Route::Busy),
+            "Another app is holding that chat and takes no messages"
+        );
+        assert_eq!(
+            stop_refusal(en, &Route::Inbox(held)),
+            "That chat did not take the stop"
+        );
 
         // And none of the three is the same sentence as another, or the
         // distinction is only in the code.
-        let said = [NOTHING_RUNNING, HELD_ELSEWHERE, REFUSED_THE_STOP];
+        let said = [
+            copy::nothing_running(en),
+            copy::held_elsewhere(en),
+            copy::refused_the_stop(en),
+        ];
         let mut sorted = said.to_vec();
         sorted.sort_unstable();
         sorted.dedup();
@@ -2381,7 +2422,10 @@ mod tests {
     fn a_stop_with_nothing_running_is_refused_not_signalled() {
         let state = fresh();
         assert!(!state.owns_session("nobody"));
-        assert_eq!(NOTHING_RUNNING, "Nothing is running there");
+        assert_eq!(
+            copy::nothing_running(Language::En),
+            "Nothing is running there"
+        );
         // The pty host knows no such session, which is the owned path's refusal.
         assert!(matches!(
             state.pty().interrupt("nobody"),
@@ -2482,9 +2526,11 @@ mod tests {
     /// tech.md 6.22. The button goes to the developer and to nobody else, and
     /// the page it is pressed on has no say in that: the address is a constant
     /// here, and the command takes no argument that could carry another one.
+    /// The state it takes is Tauri's to inject, for the language its refusal
+    /// is said in; the page cannot pass it. tech.md 6.28.
     #[test]
     fn the_bug_button_carries_its_own_address() {
         assert_eq!(BUG_REPORT_URL, "https://t.me/marselnet");
-        let _: fn() -> Result<(), String> = open_bug_report;
+        let _: for<'a> fn(State<'a, Arc<AppState>>) -> Result<(), String> = open_bug_report;
     }
 }

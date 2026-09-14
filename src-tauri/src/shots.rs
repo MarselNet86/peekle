@@ -21,6 +21,7 @@ use peekle_core::shots;
 use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::copy;
 use crate::events;
 use crate::hotkey;
 use crate::platform;
@@ -169,13 +170,13 @@ pub fn attach(app: &AppHandle) {
         // so the pill has to come down on its own.
         // The user copied something else between the offer and the answer.
         tracing::warn!("the screenshot left the pasteboard before it was attached");
-        say(app, "The screenshot is gone");
+        say(app, copy::shot_gone(state.language()));
         return;
     };
 
     let Some(dir) = shots::shots_dir() else {
         tracing::warn!("no cache directory for screenshots");
-        say(app, "Nowhere to save the screenshot");
+        say(app, copy::shot_nowhere(state.language()));
         return;
     };
     let keep = state.lock_config().shots.keep;
@@ -184,7 +185,7 @@ pub fn attach(app: &AppHandle) {
         Ok(path) => path.to_string_lossy().to_string(),
         Err(err) => {
             tracing::warn!(error = %err, "could not save the screenshot");
-            say(app, "Could not save the screenshot");
+            say(app, copy::shot_not_saved(state.language()));
             return;
         }
     };

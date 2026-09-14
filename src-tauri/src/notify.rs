@@ -9,20 +9,19 @@
 //! What decides whether to post is a free function, so the tests can hammer it
 //! without a window, a plugin or a screen.
 
-use tauri::AppHandle;
+use std::sync::Arc;
+
+use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-/// What every banner says on top. It names the state the person is in -- their
-/// turn to look -- rather than the event, because by the time they read it the
-/// event is over. tech.md 6.17.
-pub const TITLE: &str = "Claude is waiting for you";
+use crate::copy;
+use crate::state::AppState;
 
-/// What the banner says when the toggle itself is switched on.
-///
-/// It is the first post, and the first post is what makes macOS ask. So it is
-/// also the answer to "did that do anything": the person sees the banner they
-/// just signed up for, in the place it will appear from now on. tech.md 6.17.
-pub const SWITCHED_ON: &str = "Turn notices are on. This is what one looks like.";
+// What every banner says on top is `copy::notice_title`. It names the state
+// the person is in -- their turn to look -- rather than the event, because by
+// the time they read it the event is over. What the toggle's own first banner
+// says is `copy::notices_switched_on`: the first post is what makes macOS ask,
+// so it is also the answer to "did that do anything". tech.md 6.17 and 6.28.
 
 /// The sound the banner arrives with: the system's own, whatever the person
 /// has picked for it.
@@ -88,7 +87,8 @@ pub fn say(app: &AppHandle, enabled: bool, watching: bool, project: &str, said: 
     let Some(body) = notice(enabled, watching, project, said) else {
         return;
     };
-    if let Err(err) = SystemNotifier(app).post(TITLE, &body) {
+    let language = app.state::<Arc<AppState>>().language();
+    if let Err(err) = SystemNotifier(app).post(copy::notice_title(language), &body) {
         // A banner that did not appear is not worth a screen of its own: the
         // island already said the same thing where the person can see it.
         tracing::warn!(error = %err, "the system refused a turn notice");
@@ -98,7 +98,10 @@ pub fn say(app: &AppHandle, enabled: bool, watching: bool, project: &str, said: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use peekle_core::types::Language;
     use std::sync::Mutex;
+
+    const TITLE: &str = "Claude is waiting for you";
 
     /// The fake of section 7: counts what it was asked to show and touches
     /// nothing. No test raises a permission dialog.
@@ -124,7 +127,7 @@ mod tests {
 
     #[test]
     fn the_title_is_the_one_the_contract_names() {
-        assert_eq!(TITLE, "Claude is waiting for you");
+        assert_eq!(copy::notice_title(Language::En), TITLE);
     }
 
     /// The project leads and the words follow, the same line the pill carries.

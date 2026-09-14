@@ -1,4 +1,5 @@
 mod commands;
+mod copy;
 mod events;
 mod hooks;
 mod hotkey;
@@ -271,6 +272,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::open_bug_report,
             commands::choose_folder,
             commands::choose_files,
+            commands::get_language,
+            commands::set_language,
             commands::set_session_cwd,
             commands::answer_trust,
             commands::dev_emit_prompt,
@@ -324,6 +327,8 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::open_bug_report,
             commands::choose_folder,
             commands::choose_files,
+            commands::get_language,
+            commands::set_language,
             commands::set_session_cwd,
             commands::answer_trust,
         ]
