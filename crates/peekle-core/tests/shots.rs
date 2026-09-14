@@ -112,7 +112,11 @@ fn any_other_key_settles_the_offer() {
     keys.press(0);
     keys.age(KEY_GRACE_MS);
 
-    assert!(dismissed_by_key(at_open, keys.counted(), keys.since_keystroke_ms()));
+    assert!(dismissed_by_key(
+        at_open,
+        keys.counted(),
+        keys.since_keystroke_ms()
+    ));
 }
 
 /// Nobody typed, so the offer stands its full life and settles on its own
@@ -124,7 +128,11 @@ fn an_untouched_keyboard_leaves_the_offer_alone() {
 
     for _ in 0..100 {
         keys.age(50);
-        assert!(!dismissed_by_key(at_open, keys.counted(), keys.since_keystroke_ms()));
+        assert!(!dismissed_by_key(
+            at_open,
+            keys.counted(),
+            keys.since_keystroke_ms()
+        ));
     }
 }
 
@@ -141,7 +149,11 @@ fn the_keystroke_that_took_the_screenshot_does_not_settle_it() {
     let at_open = keys.counted();
     keys.age(KEY_GRACE_MS);
 
-    assert!(!dismissed_by_key(at_open, keys.counted(), keys.since_keystroke_ms()));
+    assert!(!dismissed_by_key(
+        at_open,
+        keys.counted(),
+        keys.since_keystroke_ms()
+    ));
 }
 
 /// The Up arrow is a keystroke like any other and lands at the HID level
@@ -172,7 +184,10 @@ fn the_attach_key_is_answered_before_it_can_dismiss_anything() {
     // The handler gets there first, and the tick that follows finds the offer
     // already settled: one resolution, never two. tech.md 6.13.
     assert!(slot.take().is_some(), "agreement takes the offer");
-    assert!(slot.take().is_none(), "and the late tick has nothing to take");
+    assert!(
+        slot.take().is_none(),
+        "and the late tick has nothing to take"
+    );
 }
 
 /// The counter belongs to the system and wraps where u32 does. A comparison

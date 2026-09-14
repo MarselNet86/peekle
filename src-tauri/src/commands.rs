@@ -2134,6 +2134,7 @@ mod tests {
             Config::default(),
             Arc::new(FakeUsage::default()),
             Arc::new(peekle_core::shots::FakePasteboard::new()),
+            Arc::new(peekle_core::shots::FakeKeys::new()),
         ))
     }
 
@@ -2475,6 +2476,7 @@ mod tests {
             Config::default(),
             Arc::new(FakeUsage::default()),
             board.clone(),
+            Arc::new(peekle_core::shots::FakeKeys::new()),
         ));
         let dir =
             std::env::temp_dir().join(format!("peekle-paste-{}", peekle_core::shots::new_id()));

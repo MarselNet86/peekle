@@ -20,7 +20,7 @@ use macos::active_screen;
 #[cfg(target_os = "macos")]
 pub use macos::{
     apply_view, convert_all, give_front_back, notch_for, open_url, pick, show, take_front,
-    to_trash, watch_clicks, watch_pointer, write_text, SystemPasteboard,
+    to_trash, watch_clicks, watch_pointer, write_text, SystemKeys, SystemPasteboard,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -30,7 +30,7 @@ use desktop::active_screen;
 #[cfg(not(target_os = "macos"))]
 pub use desktop::{
     apply_view, convert_all, give_front_back, notch_for, open_url, pick, show, take_front,
-    to_trash, watch_clicks, watch_pointer, write_text, SystemPasteboard,
+    to_trash, watch_clicks, watch_pointer, write_text, SystemKeys, SystemPasteboard,
 };
 
 pub const ISLAND: &str = "island";

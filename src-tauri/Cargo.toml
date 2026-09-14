@@ -50,6 +50,10 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.
 block2 = "0.6.2"
 objc2-app-kit = "0.3.2"
 objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSFileManager", "NSURL", "NSError", "NSString"] }
+# The keystroke counter behind the offer's fourth exit. Counting is all it can
+# do: nothing here names a key, and nothing here asks for Accessibility.
+# tech.md 6.13.
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEventSource", "CGEventTypes"] }
 
 # Windows and Linux: the system trash, the clipboard picture, and PNG to write
 # it as a file. tech.md 6.27.

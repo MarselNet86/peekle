@@ -3,7 +3,8 @@
 //! Control-Shift-Command-4 puts an image on the pasteboard and nowhere else,
 //! and the channel to an agent carries text. So Peekle watches for the write,
 //! offers to attach it, and on agreement turns the image into a file and the
-//! file into a line of the next reply.
+//! file into a line of the next reply. The offer settles exactly once, on
+//! agreement, on any other key, on its own clock, or on the next screenshot.
 //!
 //! The pasteboard itself is the platform's (`platform/`); this is the watch
 //! over it, and the same on every platform. tech.md 12 and 6.27.
@@ -17,7 +18,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use peekle_core::shots;
+use peekle_core::shots::{self, KEY_POLL_MS};
 use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -56,12 +57,52 @@ pub fn watch(app: &AppHandle, state: Arc<AppState>) {
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut ticker = tokio::time::interval(Duration::from_millis(poll_ms));
+        // Two cadences, one loop. The pasteboard is read on `poll_ms`, which
+        // is what that key is for; the keyboard is read on `KEY_POLL_MS` and
+        // only while an offer stands, because an offer the user has already
+        // answered by typing has to come down before they look up. Reading a
+        // clipboard is work and reading a counter is not, so the fast tick
+        // never drags the slow one along with it. tech.md 6.13.
+        let poll = Duration::from_millis(poll_ms);
+        let mut last_poll = Instant::now() - poll;
         loop {
-            ticker.tick().await;
-            tick(&handle, &state);
+            let standing = state.shot.current().is_some();
+            let step = if standing {
+                Duration::from_millis(KEY_POLL_MS)
+            } else {
+                poll
+            };
+            tokio::time::sleep(step).await;
+
+            dismiss_on_key(&handle, &state);
+            if last_poll.elapsed() >= poll {
+                last_poll = Instant::now();
+                tick(&handle, &state);
+            }
         }
     });
+}
+
+/// The fourth way an offer settles: the user kept typing. tech.md 6.13.
+///
+/// Reads two numbers the system hands over for free, a count of keystrokes and
+/// the age of the last one, and never which key was pressed: watching the keys
+/// themselves is what would need Accessibility, and Peekle asks for none. The
+/// age is also what keeps the Up arrow answerable, since that key reaches the
+/// counter before the shortcut handler runs. tech.md 6.9.
+fn dismiss_on_key(app: &AppHandle, state: &Arc<AppState>) {
+    if state.shot.current().is_none() || !state.typed_past_offer() {
+        return;
+    }
+    // Take it before anything else: agreement may be running on the main
+    // thread this very moment, and exactly one of the two paths may win.
+    let Some(offer) = state.shot.take() else {
+        return;
+    };
+
+    tracing::debug!(id = %offer.id, "a keystroke settled the screenshot offer");
+    close_offer(app, state);
+    put_away(app, state);
 }
 
 fn tick(app: &AppHandle, state: &Arc<AppState>) {
@@ -127,6 +168,11 @@ fn open_offer(app: &AppHandle, state: &Arc<AppState>, now: i64) {
         created_at: now,
         expires_at: now + i64::from(secs) * 1000,
     };
+
+    // Where the keyboard stood as the offer went up. Everything the user
+    // pressed before this moment is theirs and settles nothing, including the
+    // ⌃⇧⌘4 that produced the screenshot. tech.md 6.13.
+    state.seed_keystrokes();
 
     // The fresh screenshot pushes the stale one out: one key cannot answer for
     // two, and the one the user wants is the one they just took.

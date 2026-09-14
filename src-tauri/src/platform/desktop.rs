@@ -11,7 +11,7 @@ use std::path::Path;
 #[cfg(not(target_os = "windows"))]
 use std::sync::Mutex;
 
-use peekle_core::shots::Pasteboard;
+use peekle_core::shots::{Keys, Pasteboard};
 use peekle_core::types::IslandView;
 use tauri::AppHandle;
 
@@ -171,6 +171,33 @@ pub fn open_url(url: &str) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|err| err.to_string())
+}
+
+/// No keystroke counter here. tech.md 6.27.
+///
+/// macOS answers how many keys the system has seen and how long ago the last
+/// one was, and answers both without any trust from the system (6.13). Windows
+/// and Linux have no such free reading: what they offer is a keyboard hook,
+/// which is the thing Peekle refuses to install. So the offer keeps the three
+/// exits it had before this one and lives out its `offer_secs`.
+pub struct SystemKeys;
+
+impl SystemKeys {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Keys for SystemKeys {
+    fn counted(&self) -> u32 {
+        // A count that never moves is a keyboard nobody touched, and that is
+        // exactly the claim: Peekle here does not know, so it does not act.
+        0
+    }
+
+    fn since_keystroke_ms(&self) -> i64 {
+        i64::MAX
+    }
 }
 
 /// The type name 6.13 recognises a screenshot by. The clipboards here have

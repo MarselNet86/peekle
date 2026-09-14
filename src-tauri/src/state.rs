@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use peekle_core::config::Config;
 use peekle_core::island::Rect;
 use peekle_core::sessions::SessionOverrides;
-use peekle_core::shots::{OfferSlot, Pasteboard};
+use peekle_core::shots::{dismissed_by_key, Keys, OfferSlot, Pasteboard};
 use peekle_core::types::{
     IslandView, PeekleState, PermissionMode, PromptRequest, SessionCard, SessionRef, SessionStatus,
     TaskItem, UsageSnapshot, UsageUnavailable,
@@ -71,6 +71,10 @@ pub struct AppState {
     /// here reaches AppKit and no test touches the real clipboard.
     /// tech.md 6.13 and section 7.
     pub pasteboard: Arc<dyn Pasteboard>,
+    /// The keyboard, as far as a standing offer needs one: a count and an
+    /// age, never a key. Behind a trait for the same reason the pasteboard
+    /// is, and read only while an offer stands. tech.md 6.13 and section 7.
+    pub keys: Arc<dyn Keys>,
     /// The screenshot offer standing right now. One at a time, settled once.
     /// tech.md 6.13.
     pub shot: OfferSlot,
@@ -101,6 +105,9 @@ pub struct AppState {
     /// application, so the flag decides and AppKit is told only on a change.
     /// tech.md 6.13 and R-14.
     attach_key: AtomicBool,
+    /// What the system's keystroke counter read when the offer went up.
+    /// Anything past it is somebody typing over the offer. tech.md 6.13.
+    keys_at_open: AtomicU32,
     /// Where the pointer stood when the shape last moved, until it moves off
     /// that point. A shape that shrank leaves a still hand outside itself, and
     /// that is the island moving rather than the user leaving. tech.md 6.7.
@@ -196,6 +203,7 @@ impl AppState {
         config: Config,
         usage_provider: Arc<dyn UsageProvider>,
         pasteboard: Arc<dyn Pasteboard>,
+        keys: Arc<dyn Keys>,
     ) -> Self {
         let usage_config = config.usage.clone();
         let enabled = config.behavior.enabled;
@@ -204,6 +212,7 @@ impl AppState {
             pending: PendingRegistry::new(),
             usage_provider,
             pasteboard,
+            keys,
             shot: OfferSlot::new(),
             held: Mutex::new(std::collections::HashMap::new()),
             enabled: AtomicBool::new(enabled),
@@ -214,6 +223,7 @@ impl AppState {
             hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             attach_key: AtomicBool::new(false),
+            keys_at_open: AtomicU32::new(0),
             anchor: Mutex::new(None),
             shape_moved: AtomicBool::new(false),
             preview: AtomicBool::new(false),
@@ -819,6 +829,24 @@ impl AppState {
     /// Records that the attach key is held, and reports whether that is news.
     /// Only a change is worth an AppKit call: dropping a key nobody holds logs
     /// an error that means nothing. tech.md 6.13.
+    /// Remembers where the keystroke counter stood as the offer went up, so
+    /// the keys the user pressed before it are nobody's business. tech.md 6.13.
+    pub fn seed_keystrokes(&self) {
+        self.keys_at_open
+            .store(self.keys.counted(), Ordering::SeqCst);
+    }
+
+    /// Whether somebody typed past the standing offer: a keystroke after it
+    /// went up, old enough that the attach key would already have been
+    /// answered. Reads two numbers and never a key. tech.md 6.13.
+    pub fn typed_past_offer(&self) -> bool {
+        dismissed_by_key(
+            self.keys_at_open.load(Ordering::SeqCst),
+            self.keys.counted(),
+            self.keys.since_keystroke_ms(),
+        )
+    }
+
     pub fn set_attach_key(&self, held: bool) -> bool {
         self.attach_key.swap(held, Ordering::SeqCst) != held
     }
@@ -1264,6 +1292,7 @@ mod tests {
             Config::default(),
             Arc::new(FakeUsage::default()),
             Arc::new(peekle_core::shots::FakePasteboard::new()),
+            Arc::new(peekle_core::shots::FakeKeys::new()),
         )
     }
 
@@ -1434,6 +1463,7 @@ mod owned_tests {
             Config::default(),
             Arc::new(FakeUsage::default()),
             Arc::new(peekle_core::shots::FakePasteboard::new()),
+            Arc::new(peekle_core::shots::FakeKeys::new()),
         )
     }
 
@@ -1478,18 +1508,81 @@ mod owned_tests {
 mod shot_tests {
     use super::*;
     use peekle_core::config::Config;
-    use peekle_core::shots::FakePasteboard;
+    use peekle_core::shots::{FakeKeys, FakePasteboard, KEY_GRACE_MS};
     use peekle_core::types::ShotOffer;
     use peekle_usage::FakeUsage;
 
     fn state() -> (AppState, Arc<FakePasteboard>) {
+        let (state, pasteboard, _keys) = state_and_keys();
+        (state, pasteboard)
+    }
+
+    fn state_and_keys() -> (AppState, Arc<FakePasteboard>, Arc<FakeKeys>) {
         let pasteboard = Arc::new(FakePasteboard::new());
+        let keys = Arc::new(FakeKeys::new());
         let state = AppState::new(
             Config::default(),
             Arc::new(FakeUsage::default()),
             pasteboard.clone(),
+            keys.clone(),
         );
-        (state, pasteboard)
+        (state, pasteboard, keys)
+    }
+
+    /// The fourth way an offer settles, as the watch asks about it. The line
+    /// is the moment the offer went up: keys pressed before it are the user's
+    /// own business, including the ⌃⇧⌘4 that produced the screenshot.
+    /// tech.md 6.13.
+    #[test]
+    fn typing_past_a_standing_offer_settles_it_and_typing_before_it_does_not() {
+        let (state, _pasteboard, keys) = state_and_keys();
+
+        // The capture itself, and the second it took to drag a rectangle.
+        keys.press(0);
+        keys.age(1_000);
+        state.seed_keystrokes();
+        assert!(
+            !state.typed_past_offer(),
+            "the keystroke that took the shot is older than the offer"
+        );
+
+        keys.press(0);
+        assert!(
+            !state.typed_past_offer(),
+            "inside the grace the Up arrow is still being answered"
+        );
+        keys.age(KEY_GRACE_MS);
+        assert!(state.typed_past_offer(), "and then any key settles it");
+    }
+
+    /// A keyboard nobody touches leaves the offer to its own clock. The pill
+    /// is five seconds of somebody's screen and it may not go early on nothing.
+    #[test]
+    fn an_untouched_keyboard_never_settles_an_offer() {
+        let (state, _pasteboard, keys) = state_and_keys();
+        state.seed_keystrokes();
+
+        for _ in 0..100 {
+            keys.age(50);
+            assert!(!state.typed_past_offer());
+        }
+    }
+
+    /// Each offer draws its own line. The keys that settled the last one must
+    /// not settle the next one before the user has seen it. tech.md 6.13.
+    #[test]
+    fn the_next_offer_starts_from_the_keyboard_as_it_is_now() {
+        let (state, _pasteboard, keys) = state_and_keys();
+        state.seed_keystrokes();
+        keys.press(0);
+        keys.age(KEY_GRACE_MS);
+        assert!(state.typed_past_offer());
+
+        state.seed_keystrokes();
+        assert!(
+            !state.typed_past_offer(),
+            "the new offer inherited the old one's keystroke"
+        );
     }
 
     fn session(id: &str) -> SessionRef {

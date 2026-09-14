@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use peekle_core::shots::Pasteboard;
+use peekle_core::shots::{Keys, Pasteboard};
 use peekle_core::types::IslandView;
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_nspanel::{
@@ -400,6 +400,55 @@ impl Pasteboard for SystemPasteboard {
         let png = unsafe { NSPasteboardTypePNG };
         let data = pasteboard.dataForType(png)?;
         Some(data.to_vec())
+    }
+}
+
+/// The keyboard as a count and an age, and never as a key. tech.md 6.13.
+///
+/// `CGEventSource` answers both without any trust from the system: the count
+/// of `keyDown` events it has seen, and how long ago the last one landed.
+/// Watching the keystrokes themselves is the thing that would need
+/// Accessibility, and Peekle asks for no such permission anywhere (6.9).
+/// `HIDSystemState` on purpose: the hardware is what a person is typing on,
+/// and it counts the Up arrow the shortcut swallows, which is the whole reason
+/// the grace in 6.13 exists.
+pub struct SystemKeys;
+
+impl SystemKeys {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Keys for SystemKeys {
+    fn counted(&self) -> u32 {
+        use objc2_core_graphics::{CGEventSource, CGEventSourceStateID, CGEventType};
+
+        CGEventSource::counter_for_event_type(
+            CGEventSourceStateID::HIDSystemState,
+            CGEventType::KeyDown,
+        )
+    }
+
+    fn since_keystroke_ms(&self) -> i64 {
+        use objc2_core_graphics::{CGEventSource, CGEventSourceStateID, CGEventType};
+
+        let seconds = CGEventSource::seconds_since_last_event_type(
+            CGEventSourceStateID::HIDSystemState,
+            CGEventType::KeyDown,
+        );
+        // A machine nobody has typed on since it booted reports an age larger
+        // than milliseconds can hold. Saturating there keeps it what it is,
+        // a very old keystroke, rather than a wrapped and very recent one.
+        if !seconds.is_finite() || seconds <= 0.0 {
+            return 0;
+        }
+        let ms = seconds * 1000.0;
+        if ms >= i64::MAX as f64 {
+            i64::MAX
+        } else {
+            ms as i64
+        }
     }
 }
 

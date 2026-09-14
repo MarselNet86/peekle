@@ -104,6 +104,7 @@ pub fn run() {
                 config,
                 provider,
                 Arc::new(platform::SystemPasteboard::new()),
+                Arc::new(platform::SystemKeys::new()),
             ));
             app.manage(Arc::clone(&state));
 
