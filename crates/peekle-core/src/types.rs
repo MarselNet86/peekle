@@ -4,6 +4,19 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// The language the island speaks. Lowercase everywhere it is written down --
+/// the config, the wire, TypeScript -- because that is how a person spells a
+/// language code. English is the language the copy is written in and the one
+/// used wherever nobody has chosen yet. tech.md 6.28.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Language {
+    #[default]
+    En,
+    Ru,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SessionRef {

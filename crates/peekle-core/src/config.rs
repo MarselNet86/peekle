@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+use crate::types::Language;
+
 /// `~/Library/Application Support/peekle/config.toml`
 pub const CONFIG_FILE: &str = "config.toml";
 /// Port is duplicated here so `doctor` and `status` can find the server
@@ -92,6 +94,10 @@ pub struct UiConfig {
     /// window on top of the system rather than part of the bezel. tech.md 6.10.
     pub blur: bool,
     pub feed_visible_rows: u8,
+    /// `None` until the person picks one on the first open island, and that
+    /// absence is what raises the language screen. tech.md 6.28.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<Language>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,6 +199,7 @@ impl Default for UiConfig {
             island_opacity: 1.0,
             blur: false,
             feed_visible_rows: MAX_FEED_VISIBLE_ROWS,
+            language: None,
         }
     }
 }
@@ -353,6 +360,35 @@ mod tests {
         let off = Config::from_toml("[usage]\nbadge = false\n").unwrap();
         assert!(!off.usage.badge);
         assert!(off.usage.enabled, "one key off is not the section off");
+    }
+
+    /// No language until someone picks one: a fresh install and an old file
+    /// both come up asking. A picked one is written lowercase and read back.
+    /// tech.md 6.28.
+    #[test]
+    fn the_language_is_unchosen_until_the_file_names_one() {
+        assert_eq!(Config::default().ui.language, None);
+        assert_eq!(
+            Config::from_toml("[ui]\nfeed_visible_rows = 6\n")
+                .unwrap()
+                .ui
+                .language,
+            None
+        );
+        assert_eq!(
+            Config::from_toml("[ui]\nlanguage = \"ru\"\n")
+                .unwrap()
+                .ui
+                .language,
+            Some(Language::Ru)
+        );
+
+        let mut config = Config::default();
+        config.ui.language = Some(Language::En);
+        let written = toml::to_string(&config).unwrap();
+        assert!(written.contains("language = \"en\""), "{written}");
+        let unchosen = toml::to_string(&Config::default()).unwrap();
+        assert!(!unchosen.contains("language"), "{unchosen}");
     }
 
     #[test]
