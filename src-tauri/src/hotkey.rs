@@ -77,6 +77,9 @@ pub enum Role {
     Attach,
     /// ⌥⌘Q: ask whether to quit. tech.md 6.29.
     Quit,
+    /// ⌘ and a digit, held only while a question stands open: pick that row.
+    /// tech.md 6.14.
+    Choice(u8),
 }
 
 pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
@@ -99,7 +102,12 @@ pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
     if fires(&quit, fired) {
         return Some(Role::Quit);
     }
-    None
+    // No count is read to decide this: a digit only fires while it is held,
+    // and the count lives behind a lock this handler must not wait on.
+    // tech.md 6.14.
+    (1..=9)
+        .find(|index| fires(&crate::windows::choice_spelling(*index), fired))
+        .map(Role::Choice)
 }
 
 /// Registers the quit combination. A failure warns the way the toggle's does

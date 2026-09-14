@@ -66,6 +66,7 @@ const en = {
   send: 'Send',
   stop: 'Stop',
 
+  claudeAsks: 'Claude asks',
   recommended: 'Recommended',
   other: 'Other',
   writeOwn: 'Write your own answer',
@@ -145,6 +146,7 @@ export const CHAT: Copy<typeof en> = {
     send: 'Отправить',
     stop: 'Остановить',
 
+    claudeAsks: 'Claude спрашивает',
     recommended: 'Рекомендуется',
     other: 'Другое',
     writeOwn: 'Напишите свой ответ',

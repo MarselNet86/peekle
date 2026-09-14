@@ -23,6 +23,10 @@ export function createIsland(search = '') {
   let view = $state<IslandView>('Collapsed');
   let toast = $state<ToastRequest | null>(null);
   let prompt = $state<PromptRequest | null>(null);
+  // The last ⌘ and digit pressed while a question stood, numbered so the same
+  // row pressed twice is two presses. tech.md 6.14.
+  let choice = $state<{ index: number; seq: number } | null>(null);
+  let choices = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function show(next: ToastRequest) {
@@ -80,7 +84,7 @@ export function createIsland(search = '') {
   }
 
   async function start(): Promise<() => void> {
-    const [offToast, offView, offNotch, offOpen, offClose] = await Promise.all([
+    const [offToast, offView, offNotch, offOpen, offClose, offChoose] = await Promise.all([
       events.onToast(show),
       events.onView((next) => {
         view = next;
@@ -96,6 +100,10 @@ export function createIsland(search = '') {
       // to clear on an outcome the user never chose.
       events.onPromptClose(({ prompt_id }) => {
         if (prompt?.id === prompt_id) prompt = null;
+      }),
+      events.onChoose(({ index }) => {
+        choices += 1;
+        choice = { index, seq: choices };
       }),
     ]);
 
@@ -113,6 +121,7 @@ export function createIsland(search = '') {
       offNotch();
       offOpen();
       offClose();
+      offChoose();
     };
   }
 
@@ -128,6 +137,9 @@ export function createIsland(search = '') {
     },
     get prompt() {
       return prompt;
+    },
+    get choice() {
+      return choice;
     },
     answer,
     choose,

@@ -336,6 +336,81 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
             send_notch(handle);
         }
     });
+
+    // A question that opened or went away with the view takes its keys with
+    // it. tech.md 6.14.
+    sync_choice_keys(app);
+}
+
+/// How many of ⌘1…⌘9 a question on screen needs: every row of its widest
+/// question, the row for an answer of one's own included. None while no
+/// question stands, or while the island is not open on the chat it is about --
+/// a resting island is nobody's to answer by keyboard, and taking ⌘1 from the
+/// browser for a question nobody can see would be theft. tech.md 6.14.
+pub fn choice_keys_for(view: &IslandView, active: Option<&PromptRequest>) -> u8 {
+    let Some(prompt) = active else {
+        return 0;
+    };
+    if prompt.kind != PromptKind::Question {
+        return 0;
+    }
+    let open_on_it = matches!(view, IslandView::Session(id) if *id == prompt.session.session_id);
+    if !open_on_it {
+        return 0;
+    }
+    let widest = prompt
+        .questions
+        .iter()
+        .map(|question| question.options.len() + 1)
+        .max()
+        .unwrap_or(0);
+    widest.min(9) as u8
+}
+
+/// The config spelling of ⌘ and one digit.
+pub fn choice_spelling(index: u8) -> String {
+    format!("Command+Digit{index}")
+}
+
+/// Takes the choice keys the question on screen needs and gives back the rest.
+///
+/// Off the calling thread, always: the plugin registers on the main thread
+/// under its registry lock, and this is reached from `set_view`, which the
+/// shortcut handler itself calls (⌥⌘Q). Reads the view and the prompt when it
+/// runs rather than when it was asked, so two calls in a row settle on what is
+/// true now, and the lock makes them take turns. tech.md 6.14 and 6.13.
+pub fn sync_choice_keys(app: &AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = handle.state::<Arc<AppState>>().inner().clone();
+        let mut held = state.choice_keys();
+        let want = choice_keys_for(&state.view(), state.active_prompt().as_ref());
+        if *held == want {
+            return;
+        }
+        for index in (want + 1)..=*held {
+            crate::hotkey::unregister(&handle, &choice_spelling(index));
+        }
+        for index in (*held + 1)..=want {
+            if let Err(err) = crate::hotkey::register(&handle, &choice_spelling(index)) {
+                // Another app holds it. The row still answers to a click, and
+                // to ⌘ and the digit inside the island. tech.md 6.14.
+                tracing::debug!(index, error = %err, "a choice key is taken");
+            }
+        }
+        tracing::debug!(held = want, "choice keys");
+        *held = want;
+    });
+}
+
+/// ⌘ and a digit fired: the island picks that row of the question on screen.
+/// Only an event -- nothing here touches the plugin, so it is safe from inside
+/// the shortcut handler. tech.md 6.14.
+pub fn choose(app: &AppHandle, index: u8) {
+    let payload = serde_json::json!({ "index": index });
+    if let Err(err) = app.emit_to(platform::ISLAND, events::CHOOSE, payload) {
+        tracing::warn!(error = %err, "failed to emit a choice");
+    }
 }
 
 /// A second launch reached this instance: open the list and hold it the way
@@ -414,6 +489,9 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
         PROMPT_HOLD
     };
     state.hold_open(Instant::now() + hold);
+    // The view may not have changed -- the island was already on this chat --
+    // and the question still needs its keys. tech.md 6.14.
+    sync_choice_keys(app);
 }
 
 /// Whether what is on screen has to stay there until it is answered.
@@ -540,6 +618,9 @@ pub fn close_prompt(app: &AppHandle, prompt_id: &str, outcome: &PromptOutcome) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(COLLAPSE_AFTER).await;
         let state = handle.state::<Arc<AppState>>().inner().clone();
+        // An answered question gives its keys back even where the island stays
+        // open on the chat. tech.md 6.14.
+        sync_choice_keys(&handle);
         if state.active_prompt().is_some() {
             return;
         }
@@ -625,10 +706,85 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 #[cfg(test)]
 mod tests {
     use super::{
-        click_elsewhere_collapses, collapses_after_answer, pill_holds_off, reveal_takes,
-        stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
+        choice_keys_for, choice_spelling, click_elsewhere_collapses, collapses_after_answer,
+        pill_holds_off, reveal_takes, stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER,
+        NOTICE_HOLD, PROMPT_HOLD,
     };
-    use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+    use peekle_core::types::{
+        IslandView, PromptKind, PromptRequest, Question, QuestionOption, SessionRef,
+    };
+
+    fn asking(options: &[usize]) -> PromptRequest {
+        let mut request = standing(PromptKind::Question);
+        request.questions = options
+            .iter()
+            .map(|count| Question {
+                header: "h".into(),
+                question: format!("{count} options?"),
+                options: (0..*count)
+                    .map(|index| QuestionOption {
+                        label: format!("o{index}"),
+                        description: None,
+                    })
+                    .collect(),
+                multi_select: false,
+            })
+            .collect();
+        request
+    }
+
+    /// v87.5: ⌘1…⌘N are held while a question stands open on its own chat, one
+    /// per row of the widest question with the row for an answer of one's own
+    /// counted, and not a single one otherwise. tech.md 6.14.
+    #[test]
+    fn choice_keys_are_held_only_while_a_question_stands_open_on_its_chat() {
+        let on_it = IslandView::Session("s".into());
+        assert_eq!(choice_keys_for(&on_it, Some(&asking(&[3]))), 4);
+        assert_eq!(
+            choice_keys_for(&on_it, Some(&asking(&[2, 4]))),
+            5,
+            "the widest question decides"
+        );
+
+        assert_eq!(choice_keys_for(&on_it, None), 0, "no question");
+        assert_eq!(
+            choice_keys_for(&on_it, Some(&standing(PromptKind::Permission))),
+            0,
+            "a permission answers to its own panel"
+        );
+        for view in [
+            IslandView::Collapsed,
+            IslandView::Pill,
+            IslandView::Sessions,
+            IslandView::Session("another".into()),
+        ] {
+            assert_eq!(
+                choice_keys_for(&view, Some(&asking(&[3]))),
+                0,
+                "nobody can see the question on {view:?}"
+            );
+        }
+        assert_eq!(
+            choice_keys_for(&on_it, Some(&asking(&[12]))),
+            9,
+            "there are nine digits"
+        );
+    }
+
+    /// Every spelling a choice key is registered under names a real key, or the
+    /// row it stands for could never be picked from outside. tech.md 6.14.
+    #[test]
+    fn every_choice_key_spells_a_real_combination() {
+        for index in 1..=9 {
+            let combination = peekle_hotkey::Combination::parse(&choice_spelling(index))
+                .expect("a choice spelling parses");
+            assert!(combination.command);
+            assert!(
+                crate::hotkey::shortcut_of(&combination).is_some(),
+                "⌘{index} maps onto a key"
+            );
+        }
+    }
 
     /// v87.1: the pin goes under a hand that is on the shape as it settles,
     /// and under nothing else. A pointer already outside is a person walking

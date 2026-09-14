@@ -53,6 +53,27 @@ describe('a single question', () => {
       { question: 'Which framework?', labels: ['Vue'] },
     ]);
   });
+
+  /// v87.5: ⌘ and a digit pressed in another application arrives as a numbered
+  /// choice, and a new number answers the same way a click does. The number
+  /// standing when the prompt mounted answers nothing. tech.md 6.14.
+  it('answers on a choice from the global key, and not on a stale one', async () => {
+    const onsubmit = vi.fn();
+    const { rerender } = render(QuestionPrompt, {
+      props: { questions: [single], choice: { index: 1, seq: 4 }, onsubmit },
+    });
+    expect(onsubmit).not.toHaveBeenCalled();
+
+    await rerender({ questions: [single], choice: { index: 2, seq: 5 }, onsubmit });
+    expect(onsubmit).toHaveBeenCalledExactlyOnceWith([
+      { question: 'Which framework?', labels: ['Vue'] },
+    ]);
+  });
+
+  it('says who is asking above the question', () => {
+    render(QuestionPrompt, { props: { questions: [single] } });
+    expect(screen.getByText('Claude asks')).toBeInTheDocument();
+  });
 });
 
 describe('a multiSelect question', () => {

@@ -18,3 +18,6 @@ pub const SHOT_ATTACHED: &str = "peekle://shot-attached";
 /// What the updater is doing, after every check, download and refusal.
 /// tech.md 6.30.
 pub const UPDATE: &str = "peekle://update";
+/// ⌘ and a digit, pressed anywhere while a question stands open: which row to
+/// pick. tech.md 6.14.
+pub const CHOOSE: &str = "peekle://choose";

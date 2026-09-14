@@ -7,6 +7,9 @@
    * shortcut to whatever is on screen, and two mounted together would answer
    * the same keystroke twice.
    */
+  import { MessageSquare } from '@lucide/svelte';
+  import { untrack } from 'svelte';
+
   import { CHAT } from '$lib/i18n/chat';
   import { copy } from '$lib/i18n/index.svelte';
   import type { ChoiceOption } from '$lib/types/generated/ChoiceOption';
@@ -30,10 +33,16 @@
 
   let {
     questions,
+    choice = null,
     onsubmit,
     onclose,
   }: {
     questions: Question[];
+    /** The last ⌘ and digit pressed in another application while this stood,
+     * numbered so two presses of one row are two presses. A new number picks
+     * that row of the question on screen; the one standing when this mounted
+     * picks nothing. tech.md 6.14. */
+    choice?: { index: number; seq: number } | null;
     onsubmit?: (answers: QuestionAnswer[]) => void;
     /** None of these, and not a later one either. The tool is refused and the
      * agent moves on, rather than being handed the question again in the
@@ -81,6 +90,16 @@
   });
   const answered = $derived(labels.length > 0);
 
+  let list = $state<{ pick: (index: number) => boolean } | null>(null);
+  let seen = untrack(() => choice?.seq ?? 0);
+
+  $effect(() => {
+    const next = choice;
+    if (!next || next.seq === seen) return;
+    seen = next.seq;
+    untrack(() => list?.pick(next.index));
+  });
+
   /** Records this question's answer and moves to the next, or submits every
    * answer once the last one is in. */
   function advance() {
@@ -102,6 +121,12 @@
 
 <div class="question">
   <div class="head">
+    <!-- Who is asking, in the brand green, and the question's own short label
+         beside it. tech.md 6.14. -->
+    <span class="asks">
+      <MessageSquare size={14} strokeWidth={2.2} aria-hidden="true" />
+      {t.claudeAsks}
+    </span>
     <span class="header">{question.header}</span>
     {#if questions.length > 1}
       <span class="progress">{index + 1} / {questions.length}</span>
@@ -118,6 +143,7 @@
        question above them instead of sitting in from it. -->
   <div class="options">
     <OptionList
+      bind:this={list}
       options={toOptions(question)}
       multiple={question.multi_select}
       bind:selected
@@ -159,8 +185,18 @@
   .question {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
+  }
+
+  .asks {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--brand);
+    font-size: 13px;
+    font-weight: 600;
   }
 
   .head {
@@ -182,6 +218,7 @@
      with one page and a question with four look the same at the corner. */
   .header {
     flex: 1;
+    min-width: 0;
     color: var(--text-dim);
     font-size: 10px;
     text-transform: uppercase;
@@ -194,12 +231,14 @@
   .text {
     margin: 0;
     color: var(--text);
-    font-size: 14px;
-    line-height: 20px;
+    font-size: 15px;
+    line-height: 21px;
   }
 
+  /* The rows are cards with their own edge now, so they line up with the
+     question rather than bleeding past it. */
   .options {
-    margin: 0 -10px;
+    margin: 0;
   }
 
   .actions {

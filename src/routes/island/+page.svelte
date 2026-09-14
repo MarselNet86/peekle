@@ -1199,6 +1199,7 @@
           <div class="reply asking">
             <QuestionPrompt
               questions={question.questions}
+              choice={island.choice}
               onsubmit={(answers) => island.answerQuestions(answers)}
               onclose={() => island.dismiss()}
             />

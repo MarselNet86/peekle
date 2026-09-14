@@ -74,6 +74,10 @@ pub fn run() {
                         }
                         // ⌥⌘Q: the island opens just enough to ask. tech.md 6.29.
                         Some(hotkey::Role::Quit) => windows::ask_quit(app),
+                        // ⌘ and a digit while a question stands: an event,
+                        // nothing more, so nothing here waits on the plugin.
+                        // tech.md 6.14.
+                        Some(hotkey::Role::Choice(index)) => windows::choose(app, index),
                         None => tracing::debug!("a combination nobody claims fired"),
                     }
                 })

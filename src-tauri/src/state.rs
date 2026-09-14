@@ -105,6 +105,12 @@ pub struct AppState {
     /// application, so the flag decides and AppKit is told only on a change.
     /// tech.md 6.13 and R-14.
     attach_key: AtomicBool,
+    /// How many of ⌘1…⌘9 are held for the question on screen. Locked only by
+    /// `windows::sync_choice_keys`, off the main thread, for the length of one
+    /// register or unregister round: the shortcut handler never reads it, so
+    /// the main thread cannot wait on it while registration waits on the main
+    /// thread. tech.md 6.14 and 6.13.
+    choice_keys: Mutex<u8>,
     /// What the system's keystroke counter read when the offer went up.
     /// Anything past it is somebody typing over the offer. tech.md 6.13.
     keys_at_open: AtomicU32,
@@ -221,6 +227,7 @@ impl AppState {
             hold_until: Mutex::new(None),
             hotkey_ok: AtomicBool::new(true),
             attach_key: AtomicBool::new(false),
+            choice_keys: Mutex::new(0),
             keys_at_open: AtomicU32::new(0),
             anchor: Mutex::new(None),
             preview: AtomicBool::new(false),
@@ -837,6 +844,12 @@ impl AppState {
 
     pub fn set_attach_key(&self, held: bool) -> bool {
         self.attach_key.swap(held, Ordering::SeqCst) != held
+    }
+
+    /// How many choice keys are held, locked for one round of taking or giving
+    /// them back. Never from the main thread. tech.md 6.14.
+    pub fn choice_keys(&self) -> std::sync::MutexGuard<'_, u8> {
+        self.lock(&self.choice_keys)
     }
 
     /// The webview opened or closed a screenshot at full size. tech.md 6.13.

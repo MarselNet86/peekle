@@ -46,6 +46,7 @@ export const EVENTS = {
   shot: 'peekle://shot',
   shotAttached: 'peekle://shot-attached',
   update: 'peekle://update',
+  choose: 'peekle://choose',
 } as const;
 
 export function hasTauri(): boolean {
@@ -240,4 +241,8 @@ export const events = {
     on<{ offer: ShotOffer | null }>(EVENTS.shot, handler),
   onShotAttached: (handler: (payload: { session_id: string; path: string }) => void) =>
     on<{ session_id: string; path: string }>(EVENTS.shotAttached, handler),
+  // ⌘ and a digit, pressed anywhere while a question stands open: the row to
+  // pick, counted from one. tech.md 6.14.
+  onChoose: (handler: (payload: { index: number }) => void) =>
+    on<{ index: number }>(EVENTS.choose, handler),
 };

@@ -81,6 +81,33 @@ describe('OptionList', () => {
     expect(onselect).not.toHaveBeenCalled();
   });
 
+  /// v87.5: every row wears the key that picks it, and ⌘ with the digit picks
+  /// it inside the island too. tech.md 6.14.
+  it('badges every row with ⌘ and its digit, and ⌘ with the digit picks it', async () => {
+    const onselect = vi.fn();
+    const { container } = render(OptionList, { props: { options, onselect } });
+
+    const keys = [...container.querySelectorAll('.key')].map((key) => key.textContent);
+    expect(keys).toEqual(['⌘1', '⌘2', '⌘3']);
+
+    await userEvent.keyboard('{Meta>}3{/Meta}');
+    expect(onselect).toHaveBeenCalledWith('deny');
+  });
+
+  it('takes ⌘ and a digit even from inside a field, where a bare digit is text', async () => {
+    const onselect = vi.fn();
+    render(OptionList, { props: { options, onselect } });
+    const field = document.createElement('input');
+    document.body.append(field);
+    field.focus();
+
+    await userEvent.keyboard('2');
+    expect(onselect).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Meta>}2{/Meta}');
+    expect(onselect).toHaveBeenCalledWith('allow_always');
+    field.remove();
+  });
+
   it('moves the selection with the arrow keys', async () => {
     const onselect = vi.fn();
     render(OptionList, { props: { options, selected: 'allow_once', onselect } });
