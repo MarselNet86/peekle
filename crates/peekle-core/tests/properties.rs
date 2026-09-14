@@ -75,10 +75,16 @@ proptest! {
         let mark = Rect::new(mark_x, mark_y, mark_w, mark_h);
         let Some(rect) = shape_rect(window, mark) else { return Ok(()) };
 
+        // A billionth of a pixel: rounding, not a pixel a pointer could land
+        // on. `f64::EPSILON` stood here until v87.1 and was three orders too
+        // tight for coordinates in the thousands, where one ulp is already
+        // 5e-13; the pinned case in `properties.proptest-regressions` is the
+        // rounding of a far edge and nothing more.
+        const SLACK: f64 = 1e-9;
         prop_assert!(rect.x >= window.x);
         prop_assert!(rect.y >= window.y);
-        prop_assert!(rect.x + rect.width <= window.x + window.width + f64::EPSILON);
-        prop_assert!(rect.y + rect.height <= window.y + window.height + f64::EPSILON);
+        prop_assert!(rect.x + rect.width <= window.x + window.width + SLACK);
+        prop_assert!(rect.y + rect.height <= window.y + window.height + SLACK);
     }
 
     /// Every point the hotspot claims has to be a point the window covers,
