@@ -57,6 +57,7 @@
   import AgentBar from '$lib/ui/AgentBar.svelte';
   import Button from '$lib/ui/Button.svelte';
   import IconButton from '$lib/ui/IconButton.svelte';
+  import InfoRow from '$lib/ui/InfoRow.svelte';
   import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
   import ActionRow from '$lib/ui/ActionRow.svelte';
@@ -105,6 +106,9 @@
   // setting stands where the list stood rather than in a window of its own.
   // tech.md 6.17.
   let settingsOpen = $state(false);
+  // This build's version, asked once: it does not change while the app runs.
+  // Null until Rust answers, and outside the shell. tech.md 6.5.
+  let appVersion = $state<string | null>(null);
 
   /** Which session is open, by id. A string rather than the card: the card is
    * a new object on every hook, and while a turn runs those arrive on every
@@ -674,6 +678,7 @@
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
     commands.windowReady('island');
+    void commands.appVersion().then((version) => (appVersion = version));
     return () => {
       void stop.then((offs) => offs.forEach((off) => off()));
     };
@@ -1011,6 +1016,12 @@
                   error={account.signOutError}
                   onaction={signOut}
                 />
+              {/if}
+              <!-- Last, after the account, as asked: the number a bug report
+                   needs. Stands whether or not anyone is signed in.
+                   tech.md v87.2. -->
+              {#if appVersion}
+                <InfoRow label={t.version} value={appVersion} />
               {/if}
             </div>
           {:else}

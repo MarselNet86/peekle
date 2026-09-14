@@ -2234,6 +2234,15 @@ pub fn open_bug_report(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     Ok(())
 }
 
+/// This build's version, the last row of the settings. Read from the package
+/// info rather than the crate: it is the number the update check compares tags
+/// against (6.30), so the settings and the update question cannot disagree.
+/// tech.md 6.5.
+#[tauri::command]
+pub fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
 #[tauri::command]
 pub fn window_ready(state: State<'_, Arc<AppState>>, label: String) {

@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.2   | [The version in the settings](#v872--the-version-in-the-settings)                                                        | 6.5, 9                 |
 | v85     | [Quitting asks first](#v85--quitting-asks-first)                                                                         | 6.29, 6.3, 6.5, 6.9, 9 |
 | v84     | [The island speaks Russian](#v84--the-island-speaks-russian)                                                             | 6.28, 6.5, 6.8, 9      |
 | v83.4   | [The first press is a press](#v834--the-first-press-is-a-press)                                                          | 6.7, 6.16, 9           |
@@ -61,6 +62,20 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.2 — The version in the settings
+
+2026-09-14
+
+![The version row in the settings](shots/settings-version.png)
+
+![The same row in Russian](shots/settings-version-ru.png)
+
+The settings end with the version of the app: `Version` on the left, the number
+on the right, dim and selectable, because it is what goes into a bug report. It
+is the number the update check compares releases against, so the settings and
+the update question never name two different versions. The row stands whether
+or not anyone is signed in.
 
 ## v85 — Quitting asks first
 
