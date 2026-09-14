@@ -22,6 +22,16 @@ pub const STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 
 const VERSION_ARGS: &[&str] = &["--version"];
 
+/// Signs Claude Code out on this Mac. tech.md 6.16.
+pub const LOGOUT_ARGS: &[&str] = &["auth", "logout"];
+
+/// How long a sign-out is given. Longer than a status read: signing out may go
+/// to the network to revoke the token. tech.md 6.16.
+pub const LOGOUT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How the CLI begins the line it prints when a sign-out did not go through.
+const LOGOUT_FAILED: &str = "Logout failed:";
+
 /// The cask Homebrew installs when the path does not say which one.
 const DEFAULT_CASK: &str = "claude-code";
 
@@ -161,6 +171,45 @@ pub fn assemble(
     }
 }
 
+/// What a sign-out came to, from how the process ended and what it printed.
+///
+/// From the 2.1.263 binary: success prints `Successfully logged out…` and
+/// exits zero, failure writes `Logout failed: <reason>` and exits one. The
+/// exit code decides; the line only gives the reason words. tech.md 6.16.
+pub fn logout_outcome(finished: bool, success: bool, output: &str) -> Result<(), String> {
+    if !finished {
+        return Err("Claude Code did not finish signing out.".to_string());
+    }
+    if success {
+        return Ok(());
+    }
+    let reason = output
+        .rfind(LOGOUT_FAILED)
+        .map(|at| &output[at + LOGOUT_FAILED.len()..])
+        .and_then(|rest| rest.lines().next())
+        .map(|line| {
+            line.split_whitespace()
+                .filter(|word| !word.contains("://"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|reason| !reason.is_empty());
+    Err(match reason {
+        Some(reason) => format!("Claude Code could not sign out: {reason}"),
+        None => "Claude Code could not sign out.".to_string(),
+    })
+}
+
+/// Signs Claude Code out. Blocking, up to `LOGOUT_TIMEOUT`. tech.md 6.16.
+pub fn logout() -> Result<(), String> {
+    let binary = crate::claude_path().ok_or("Claude Code is not installed on this Mac.")?;
+    let run = run_bounded(&binary, LOGOUT_ARGS, LOGOUT_TIMEOUT)
+        .ok_or("Claude Code could not be started.")?;
+    let outcome = logout_outcome(run.finished, run.success, &run.output);
+    tracing::debug!(ok = outcome.is_ok(), "claude auth logout");
+    outcome
+}
+
 /// Asks the CLI on this Mac. Blocking, up to two `STATUS_TIMEOUT`s; call it
 /// off the async runtime. tech.md 6.16.
 pub fn probe() -> AccountState {
@@ -169,9 +218,10 @@ pub fn probe() -> AccountState {
     };
     let binary = std::fs::canonicalize(&found).unwrap_or(found);
 
-    let version = run_bounded(&binary, VERSION_ARGS).and_then(|(_, out)| version_of(&out));
-    let status = match run_bounded(&binary, crate::auth::STATUS_ARGS) {
-        Some((finished, out)) => read_status(finished, &out),
+    let version =
+        run_bounded(&binary, VERSION_ARGS, STATUS_TIMEOUT).and_then(|run| version_of(&run.output));
+    let status = match run_bounded(&binary, crate::auth::STATUS_ARGS, STATUS_TIMEOUT) {
+        Some(run) => read_status(run.finished, &run.output),
         None => StatusAnswer::NoAnswer,
     };
     let state = assemble(Some(&binary), version, status);
@@ -180,10 +230,18 @@ pub fn probe() -> AccountState {
     state
 }
 
-/// Runs `binary args` for at most `STATUS_TIMEOUT` and returns whether it
-/// finished and what it printed on stdout and stderr together. `None` when it
-/// would not start.
-fn run_bounded(binary: &Path, args: &[&str]) -> Option<(bool, String)> {
+/// How a bounded run of the CLI ended.
+struct Run {
+    /// It exited inside the time it was given.
+    finished: bool,
+    /// It exited with zero. Never true for a run that did not finish.
+    success: bool,
+    /// stdout, then stderr.
+    output: String,
+}
+
+/// Runs `binary args` for at most `timeout`. `None` when it would not start.
+fn run_bounded(binary: &Path, args: &[&str], timeout: Duration) -> Option<Run> {
     let mut child = Command::new(binary)
         .args(args)
         .env("PATH", crate::pty::session_path())
@@ -207,23 +265,27 @@ fn run_bounded(binary: &Path, args: &[&str]) -> Option<(bool, String)> {
         text
     });
 
-    let deadline = Instant::now() + STATUS_TIMEOUT;
-    let finished = loop {
+    let deadline = Instant::now() + timeout;
+    let (finished, success) = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break true,
+            Ok(Some(status)) => break (true, status.success()),
             Ok(None) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(40));
             }
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                break false;
+                break (false, false);
             }
         }
     };
-    let mut text = out.join().unwrap_or_default();
-    text.push_str(&err.join().unwrap_or_default());
-    Some((finished, text))
+    let mut output = out.join().unwrap_or_default();
+    output.push_str(&err.join().unwrap_or_default());
+    Some(Run {
+        finished,
+        success,
+        output,
+    })
 }
 
 #[cfg(test)]
@@ -370,6 +432,44 @@ mod tests {
         assert_eq!(state.cli, CliState::Ready);
         assert_eq!(state.signed_in, None);
         assert_eq!(state.command, None);
+    }
+
+    /// The two endings the 2.1.263 binary has. Read out of the binary, not
+    /// captured live: a live sign-out would sign the owner out. tech.md 6.16.
+    #[test]
+    fn a_sign_out_that_exited_zero_went_through() {
+        assert_eq!(
+            logout_outcome(
+                true,
+                true,
+                "Successfully logged out from your Anthropic account.\n"
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn a_failed_sign_out_says_why_without_addresses() {
+        let err = logout_outcome(
+            true,
+            false,
+            "Logout failed: could not reach https://platform.claude.com/v1/oauth/revoke in time\n",
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Claude Code could not sign out: could not reach in time"
+        );
+        assert_eq!(
+            logout_outcome(true, false, "").unwrap_err(),
+            "Claude Code could not sign out."
+        );
+    }
+
+    /// No answer is not a sign-out, whatever was printed so far.
+    #[test]
+    fn a_sign_out_that_did_not_finish_did_not_happen() {
+        assert!(logout_outcome(false, false, "Successfully logged out").is_err());
     }
 
     #[test]

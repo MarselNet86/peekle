@@ -459,6 +459,37 @@ pub fn open_account_link(link: AccountLink) -> Result<(), String> {
     })
 }
 
+/// Signs Claude Code out on this Mac, then asks the CLI again. `signed_in:
+/// false` raises the sign-in window by the same gate as ever; there is no
+/// separate way to it. The sign-out is Claude Code's own, and it signs the
+/// terminal out too, which is why the island asks twice before calling this.
+/// tech.md 6.16.
+#[tauri::command]
+pub async fn sign_out(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<AccountState, String> {
+    let state = state.inner().clone();
+    if state
+        .account()
+        .is_some_and(|account| account.cli != CliState::Ready)
+    {
+        return Err("This Claude Code cannot sign out from Peekle.".to_string());
+    }
+    // A sign-in still running would sign straight back in behind this.
+    state.sign_in().cancel();
+    publish_sign_in(&app, SignInState::idle());
+
+    let outcome = tauri::async_runtime::spawn_blocking(peekle_core::account::logout)
+        .await
+        .map_err(|_| "Claude Code could not sign out.".to_string())?;
+    if let Err(reason) = outcome {
+        tracing::warn!("claude auth logout did not go through");
+        return Err(reason);
+    }
+    Ok(probe_account(&app, &state).await)
+}
+
 /// The verdict of a run whose process has exited. Asks the CLI first, because
 /// the status file is what Claude Code will act on, and settles once: a run
 /// that was cancelled while this asked settles nothing. tech.md 6.16, rule 10.
