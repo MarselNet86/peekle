@@ -1155,6 +1155,18 @@ fn a_deleted_chat_is_not_raised_by_its_live_hooks() {
     assert!(registry.cards().is_empty(), "a reply may not raise it");
 }
 
+/// v87.1: a session is known while its card stands and not once it is put
+/// away, so nothing expensive is done on a deleted chat's behalf. tech.md 6.11.
+#[test]
+fn a_session_is_known_while_its_card_stands_and_not_once_hidden() {
+    let mut registry = SessionRegistry::new();
+    assert!(!registry.knows("s"));
+    registry.ensure(session("s"), 0);
+    assert!(registry.knows("s"));
+    registry.hide("s");
+    assert!(!registry.knows("s"));
+}
+
 /// The lost update behind it: each writer wrote the whole set it had read at
 /// start, and the second one erased the first one's deletions. A save merges
 /// onto the file instead. tech.md 6.26.

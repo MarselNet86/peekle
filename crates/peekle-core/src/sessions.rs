@@ -407,6 +407,18 @@ impl SessionRegistry {
         self.local_pending.remove(session_id);
     }
 
+    /// Whether a card for this session stands, as the user sees the list: a
+    /// session put away is not known, however loudly its hooks keep arriving.
+    /// Cheap on purpose -- asked on every hook, before anything expensive is
+    /// done on the session's behalf. tech.md 6.11 and 6.26.
+    pub fn knows(&self, session_id: &str) -> bool {
+        !self.overrides.hidden.contains(session_id)
+            && self
+                .cards
+                .iter()
+                .any(|card| card.session.session_id == session_id)
+    }
+
     /// The cards as the user sees them: their titles over the hooks' titles,
     /// and nothing they put away.
     ///

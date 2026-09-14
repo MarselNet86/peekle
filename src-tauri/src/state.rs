@@ -918,6 +918,12 @@ impl AppState {
     /// One card by id, or `None` when the island does not know it. Used by
     /// deletion, which needs the folder the chat runs in to find its
     /// transcript. tech.md 6.26.
+    /// Whether the list holds a card for this session. Cheaper than `card`:
+    /// nothing is cloned, and it is asked on every hook. tech.md 6.11.
+    pub fn knows_session(&self, session_id: &str) -> bool {
+        self.lock(&self.sessions).knows(session_id)
+    }
+
     pub fn card(&self, session_id: &str) -> Option<SessionCard> {
         self.lock(&self.sessions)
             .cards()

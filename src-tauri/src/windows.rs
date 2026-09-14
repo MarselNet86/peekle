@@ -104,24 +104,25 @@ const DISMISS_AFTER: Duration = Duration::from_millis(800);
 /// is not a decision to walk away from the island. tech.md 6.7.
 const POINTER_MOVED: f64 = 10.0;
 
-fn update_hover(app: &AppHandle) {
-    let state = app.state::<Arc<AppState>>().inner().clone();
-
-    // No measurement yet means no rectangle. Guessing one would eat clicks
-    // next to a mark the user cannot even see. tech.md 6.7.
-    let Some(bounds) = state.shape_bounds() else {
-        return;
-    };
-    let Ok((frame, scale)) = platform::island_frame(app) else {
-        return;
-    };
+/// The rectangle the shape was drawn in, in physical pixels of the screen, or
+/// None before the webview has measured one. Guessing one would eat clicks
+/// next to a mark the user cannot even see. tech.md 6.7.
+fn shape_on_screen(app: &AppHandle, state: &AppState) -> Option<Rect> {
+    let bounds = state.shape_bounds()?;
+    let (frame, scale) = platform::island_frame(app).ok()?;
     let mark = Rect::new(
         bounds.x * scale,
         bounds.y * scale,
         bounds.width * scale,
         bounds.height * scale,
     );
-    let Some(rect) = shape_rect(frame, mark) else {
+    shape_rect(frame, mark)
+}
+
+fn update_hover(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+
+    let Some(rect) = shape_on_screen(app, &state) else {
         return;
     };
     let Ok(pointer) = app.cursor_position() else {
@@ -230,10 +231,37 @@ fn question_stands(view: &IslandView) -> bool {
 fn clicked_elsewhere(app: &AppHandle) {
     let state = app.state::<Arc<AppState>>().inner().clone();
     let view = state.view();
+
+    // A press on the resting mark that the window did not take. The mark
+    // takes the mouse only once the hover tracker has reacted to the pointer
+    // arriving, and that reaction is a main-thread event some tens of
+    // milliseconds behind the pointer -- more on a loaded Mac. A hand that
+    // arrives and presses inside that window sends its click through to the
+    // menu bar, and this monitor is where such a click ends up. Measured
+    // live: a press 0 ms after arrival was lost every time, 20 ms after
+    // arrival never. The click is spent on what it was aimed at. tech.md 6.7.
+    if view == IslandView::Collapsed {
+        let inside = shape_on_screen(app, &state)
+            .zip(app.cursor_position().ok())
+            .is_some_and(|(rect, pointer)| rect.contains((pointer.x, pointer.y)));
+        if press_on_rest_opens(&view, inside) {
+            tracing::debug!("a press reached the mark before the window took the mouse, opening");
+            set_view(app, IslandView::Sessions);
+        }
+        return;
+    }
+
     if click_elsewhere_collapses(&view, state.in_hand(), state.held_open(Instant::now())) {
         tracing::debug!("a click landed in another application, putting the island away");
         set_view(app, IslandView::Collapsed);
     }
+}
+
+/// Whether a press the window did not take opens the island: only on a
+/// resting island, and only inside the mark it drew. A pill is not the mark,
+/// and a press beside the mark is a press on the menu bar. tech.md 6.7.
+fn press_on_rest_opens(view: &IslandView, inside: bool) -> bool {
+    matches!(view, IslandView::Collapsed) && inside
 }
 
 /// Whether a press in another application puts the island away at once.
@@ -587,6 +615,17 @@ mod tests {
         stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+
+    /// v87.1: a press on the mark that arrived before the window took the
+    /// mouse still opens the island; a press anywhere else does not, and a
+    /// pill is not the mark. tech.md 6.7.
+    #[test]
+    fn a_press_the_window_missed_opens_the_island_only_on_the_mark() {
+        assert!(super::press_on_rest_opens(&IslandView::Collapsed, true));
+        assert!(!super::press_on_rest_opens(&IslandView::Collapsed, false));
+        assert!(!super::press_on_rest_opens(&IslandView::Pill, true));
+        assert!(!super::press_on_rest_opens(&IslandView::Sessions, true));
+    }
 
     /// v85: the quit question stays until it is answered, and it takes the
     /// mouse like every open view. tech.md 6.29.
