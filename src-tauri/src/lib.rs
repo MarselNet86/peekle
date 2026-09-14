@@ -290,6 +290,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::check_update,
             commands::install_update,
             commands::dismiss_update,
+            commands::open_update_notes,
             commands::set_session_cwd,
             commands::answer_trust,
             commands::dev_emit_prompt,
@@ -349,6 +350,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::check_update,
             commands::install_update,
             commands::dismiss_update,
+            commands::open_update_notes,
             commands::set_session_cwd,
             commands::answer_trust,
         ]

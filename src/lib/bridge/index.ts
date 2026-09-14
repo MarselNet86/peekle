@@ -29,6 +29,7 @@ import type { SignInState } from '$lib/types/generated/SignInState';
 import type { AccountLink } from '$lib/types/generated/AccountLink';
 import type { AccountState } from '$lib/types/generated/AccountState';
 import type { Language } from '$lib/types/generated/Language';
+import type { UpdateState } from '$lib/types/generated/UpdateState';
 
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
@@ -44,6 +45,7 @@ export const EVENTS = {
   notch: 'peekle://notch',
   shot: 'peekle://shot',
   shotAttached: 'peekle://shot-attached',
+  update: 'peekle://update',
 } as const;
 
 export function hasTauri(): boolean {
@@ -176,6 +178,17 @@ export const commands = {
   // island and ends the process. tech.md 6.29.
   quitApp: () => call<void>('quit_app'),
 
+  // The update check, by hand. The same one the timer runs, and it answers
+  // with the state it settled on. tech.md 6.30.
+  checkUpdate: () => call<UpdateState>('check_update'),
+  // "Install": Rust hands the dmg to Finder and stands aside, or copies the
+  // brew command for a copy Homebrew owns. tech.md 6.30.
+  installUpdate: () => call<void>('install_update'),
+  // "Later": this version does not come back until the app is restarted.
+  dismissUpdate: () => call<void>('dismiss_update'),
+  // The release page. No argument: the address is Rust's, as in 6.16 and 6.22.
+  openUpdateNotes: () => call<void>('open_update_notes'),
+
   // The permission mode, and only before the session has answered: it is a
   // spawn flag, not a line. tech.md 6.19.
   setMode: (sessionId: string, mode: PermissionMode) => call<void>('set_mode', { sessionId, mode }),
@@ -217,6 +230,7 @@ export const events = {
   onView: (handler: (view: IslandView) => void) => on<IslandView>(EVENTS.view, handler),
   onNotch: (handler: (notch: { height: number; width: number }) => void) =>
     on<{ height: number; width: number }>(EVENTS.notch, handler),
+  onUpdate: (handler: (state: UpdateState) => void) => on<UpdateState>(EVENTS.update, handler),
   onShot: (handler: (payload: { offer: ShotOffer | null }) => void) =>
     on<{ offer: ShotOffer | null }>(EVENTS.shot, handler),
   onShotAttached: (handler: (payload: { session_id: string; path: string }) => void) =>

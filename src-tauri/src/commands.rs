@@ -695,6 +695,27 @@ pub async fn check_update(
         })
 }
 
+/// Opens the release page of the update on offer. tech.md 6.30.
+///
+/// No argument: the address comes from the release Rust already fetched, so a
+/// page cannot point it anywhere of its own. The same rule as 6.16 and 6.22.
+#[tauri::command]
+pub fn open_update_notes(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let Some(update) = app
+        .try_state::<Arc<Updates>>()
+        .and_then(|updates| updates.ready())
+    else {
+        return Ok(());
+    };
+    if update.notes_url.is_empty() {
+        return Ok(());
+    }
+    platform::open_url(&update.notes_url).map_err(|err| {
+        tracing::warn!(error = %err, "could not open the release page");
+        copy::could_not_open_browser(state.language()).to_string()
+    })
+}
+
 /// "Later" on the update panel. tech.md 6.30.
 #[tauri::command]
 pub fn dismiss_update(app: AppHandle) {

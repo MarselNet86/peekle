@@ -20,12 +20,14 @@
   import { createSignIn } from '$lib/features/signin/signin.svelte';
   import { createAccount } from '$lib/features/account/account.svelte';
   import { createLanguage } from '$lib/features/language/language.svelte';
+  import { createUpdate } from '$lib/features/update/update.svelte';
   import { ACCOUNT_POLL, authScreen, needsAuth, polls } from '$lib/logic/account';
   import { LANGUAGE_CHOICES, needsLanguage } from '$lib/logic/language';
   import { copy } from '$lib/i18n/index.svelte';
   import { ISLAND } from '$lib/i18n/island';
   import { QUIT } from '$lib/i18n/quit';
   import QuitPanel from '$lib/ui/QuitPanel.svelte';
+  import UpdatePanel from '$lib/ui/UpdatePanel.svelte';
   import type { IslandView } from '$lib/types/generated/IslandView';
   import {
     contextLabel,
@@ -92,6 +94,8 @@
   const notify = createNotify();
   const badge = createBadge();
   const language = createLanguage();
+  // A new version, offered once it is already downloaded. tech.md 6.30.
+  const update = createUpdate();
   // Every word the route says itself, in the language in force. tech.md 6.28.
   const t = $derived(copy(ISLAND));
   const q = $derived(copy(QUIT));
@@ -495,7 +499,8 @@
   let quitting = $state(false);
   $effect(() => {
     const view = island.view;
-    if (view !== 'Quit') untrack(() => (returnTo = view === 'Pill' ? 'Collapsed' : view));
+    if (view !== 'Quit' && view !== 'Update')
+      untrack(() => (returnTo = view === 'Pill' ? 'Collapsed' : view));
   });
 
   function askQuit() {
@@ -664,6 +669,7 @@
       notify.start().then(() => () => {}),
       badge.start(),
       language.start(),
+      update.start(),
     ]);
     // Rust holds the panel back until this lands, so the island never appears
     // as an empty shape. tech.md section 8.
@@ -828,7 +834,19 @@
     <!-- A permission asks for yes or no, and neither answer needs the feed.
          The panel carries the question; pressing it anywhere but the buttons
          lands in the session it came from. tech.md 6.7. -->
-    {#if island.view === 'Quit'}
+    {#if island.view === 'Update' && update.update}
+      <!-- A newer version, already on disk. Raised over a resting island only,
+           so it never lands on top of somebody's work. tech.md 6.30. -->
+      <UpdatePanel
+        version={update.update.version}
+        size={update.update.size}
+        brew={update.update.install === 'Homebrew'}
+        busy={update.busy}
+        oninstall={() => update.install()}
+        onlater={() => update.later()}
+        onnotes={() => update.notes()}
+      />
+    {:else if island.view === 'Quit'}
       <!-- The quit question, over whatever was open: ⌥⌘Q or the button beside
            the gear. tech.md 6.29. -->
       <QuitPanel busy={quitting} onyes={() => answerQuit(true)} onno={() => answerQuit(false)} />
