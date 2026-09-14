@@ -146,12 +146,18 @@
   // screen, so a turn in a chat nobody is watching cannot move the row under
   // the cursor. Taken again on the next opening. tech.md 6.12.
   let held = $state<string[]>([]);
+  // `held` is read without being tracked. Read and written in the same effect,
+  // an empty list wrote a new empty array, the write woke the effect, and the
+  // effect wrote again -- until Svelte stopped every effect on the page and the
+  // island froze half grown. Only a person with no sessions at all saw it,
+  // which is every person on their first run. What this has to follow is the
+  // list opening and the sessions arriving, and nothing else.
   $effect(() => {
     if (!listing) {
-      held = [];
+      if (untrack(() => held.length) > 0) held = [];
       return;
     }
-    if (held.length === 0) {
+    if (untrack(() => held.length) === 0 && feed.sessions.length > 0) {
       held = feed.sessions.map((card) => card.session.session_id);
     }
   });
