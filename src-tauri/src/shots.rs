@@ -64,7 +64,11 @@ pub fn watch(app: &AppHandle, state: Arc<AppState>) {
         // clipboard is work and reading a counter is not, so the fast tick
         // never drags the slow one along with it. tech.md 6.13.
         let poll = Duration::from_millis(poll_ms);
-        let mut last_poll = Instant::now() - poll;
+        // Now, and never `now - poll` to get the first read one step sooner:
+        // `Instant` counts from the boot of the machine, and subtracting from
+        // it panics where there is nothing to subtract from. Peekle opened by
+        // a login item is exactly the case that would find that edge.
+        let mut last_poll = Instant::now();
         loop {
             let standing = state.shot.current().is_some();
             let step = if standing {
