@@ -64,6 +64,37 @@ where
     Err("no global pointer monitor on this platform, polling instead".to_string())
 }
 
+/// Raises the system dialog through `tauri-plugin-dialog` and answers once it
+/// closes: `None` for a cancel, the chosen paths otherwise. There is no sheet
+/// to dim a transparent window here, which is why macOS does not take this
+/// path. tech.md 6.23 and 6.27.
+pub fn pick(
+    app: &AppHandle,
+    kind: super::Pick,
+    title: &'static str,
+) -> tokio::sync::oneshot::Receiver<Option<Vec<std::path::PathBuf>>> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let dialog = app.dialog().file().set_title(title);
+    match kind {
+        super::Pick::Folder => dialog.pick_folder(move |picked| {
+            let chosen = picked.map(|folder| folder.into_path().into_iter().collect());
+            let _ = tx.send(chosen);
+        }),
+        super::Pick::Files => dialog.pick_files(move |picked| {
+            let chosen = picked.map(|files| {
+                files
+                    .into_iter()
+                    .filter_map(|file| file.into_path().ok())
+                    .collect()
+            });
+            let _ = tx.send(chosen);
+        }),
+    }
+    rx
+}
+
 /// No global click monitor here either. An open island still goes away on the
 /// leave clock of 6.7 once the pointer is off it. tech.md 6.27.
 pub fn watch_clicks<F>(_app: &AppHandle, _pressed: F) -> Result<(), String>

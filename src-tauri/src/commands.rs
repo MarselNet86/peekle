@@ -1886,8 +1886,6 @@ pub fn island_bounds(
 /// active app, and one nobody can see is worse than none. tech.md 6.23.
 #[tauri::command]
 pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-
     // The pointer goes into the dialog, and that is not leaving the island:
     // the leave clock is off for as long as the dialog stands. tech.md 6.7
     // and 6.23.
@@ -1895,24 +1893,21 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(platform::take_front);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Choose the folder this chat works in")
-        .pick_folder(move |picked| {
-            let _ = tx.send(picked);
-        });
-
-    let picked = rx.await;
+    let picked = platform::pick(
+        &app,
+        platform::Pick::Folder,
+        "Choose the folder this chat works in",
+    )
+    .await;
     state.set_dialog(false);
     let _ = app.run_on_main_thread(platform::give_front_back);
     let picked = picked.map_err(|_| "the folder dialog went away".to_string())?;
 
-    let Some(folder) = picked else {
+    let Some(chosen) = picked else {
         tracing::debug!("the folder dialog was cancelled");
         return Ok(None);
     };
-    let Ok(path) = folder.into_path() else {
+    let Some(path) = chosen.into_iter().next() else {
         return Err("That folder cannot be reached".to_string());
     };
     let path = path.to_string_lossy().to_string();
@@ -1929,23 +1924,13 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
 /// tech.md 6.25.
 #[tauri::command]
 pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-
     // The pointer goes into the dialog, and that is not leaving the island.
     // tech.md 6.7 and 6.25.
     let state = app.state::<Arc<AppState>>().inner().clone();
     state.set_dialog(true);
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(platform::take_front);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Attach files to this message")
-        .pick_files(move |picked| {
-            let _ = tx.send(picked);
-        });
-
-    let picked = rx.await;
+    let picked = platform::pick(&app, platform::Pick::Files, "Attach files to this message").await;
     state.set_dialog(false);
     let _ = app.run_on_main_thread(platform::give_front_back);
     let picked = picked.map_err(|_| "the file dialog went away".to_string())?;
@@ -1956,7 +1941,6 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
     };
     let paths: Vec<String> = files
         .into_iter()
-        .filter_map(|file| file.into_path().ok())
         .map(|path| path.to_string_lossy().to_string())
         .collect();
     tracing::info!(files = paths.len(), "files were chosen");

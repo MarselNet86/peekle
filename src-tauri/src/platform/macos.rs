@@ -277,6 +277,63 @@ pub fn take_front() {
     NSApplication::sharedApplication(marker).activate();
 }
 
+/// Raises the system open panel as a window of its own and answers once it
+/// closes: `None` for a cancel, the chosen paths otherwise.
+///
+/// Not through `tauri-plugin-dialog`. With no parent given, rfd under it takes
+/// the app's main or first window as one and runs the panel as a sheet on it,
+/// and the only window this app has is the transparent 720 by 560 island:
+/// macOS 26 dims a sheet's parent, and the dimming paints the whole invisible
+/// rectangle grey over the screen. A modeless panel has no parent to dim, and
+/// it does not stop the main thread either. tech.md 6.23.
+pub fn pick(
+    app: &AppHandle,
+    kind: super::Pick,
+    title: &'static str,
+) -> tokio::sync::oneshot::Receiver<Option<Vec<std::path::PathBuf>>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    // A main thread that cannot be reached drops the sender, and the receiver
+    // reports that as the dialog going away.
+    let _ = app.run_on_main_thread(move || {
+        use block2::RcBlock;
+        use objc2_app_kit::{NSModalResponse, NSModalResponseOK, NSOpenPanel};
+        use objc2_foundation::NSString;
+        use tauri_nspanel::objc2::MainThreadMarker;
+
+        let Some(marker) = MainThreadMarker::new() else {
+            tracing::warn!("not on the main thread, no open panel");
+            return;
+        };
+        let options = super::pick_options(kind);
+        let panel = NSOpenPanel::openPanel(marker);
+        panel.setCanChooseFiles(options.files);
+        panel.setCanChooseDirectories(options.directories);
+        panel.setAllowsMultipleSelection(options.multiple);
+        panel.setCanCreateDirectories(true);
+        panel.setMessage(Some(&NSString::from_str(title)));
+
+        // The handler holds the panel to read the choice off it; AppKit lets
+        // go of the handler once it has run, and the panel with it.
+        let kept = panel.clone();
+        let tx = std::cell::Cell::new(Some(tx));
+        let handler = RcBlock::new(move |result: NSModalResponse| {
+            let Some(tx) = tx.take() else {
+                return;
+            };
+            let chosen = (result == NSModalResponseOK).then(|| {
+                kept.URLs()
+                    .iter()
+                    .filter_map(|url| url.path())
+                    .map(|path| std::path::PathBuf::from(path.to_string()))
+                    .collect()
+            });
+            let _ = tx.send(chosen);
+        });
+        panel.beginWithCompletionHandler(&handler);
+    });
+    rx
+}
+
 /// Gives the front back to whoever had it. tech.md 6.23.
 pub fn give_front_back() {
     use objc2_app_kit::NSApplication;

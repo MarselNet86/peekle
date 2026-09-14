@@ -19,8 +19,8 @@ mod macos;
 use macos::active_screen;
 #[cfg(target_os = "macos")]
 pub use macos::{
-    apply_view, convert_all, give_front_back, notch_for, open_url, show, take_front, to_trash,
-    watch_clicks, watch_pointer, write_text, SystemPasteboard,
+    apply_view, convert_all, give_front_back, notch_for, open_url, pick, show, take_front,
+    to_trash, watch_clicks, watch_pointer, write_text, SystemPasteboard,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -29,8 +29,8 @@ mod desktop;
 use desktop::active_screen;
 #[cfg(not(target_os = "macos"))]
 pub use desktop::{
-    apply_view, convert_all, give_front_back, notch_for, open_url, show, take_front, to_trash,
-    watch_clicks, watch_pointer, write_text, SystemPasteboard,
+    apply_view, convert_all, give_front_back, notch_for, open_url, pick, show, take_front,
+    to_trash, watch_clicks, watch_pointer, write_text, SystemPasteboard,
 };
 
 pub const ISLAND: &str = "island";
@@ -50,6 +50,43 @@ pub enum PanelError {
     MissingPanel(String),
     #[error("tauri call failed: {0}")]
     Tauri(#[from] tauri::Error),
+}
+
+/// What a system open dialog is asked for. tech.md 6.23 and 6.25.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pick {
+    /// The one folder a new chat works in.
+    Folder,
+    /// Files to attach to a message, usually a set of them.
+    Files,
+}
+
+/// What the open panel lets a person choose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PickOptions {
+    pub directories: bool,
+    pub files: bool,
+    pub multiple: bool,
+}
+
+/// A folder is one folder and never a file; files are any number of files
+/// and never a folder. tech.md 6.23 and 6.25.
+// Read by the macOS panel only: the desktop plugin says the same thing through
+// the method it calls.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn pick_options(kind: Pick) -> PickOptions {
+    match kind {
+        Pick::Folder => PickOptions {
+            directories: true,
+            files: false,
+            multiple: false,
+        },
+        Pick::Files => PickOptions {
+            directories: false,
+            files: true,
+            multiple: true,
+        },
+    }
 }
 
 /// The notch of the display the island opens on. tech.md 6.7 and 6.27.
@@ -183,6 +220,16 @@ mod tests {
         assert!(!focusable_for(&IslandView::Ask));
         assert!(focusable_for(&IslandView::Sessions));
         assert!(focusable_for(&IslandView::Session("s".into())));
+    }
+
+    /// A new chat gets exactly one folder, and an attachment is files only.
+    /// tech.md 6.23 and 6.25.
+    #[test]
+    fn a_folder_pick_takes_one_folder_and_a_files_pick_takes_many_files() {
+        let folder = pick_options(Pick::Folder);
+        assert!(folder.directories && !folder.files && !folder.multiple);
+        let files = pick_options(Pick::Files);
+        assert!(!files.directories && files.files && files.multiple);
     }
 
     /// The signature stands in for a change counter, so two reads of one

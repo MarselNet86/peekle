@@ -49,7 +49,7 @@ directories = "6.0.0"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
 block2 = "0.6.2"
 objc2-app-kit = "0.3.2"
-objc2-foundation = { version = "0.3.2", features = ["NSFileManager", "NSURL", "NSError", "NSString"] }
+objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSFileManager", "NSURL", "NSError", "NSString"] }
 
 # Windows and Linux: the system trash, the clipboard picture, and PNG to write
 # it as a file. tech.md 6.27.
