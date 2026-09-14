@@ -494,9 +494,10 @@ pub(crate) fn refresh_session(
     // Asked before the file is touched, not after it is parsed. A chat the
     // user deleted goes on running in its terminal and raising hooks on every
     // tool call, and each one used to read and parse the whole transcript --
-    // 121 MB for a long session, measured live -- only to find no card to put
-    // it in. On a loaded Mac that was the island stalling under the pointer.
-    // tech.md 6.11 and 6.26.
+    // four megabytes for the owner's session, several times a second while
+    // it worked, measured live -- only to find no card to put it in. On a
+    // loaded Mac that was the island stalling under the pointer. tech.md 6.11
+    // and 6.26.
     if !state.knows_session(&session_id) {
         tracing::debug!(session = %session_id, "no card for this session, its transcript stays unread");
         return;

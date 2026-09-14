@@ -865,6 +865,29 @@ fn fork_session(
     Ok(session)
 }
 
+/// Runs a command's blocking body off the main thread and answers what it
+/// answered.
+///
+/// A command declared without `async` runs inline in the IPC handler, and on
+/// macOS the IPC handler is the main thread. Every command below that asks the
+/// registry, a socket or a process used to hold the island still for as long
+/// as that took: `find_live` runs `ps` per record, and an inbox drain alone is
+/// bounded at `IO_TIMEOUT`. An island held still is an island that hangs,
+/// which is how the owner described it. tech.md 6.5.
+async fn off_main<T, F>(language: peekle_core::types::Language, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    match tauri::async_runtime::spawn_blocking(work).await {
+        Ok(answer) => answer,
+        Err(err) => {
+            tracing::warn!(error = %err, "a command's work did not finish");
+            Err(copy::command_lost(language).to_string())
+        }
+    }
+}
+
 /// Delivers a reply into an observed chat. tech.md 6.5.
 ///
 /// Where it goes is the registry's call, made now rather than read off the
@@ -879,12 +902,26 @@ fn fork_session(
 /// Refused for a session the island already owns: it has a field already,
 /// and a second process for it would be the two-agents race of v34.
 #[tauri::command]
-pub fn continue_session(
+pub async fn continue_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
     text: String,
     shots: Vec<String>,
+) -> Result<peekle_core::types::SessionRef, String> {
+    let state = state.inner().clone();
+    off_main(state.language(), move || {
+        continue_now(&app, &state, &session_id, &text, &shots)
+    })
+    .await
+}
+
+fn continue_now(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    session_id: &str,
+    text: &str,
+    shots: &[String],
 ) -> Result<peekle_core::types::SessionRef, String> {
     let Some(card) = state
         .sessions()
@@ -895,15 +932,15 @@ pub fn continue_session(
         return Err(copy::session_gone(state.language()).to_string());
     };
 
-    if state.owns_session(&session_id) {
+    if state.owns_session(session_id) {
         return Err(copy::session_has_field(state.language()).to_string());
     }
 
-    let message = peekle_core::shots::compose(text.trim(), &shots);
+    let message = peekle_core::shots::compose(text.trim(), shots);
     let sessions_root = peekle_core::registry::default_root();
     let live = sessions_root
         .as_deref()
-        .and_then(|root| peekle_core::registry::find_live(root, &session_id));
+        .and_then(|root| peekle_core::registry::find_live(root, session_id));
 
     let session = match peekle_core::registry::route(live) {
         // Somebody holds the chat and takes nothing: copy it rather than
@@ -911,12 +948,10 @@ pub fn continue_session(
         // histories into one transcript -- the interleaving the CLI documents
         // -- and refusing leaves a field that takes words and delivers none.
         // The original stays exactly where its owner left it. tech.md 6.5.
-        peekle_core::registry::Route::Busy => {
-            return fork_session(&app, state.inner(), &card, &message)
-        }
+        peekle_core::registry::Route::Busy => return fork_session(app, state, &card, &message),
         peekle_core::registry::Route::Inbox(live) => {
             let Some(root) = sessions_root.as_deref() else {
-                return fork_session(&app, state.inner(), &card, &message);
+                return fork_session(app, state, &card, &message);
             };
             if let Err(err) = peekle_core::inbox::send(root, &live, &message) {
                 // The socket is there and would not take it. That is not a
@@ -928,7 +963,7 @@ pub fn continue_session(
                     error = %err,
                     "the live chat's inbox did not take the message, forking instead"
                 );
-                return fork_session(&app, state.inner(), &card, &message);
+                return fork_session(app, state, &card, &message);
             }
             tracing::info!(
                 session = %session_id,
@@ -942,16 +977,8 @@ pub fn continue_session(
         // it: a TUI that is still starting swallows a written line without
         // a trace. tech.md 6.5.
         peekle_core::registry::Route::Resume => {
-            let held = state.take_settings(&session_id);
-            spawn_owned(
-                &app,
-                state.inner(),
-                card.session.clone(),
-                true,
-                None,
-                &message,
-                held,
-            )?;
+            let held = state.take_settings(session_id);
+            spawn_owned(app, state, card.session.clone(), true, None, &message, held)?;
             card.session.clone()
         }
     };
@@ -970,7 +997,7 @@ pub fn continue_session(
             tracing::warn!(error = %err, "failed to emit sessions");
         }
         if let Some(entry_id) = entry_id {
-            watch_delivery(&app, state.inner(), session.session_id.clone(), entry_id);
+            watch_delivery(app, state, session.session_id.clone(), entry_id);
         }
     }
 
@@ -1755,13 +1782,21 @@ fn stop_refusal(language: Language, route: &peekle_core::registry::Route) -> &'s
 /// tool boundary the way any queued line is. No feed row is added on that
 /// path: the request arrives as a user turn and `UserPromptSubmit` adds it.
 #[tauri::command]
-pub fn stop_session(
+pub async fn stop_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<(), String> {
-    if state.owns_session(&session_id) {
-        state.pty().interrupt(&session_id).map_err(|err| {
+    let state = state.inner().clone();
+    off_main(state.language(), move || {
+        stop_now(&app, &state, &session_id)
+    })
+    .await
+}
+
+fn stop_now(app: &AppHandle, state: &Arc<AppState>, session_id: &str) -> Result<(), String> {
+    if state.owns_session(session_id) {
+        state.pty().interrupt(session_id).map_err(|err| {
             tracing::warn!(session = %session_id, error = %err, "could not interrupt");
             copy::nothing_running(state.language()).to_string()
         })?;
@@ -1772,14 +1807,12 @@ pub fn stop_session(
         // still be offering to end it. Measured live on 2026-09-08: the turn
         // is over 0.2s after the key. We pressed it, so we know. tech.md 6.5.
         let cards = state.set_session_status(
-            &session_for(state.inner(), &session_id).unwrap_or_else(|| {
-                peekle_core::types::SessionRef {
-                    session_id: session_id.clone(),
-                    cwd: String::new(),
-                    project: String::new(),
-                    pid: None,
-                    tty: None,
-                }
+            &session_for(state, session_id).unwrap_or_else(|| peekle_core::types::SessionRef {
+                session_id: session_id.to_string(),
+                cwd: String::new(),
+                project: String::new(),
+                pid: None,
+                tty: None,
             }),
             peekle_core::types::SessionStatus::Idle,
             now_ms(),
@@ -1793,7 +1826,7 @@ pub fn stop_session(
     let sessions_root = peekle_core::registry::default_root();
     let live = sessions_root
         .as_deref()
-        .and_then(|root| peekle_core::registry::find_live(root, &session_id));
+        .and_then(|root| peekle_core::registry::find_live(root, session_id));
     let route = peekle_core::registry::route(live);
     let refusal = stop_refusal(state.language(), &route);
     let over = matches!(route, peekle_core::registry::Route::Resume);
@@ -1804,7 +1837,7 @@ pub fn stop_session(
         // button there. It is corrected here rather than left for the stale
         // sweep ten minutes out: we just looked, and we know. tech.md 6.5.
         if over {
-            if let Some(session) = session_for(state.inner(), &session_id) {
+            if let Some(session) = session_for(state, session_id) {
                 let cards = state.set_session_status(
                     &session,
                     peekle_core::types::SessionStatus::Idle,
@@ -1826,7 +1859,7 @@ pub fn stop_session(
     // gone, and until the turn ends the feed says so and the button takes no
     // second press. A second press is a second message and a second turn in
     // somebody's chat. tech.md 6.5.
-    if let Some(cards) = state.start_stop(&session_id, now_ms()) {
+    if let Some(cards) = state.start_stop(session_id, now_ms()) {
         if let Err(err) = app.emit(events::SESSIONS, &cards) {
             tracing::warn!(error = %err, "failed to emit sessions");
         }
@@ -1970,18 +2003,26 @@ pub fn rename_session(
 /// three go together now, in this order -- the process first, so that nothing
 /// is still writing to the file that goes next. tech.md 6.26.
 #[tauri::command]
-pub fn delete_session(
+pub async fn delete_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<(), String> {
-    let card = state.card(&session_id);
+    let state = state.inner().clone();
+    off_main(state.language(), move || {
+        delete_now(&app, &state, &session_id)
+    })
+    .await
+}
+
+fn delete_now(app: &AppHandle, state: &Arc<AppState>, session_id: &str) -> Result<(), String> {
+    let card = state.card(session_id);
 
     // Ours to end. Somebody else's process is not ours to kill and we have no
     // handle on it either; the row goes, the process is theirs.
-    if state.owns_session(&session_id) {
-        state.pty().end(&session_id);
-        state.disown_session(&session_id);
+    if state.owns_session(session_id) {
+        state.pty().end(session_id);
+        state.disown_session(session_id);
         tracing::info!(session_id, "ended the process of a chat being deleted");
     }
 
@@ -2002,7 +2043,7 @@ pub fn delete_session(
 
     // The id stays remembered: a straggling hook from a process somebody else
     // is running would otherwise raise the row again a second later.
-    let cards = state.hide_session(&session_id);
+    let cards = state.hide_session(session_id);
     if let Err(err) = app.emit(events::SESSIONS, &cards) {
         tracing::warn!(error = %err, "failed to emit sessions");
     }

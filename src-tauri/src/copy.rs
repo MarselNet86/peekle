@@ -239,6 +239,17 @@ pub fn refused_the_stop(l: Language) -> &'static str {
     )
 }
 
+/// The thread a command's work ran on did not answer: a panic in it, or the
+/// runtime going down. Nothing the person did, and nothing to redo but the
+/// press. tech.md 6.5.
+pub fn command_lost(l: Language) -> &'static str {
+    say(
+        l,
+        "That did not go through",
+        "Не получилось, попробуйте ещё раз",
+    )
+}
+
 // Folders and files. tech.md 6.23 and 6.25.
 
 pub fn choose_folder_title(l: Language) -> &'static str {
