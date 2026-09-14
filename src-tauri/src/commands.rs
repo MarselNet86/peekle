@@ -646,6 +646,32 @@ pub fn set_usage_enabled(state: State<'_, Arc<AppState>>, enabled: bool) {
     state.lock_config().usage.enabled = enabled;
 }
 
+/// How long the shape takes to fold before the process goes. Long enough to
+/// see the island close on the word, short enough that nobody waits for it.
+/// tech.md 6.29.
+pub const QUIT_AFTER: Duration = Duration::from_millis(260);
+
+/// Quits Peekle, on a yes from the quit panel. tech.md 6.29.
+///
+/// Every hook still waiting is settled first, as `Dismissed`: a blocking hook
+/// whose server simply vanished is the leaked pending rule 10 forbids, and
+/// `Dismissed` is the answer that hands the question back to the terminal.
+#[tauri::command]
+pub fn quit_app(app: AppHandle, state: State<'_, Arc<AppState>>) {
+    let settled = state.pending.resolve_all(PromptOutcome::Dismissed);
+    if let Some(request) = state.clear_prompts() {
+        windows::close_prompt(&app, &request.id, &PromptOutcome::Dismissed);
+    }
+    tracing::info!(settled, "quitting on the person's word");
+
+    windows::set_view(&app, IslandView::Collapsed);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(QUIT_AFTER).await;
+        handle.exit(0);
+    });
+}
+
 /// The intent to open or collapse. Rust, not the webview, switches whether the
 /// window takes clicks. tech.md 6.5 and 6.7.
 #[tauri::command]

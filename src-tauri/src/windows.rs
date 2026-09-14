@@ -164,6 +164,13 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
+    // The quit question stands the same way: ⌥⌘Q is pressed with the pointer
+    // anywhere, and a panel that goes away before the hand reaches it asks
+    // nothing. A click beside it is still an answer, and it is no. tech.md 6.29.
+    if quit_stands(&view) {
+        state.pointer_returned();
+        return;
+    }
     // An island in the user's hands is not one they are walking away from: a
     // picture open, the cursor in the field or a draft in it, a dialog up, the
     // CLI asking about the folder. The screenshot frame of ⌃⇧⌘4 takes the
@@ -203,6 +210,18 @@ fn update_hover(app: &AppHandle) {
         tracing::debug!("the pointer left the island, putting it away");
         set_view(app, IslandView::Collapsed);
     }
+}
+
+/// ⌥⌘Q: the island opens just enough to ask whether to quit. Pressed again
+/// while it asks, it changes nothing: `set_view` ignores a view that stands.
+/// tech.md 6.29.
+pub fn ask_quit(app: &AppHandle) {
+    set_view(app, IslandView::Quit);
+}
+
+/// Whether the leave clock leaves this view alone. tech.md 6.29.
+fn quit_stands(view: &IslandView) -> bool {
+    matches!(view, IslandView::Quit)
 }
 
 /// A mouse button went down in another application.
@@ -566,6 +585,16 @@ mod tests {
         stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+
+    /// v85: the quit question stays until it is answered, and it takes the
+    /// mouse like every open view. tech.md 6.29.
+    #[test]
+    fn the_quit_question_stands_until_answered() {
+        assert!(super::quit_stands(&IslandView::Quit));
+        assert!(!super::quit_stands(&IslandView::Sessions));
+        assert!(IslandView::Quit.takes_clicks());
+        assert!(click_elsewhere_collapses(&IslandView::Quit, false, false));
+    }
 
     #[test]
     fn a_click_in_another_application_puts_an_open_island_away_at_once() {

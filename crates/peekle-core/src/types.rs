@@ -213,6 +213,9 @@ pub enum IslandView {
     /// The compact permission panel: what the tool is, what it wants, and two
     /// buttons. Answering yes or no needs none of the feed. tech.md 6.7.
     Ask,
+    /// The quit question: open just enough for one line and two buttons,
+    /// raised by ⌥⌘Q or the button beside the gear. tech.md 6.29.
+    Quit,
     /// The list of sessions.
     Sessions,
     /// The feed of one session, by its session_id.

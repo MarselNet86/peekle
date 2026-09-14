@@ -75,13 +75,19 @@ pub fn shortcut_of(combination: &Combination) -> Option<Shortcut> {
 pub enum Role {
     Toggle,
     Attach,
+    /// ⌥⌘Q: ask whether to quit. tech.md 6.29.
+    Quit,
 }
 
 pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
     let state = app.state::<Arc<AppState>>().inner().clone();
-    let (toggle, attach) = {
+    let (toggle, attach, quit) = {
         let config = state.lock_config();
-        (config.hotkey.toggle.clone(), config.hotkey.attach.clone())
+        (
+            config.hotkey.toggle.clone(),
+            config.hotkey.attach.clone(),
+            config.hotkey.quit.clone(),
+        )
     };
 
     if fires(&toggle, fired) {
@@ -90,7 +96,38 @@ pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
     if fires(&attach, fired) {
         return Some(Role::Attach);
     }
+    if fires(&quit, fired) {
+        return Some(Role::Quit);
+    }
     None
+}
+
+/// Registers the quit combination. A failure warns the way the toggle's does
+/// and changes nothing else: `hotkey_ok` is about the toggle, and a Peekle
+/// that cannot take ⌥⌘Q still quits from the button beside the gear. An empty
+/// spelling registers nothing. tech.md 6.29.
+pub fn install_quit(app: &AppHandle, spelling: &str) {
+    if spelling.trim().is_empty() {
+        return;
+    }
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let combination = match Combination::parse(spelling) {
+        Ok(combination) => combination,
+        Err(err) => {
+            tracing::warn!(error = %err, "the quit combination does not parse");
+            crate::windows::warn_hotkey(app, crate::copy::hotkey_invalid(state.language()));
+            return;
+        }
+    };
+    if let Err(err) = PluginRegistrar::new(app.clone()).register(&combination) {
+        tracing::warn!(error = %err, "the quit combination is unavailable");
+        crate::windows::warn_hotkey(
+            app,
+            &crate::copy::hotkey_taken(state.language(), &combination.to_display()),
+        );
+        return;
+    }
+    tracing::info!(combination = %combination.to_display(), "quit combination registered");
 }
 
 /// Whether a config spelling names the combination that fired. An unparseable

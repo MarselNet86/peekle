@@ -71,6 +71,8 @@ pub fn run() {
                             let app = app.clone();
                             tauri::async_runtime::spawn_blocking(move || shots::attach(&app));
                         }
+                        // ⌥⌘Q: the island opens just enough to ask. tech.md 6.29.
+                        Some(hotkey::Role::Quit) => windows::ask_quit(app),
                         None => tracing::debug!("a combination nobody claims fired"),
                     }
                 })
@@ -95,6 +97,7 @@ pub fn run() {
             let port = config.server.port;
             let token = config.server.token.clone();
             let toggle = config.hotkey.toggle.clone();
+            let quit = config.hotkey.quit.clone();
             let provider = usage_provider(&config);
 
             let state = Arc::new(state::AppState::new(
@@ -153,6 +156,7 @@ pub fn run() {
             watch_working_transcripts(app.handle(), Arc::clone(&state));
 
             hotkey::install(app.handle(), &toggle);
+            hotkey::install_quit(app.handle(), &quit);
 
             // A screenshot lives on the pasteboard and nowhere else, so the
             // island watches for one and offers to carry it into a session.
@@ -274,6 +278,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::choose_files,
             commands::get_language,
             commands::set_language,
+            commands::quit_app,
             commands::set_session_cwd,
             commands::answer_trust,
             commands::dev_emit_prompt,
@@ -329,6 +334,7 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::choose_files,
             commands::get_language,
             commands::set_language,
+            commands::quit_app,
             commands::set_session_cwd,
             commands::answer_trust,
         ]

@@ -84,6 +84,9 @@ pub struct HotkeyConfig {
     /// taken from the whole system for good would be a fault. Empty switches
     /// the offer off. tech.md 6.9 and 6.13.
     pub attach: String,
+    /// Asks whether to quit, from anywhere. Held for the life of the app, as
+    /// `toggle` is. Empty means do not register. tech.md 6.29.
+    pub quit: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -189,6 +192,7 @@ impl Default for HotkeyConfig {
             toggle: "Alt+Shift+KeyQ".to_string(),
             recall: String::new(),
             attach: "ArrowUp".to_string(),
+            quit: "Alt+Command+KeyQ".to_string(),
         }
     }
 }
@@ -360,6 +364,17 @@ mod tests {
         let off = Config::from_toml("[usage]\nbadge = false\n").unwrap();
         assert!(!off.usage.badge);
         assert!(off.usage.enabled, "one key off is not the section off");
+    }
+
+    /// ⌥⌘Q asks whether to quit out of the box, and a file that says nothing
+    /// about it keeps it. tech.md 6.29.
+    #[test]
+    fn the_quit_combination_is_option_command_q_until_a_file_says_otherwise() {
+        assert_eq!(Config::default().hotkey.quit, "Alt+Command+KeyQ");
+        let partial = Config::from_toml("[hotkey]\ntoggle = \"Alt+Shift+KeyQ\"\n").unwrap();
+        assert_eq!(partial.hotkey.quit, "Alt+Command+KeyQ");
+        let off = Config::from_toml("[hotkey]\nquit = \"\"\n").unwrap();
+        assert_eq!(off.hotkey.quit, "");
     }
 
     /// No language until someone picks one: a fresh install and an old file
