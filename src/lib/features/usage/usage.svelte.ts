@@ -79,26 +79,18 @@ export function connectLabel(snapshot: UsageSnapshot | null): string | null {
 }
 
 /**
- * Whether this is a sign-in problem rather than anything a reconnect touches.
- *
- * The one reason `claude auth login` is the answer to. tech.md 6.16.
- */
-export function needsSignIn(snapshot: UsageSnapshot | null): boolean {
-  return snapshot?.reason === 'NotLoggedIn';
-}
-
-/**
  * Whether the island cannot reach Anthropic at all.
  *
- * An agent needs the same network and the same account the bars do, so these
- * three mean a message typed now goes nowhere useful. The rest do not: usage
- * switched off, an endpoint that changed shape, a rate limit that clears
- * itself, a Keychain grant nobody has given -- under every one of those the
- * agent works and the chat stays open. tech.md 6.16.
+ * An agent needs the same network the bars do, so these two mean a message
+ * typed now goes nowhere useful. `NotLoggedIn` is not among them since v83:
+ * who is signed in is Claude Code's to say (`logic/account.ts`), and a usage
+ * read that failed while the CLI is signed in is a chat that works. Under the
+ * rest -- usage switched off, an endpoint that changed shape, a rate limit, a
+ * Keychain grant nobody has given -- the agent works too. tech.md 6.16.
  */
 export function outOfReach(snapshot: UsageSnapshot | null): boolean {
   const reason = snapshot?.reason;
-  return reason === 'NotLoggedIn' || reason === 'Offline' || reason === 'Network';
+  return reason === 'Offline' || reason === 'Network';
 }
 
 /**
@@ -114,10 +106,7 @@ export function outOfReach(snapshot: UsageSnapshot | null): boolean {
  * screen for the instant before `get_state` answers. tech.md 6.4.
  */
 export function gateSessions(snapshot: UsageSnapshot | null): boolean {
-  return (
-    !(snapshot?.keychain_granted ?? true) &&
-    (connectLabel(snapshot) !== null || needsSignIn(snapshot))
-  );
+  return !(snapshot?.keychain_granted ?? true) && connectLabel(snapshot) !== null;
 }
 
 export function createUsage() {
@@ -165,10 +154,6 @@ export function createUsage() {
     },
     get connectLabel() {
       return connectLabel(snapshot);
-    },
-    /** Whether the way back is a sign-in rather than a reconnect. 6.16. */
-    get needsSignIn() {
-      return needsSignIn(snapshot);
     },
     /** Whether Anthropic is unreachable, so an agent cannot work. 6.16. */
     get outOfReach() {

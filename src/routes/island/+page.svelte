@@ -18,6 +18,8 @@
   import { createShots } from '$lib/features/shots/shots.svelte';
   import { createUsage } from '$lib/features/usage/usage.svelte';
   import { createSignIn } from '$lib/features/signin/signin.svelte';
+  import { createAccount } from '$lib/features/account/account.svelte';
+  import { ACCOUNT_POLL, authScreen, needsAuth, polls } from '$lib/logic/account';
   import {
     contextLabel,
     noteTitle,
@@ -48,7 +50,8 @@
   import IconButton from '$lib/ui/IconButton.svelte';
   import PickerMenu from '$lib/ui/PickerMenu.svelte';
   import NoteBlock from '$lib/ui/NoteBlock.svelte';
-  import SignInPanel from '$lib/ui/SignInPanel.svelte';
+  import AuthPanel from '$lib/ui/AuthPanel.svelte';
+  import ReachPanel from '$lib/ui/ReachPanel.svelte';
   import FeedRow from '$lib/ui/FeedRow.svelte';
   import PermissionRow from '$lib/ui/PermissionRow.svelte';
   import QuestionPrompt from '$lib/ui/QuestionPrompt.svelte';
@@ -73,6 +76,7 @@
   const feed = createFeed();
   const usage = createUsage();
   const signIn = createSignIn();
+  const account = createAccount();
   const shots = createShots();
   const agent = createAgent();
   const notify = createNotify();
@@ -397,6 +401,32 @@
     isBarred({ outOfReach: usage.outOfReach, hasPrompt: island.prompt !== null }),
   );
 
+  // Signed out, no CLI, or a CLI too old to sign in: the list and the chats
+  // give way to the sign-in window, and nothing of the account's history
+  // stands beside it. The window also stays for a run in flight and for the
+  // tick of one that just went through. Never in front of a waiting hook.
+  // tech.md 6.16.
+  const accountGated = $derived(
+    island.prompt === null && (needsAuth(account.state, false) || signIn.showing),
+  );
+  const authOpen = $derived(accountGated && island.view !== 'Collapsed');
+
+  // Asked again whenever the list or a chat opens: the person may have signed
+  // in or installed from a terminal since. Quiet: nobody pressed anything.
+  $effect(() => {
+    const view = island.view;
+    if (view === 'Sessions' || typeof view === 'object') {
+      untrack(() => account.refresh({ quiet: true }));
+    }
+  });
+
+  // And while the screen waits on a terminal, it keeps asking. tech.md 6.16.
+  $effect(() => {
+    if (!authOpen || !polls(authScreen(account.state, signIn.state))) return;
+    const timer = setInterval(() => account.refresh({ quiet: true }), ACCOUNT_POLL);
+    return () => clearInterval(timer);
+  });
+
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
   const question = $derived(isQuestion(island.prompt) ? island.prompt : null);
 
@@ -576,6 +606,7 @@
       feed.start(),
       usage.start(),
       signIn.start(),
+      account.start(),
       shots.start(),
       agent.start(),
       notify.start().then(() => () => {}),
@@ -695,7 +726,7 @@
   {#if usage.outOfReach}
     <!-- The account screen, in the strip under the list. Says what is wrong
          and offers the one thing that fixes it. tech.md 6.16. -->
-    <div class="usage">{@render accountPanel(true)}</div>
+    <div class="usage">{@render reachPanel(true)}</div>
   {:else if usage.connectLabel || usage.failed}
     <div class="usage">
       {#if usage.connectLabel}
@@ -716,16 +747,12 @@
   {/if}
 {/snippet}
 
-{#snippet accountPanel(compact = false)}
-  <SignInPanel
+{#snippet reachPanel(compact = false)}
+  <ReachPanel
     {compact}
-    signIn={signIn.state}
     reason={usage.reasonCode}
-    busy={signIn.busy || usage.connecting}
-    onaction={() => (usage.needsSignIn ? signIn.begin() : usage.connect())}
-    oncode={(code) => signIn.submit(code)}
-    onopen={() => signIn.openPage()}
-    oncancel={() => signIn.cancel()}
+    busy={usage.connecting}
+    onretry={() => usage.connect()}
   />
 {/snippet}
 
@@ -777,6 +804,27 @@
           onopen={island.toast.session ? () => openSession(island.toast!.session!) : null}
         />
       {/key}
+    {:else if authOpen}
+      <!-- The sign-in window and nothing else: no rows, no search, no New
+           session, no gear. tech.md 6.16. -->
+      <div class="feed">
+        <div class="auth">
+          <AuthPanel
+            account={account.state}
+            signIn={signIn.state}
+            busy={signIn.busy}
+            checking={account.checking}
+            copied={account.copied}
+            onsignin={() => signIn.begin()}
+            oncode={(code) => signIn.submit(code)}
+            onopen={() => signIn.openPage()}
+            oncancel={() => signIn.cancel()}
+            oncheck={() => account.refresh()}
+            oncopy={() => account.copy()}
+            onlink={(link) => account.openLink(link)}
+          />
+        </div>
+      </div>
     {:else if listing}
       <div class="feed">
         {#if usage.gateSessions}
@@ -787,7 +835,7 @@
                tech.md 6.4. -->
           <div class="gate">
             {#if usage.outOfReach}
-              {@render accountPanel()}
+              {@render reachPanel()}
             {:else}
               <Button
                 label={usage.connecting ? 'Connecting' : (usage.connectLabel ?? 'Connect')}
@@ -922,7 +970,7 @@
             </svg>
           </button>
         </div>
-        <div class="blocked">{@render accountPanel()}</div>
+        <div class="blocked">{@render reachPanel()}</div>
       </div>
     {:else if current}
       <div class="feed">
@@ -1237,6 +1285,17 @@
     align-items: center;
     justify-content: center;
     padding: 0 18px 42px;
+  }
+
+  /* The sign-in window fills the shape and stands a little above centre, the
+     optical centre of a block whose top is heavier. tech.md 6.16. */
+  .auth {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px 26px;
   }
 
   /* Under the button, dim and small: it explains, it does not shout. */

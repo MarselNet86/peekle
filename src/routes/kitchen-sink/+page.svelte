@@ -16,7 +16,9 @@
   import ScrollHint from '$lib/ui/ScrollHint.svelte';
   import WorkLine from '$lib/ui/WorkLine.svelte';
   import SearchField from '$lib/ui/SearchField.svelte';
-  import SignInPanel from '$lib/ui/SignInPanel.svelte';
+  import AuthPanel from '$lib/ui/AuthPanel.svelte';
+  import CommandLine from '$lib/ui/CommandLine.svelte';
+  import ReachPanel from '$lib/ui/ReachPanel.svelte';
   import SessionRow from '$lib/ui/SessionRow.svelte';
   import Shape from '$lib/ui/Shape.svelte';
   import Sign from '$lib/ui/Sign.svelte';
@@ -45,6 +47,31 @@
   import type { FeedEntry } from '$lib/types/generated/FeedEntry';
   import type { IslandView } from '$lib/types/generated/IslandView';
   import type { TaskStatus } from '$lib/types/generated/TaskStatus';
+  import type { AccountState } from '$lib/types/generated/AccountState';
+  import type { SignInState } from '$lib/types/generated/SignInState';
+
+  const idleSignIn: SignInState = { stage: 'Idle', url: null, needs_code: false, error: null };
+  const noCli: AccountState = {
+    cli: 'Missing',
+    version: null,
+    install: 'Unknown',
+    signed_in: null,
+    command: 'curl -fsSL https://claude.ai/install.sh | bash',
+  };
+  const oldCli: AccountState = {
+    cli: 'Outdated',
+    version: '2.0.14',
+    install: 'Homebrew',
+    signed_in: null,
+    command: 'brew upgrade --cask claude-code@latest',
+  };
+  const signedOut: AccountState = {
+    cli: 'Ready',
+    version: '2.1.263',
+    install: 'Homebrew',
+    signed_in: false,
+    command: null,
+  };
 
   const NOW = 1_700_000_000;
 
@@ -354,70 +381,43 @@
     <h2>SearchField</h2>
     <div class="frame"><SearchField bind:value={search} /></div>
 
-    <h2>SignInPanel</h2>
+    <h2>AuthPanel</h2>
+    <!-- The sign-in window, one frame per screen of the table in 6.16. -->
+    <div class="frame"><AuthPanel account={noCli} signIn={idleSignIn} /></div>
+    <div class="frame"><AuthPanel account={oldCli} signIn={idleSignIn} /></div>
+    <div class="frame"><AuthPanel account={signedOut} signIn={idleSignIn} /></div>
     <div class="frame">
-      <SignInPanel
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
-        reason="Offline"
-      />
-    </div>
-    <div class="frame">
-      <SignInPanel
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
-        reason="NotLoggedIn"
-      />
-    </div>
-    <div class="frame">
-      <SignInPanel
+      <AuthPanel
+        account={signedOut}
         signIn={{
           stage: 'Waiting',
           url: 'https://claude.com/cai/oauth/authorize?code=true',
           needs_code: true,
           error: null,
         }}
-        reason="NotLoggedIn"
       />
     </div>
     <div class="frame">
-      <SignInPanel
-        signIn={{
-          stage: 'Failed',
-          url: null,
-          needs_code: false,
-          error: 'That code was not accepted.',
-        }}
-        reason="NotLoggedIn"
+      <AuthPanel
+        account={signedOut}
+        signIn={{ stage: 'Denied', url: null, needs_code: false, error: null }}
+      />
+    </div>
+    <div class="frame">
+      <AuthPanel
+        account={signedOut}
+        signIn={{ stage: 'Failed', url: null, needs_code: false, error: 'Invalid code' }}
       />
     </div>
 
-    <h2>SignInPanel · strip</h2>
-    <!-- The strip under the session list: the same panel in one column, with
-         everything a press can produce landing somewhere. tech.md 6.16. -->
+    <h2>CommandLine</h2>
     <div class="frame">
-      <SignInPanel
-        compact
-        signIn={{ stage: 'Idle', url: null, needs_code: false, error: null }}
-        reason="NotLoggedIn"
-      />
+      <CommandLine command="curl -fsSL https://claude.ai/install.sh | bash" />
     </div>
-    <div class="frame">
-      <SignInPanel
-        compact
-        signIn={{
-          stage: 'Refused',
-          url: null,
-          needs_code: false,
-          error: 'Check your connection or VPN, then wait a moment.',
-        }}
-        reason="NotLoggedIn"
-      />
-    </div>
-    <div class="frame">
-      <SignInPanel
-        compact
-        signIn={{ stage: 'Waiting', url: 'https://claude.ai/x', needs_code: true, error: null }}
-      />
-    </div>
+
+    <h2>ReachPanel</h2>
+    <div class="frame"><ReachPanel reason="Offline" /></div>
+    <div class="frame"><ReachPanel compact reason="Network" /></div>
 
     <h2>UsageCorner</h2>
     <!-- The top right corner of a dialogue: both windows and the context, the

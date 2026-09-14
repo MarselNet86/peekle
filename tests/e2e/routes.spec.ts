@@ -129,6 +129,9 @@ test.describe('overlay routes', () => {
       'ScrollHint',
       'Toast',
       'Kbd',
+      'AuthPanel',
+      'CommandLine',
+      'ReachPanel',
     ]) {
       await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
     }

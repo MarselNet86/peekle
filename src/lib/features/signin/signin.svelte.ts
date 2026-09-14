@@ -7,6 +7,7 @@
  */
 
 import { commands, events } from '$lib/bridge';
+import { DONE_HOLD } from '$lib/logic/account';
 import type { SignInState } from '$lib/types/generated/SignInState';
 import type { SignInStage } from '$lib/types/generated/SignInStage';
 
@@ -22,15 +23,34 @@ export function isOpen(state: SignInState): boolean {
 export function createSignIn() {
   let state = $state<SignInState>(IDLE);
   let busy = $state(false);
+  // The tick after a sign-in went through stands a moment before the window
+  // gives way. tech.md 6.16.
+  let holding = $state(false);
+  let hold: ReturnType<typeof setTimeout> | undefined;
+
+  function apply(next: SignInState) {
+    state = next;
+    if (next.stage !== 'Done') return;
+    holding = true;
+    clearTimeout(hold);
+    hold = setTimeout(() => {
+      holding = false;
+      if (state.stage === 'Done') state = IDLE;
+    }, DONE_HOLD);
+  }
 
   async function start(): Promise<() => void> {
-    return await events.onSignIn((next) => {
-      state = next;
+    const off = await events.onSignIn((next) => {
+      apply(next);
       // Rust has moved on, so nothing here is still in flight. Without this a
       // failure that came back as an event would leave the button spinning
       // over a process that is already gone.
       busy = false;
     });
+    return () => {
+      clearTimeout(hold);
+      off();
+    };
   }
 
   /** The press. Rust decides whether a login is even the right answer. */
@@ -38,7 +58,7 @@ export function createSignIn() {
     busy = true;
     try {
       const next = await commands.startSignIn();
-      if (next) state = next;
+      if (next) apply(next);
     } finally {
       busy = false;
     }
@@ -50,7 +70,7 @@ export function createSignIn() {
     busy = true;
     try {
       const next = await commands.submitSignInCode(code);
-      if (next) state = next;
+      if (next) apply(next);
     } finally {
       busy = false;
     }
@@ -66,6 +86,8 @@ export function createSignIn() {
     // later. Rust settles the process, and its event confirms the same thing.
     state = IDLE;
     busy = false;
+    holding = false;
+    clearTimeout(hold);
     await commands.cancelSignIn();
   }
 
@@ -78,6 +100,11 @@ export function createSignIn() {
     },
     get busy() {
       return busy;
+    },
+    /** Whether the window must stay for the run itself: a process up, or the
+     * tick of one that just went through. tech.md 6.16. */
+    get showing() {
+      return isOpen(state) || holding;
     },
     begin,
     submit,

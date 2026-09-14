@@ -26,6 +26,8 @@ import type { UsageSnapshot } from '$lib/types/generated/UsageSnapshot';
 import type { PromptOutcome } from '$lib/types/generated/PromptOutcome';
 import type { ShotOffer } from '$lib/types/generated/ShotOffer';
 import type { SignInState } from '$lib/types/generated/SignInState';
+import type { AccountLink } from '$lib/types/generated/AccountLink';
+import type { AccountState } from '$lib/types/generated/AccountState';
 
 export const EVENTS = {
   promptOpen: 'peekle://prompt-open',
@@ -34,6 +36,7 @@ export const EVENTS = {
   tasks: 'peekle://tasks',
   usage: 'peekle://usage',
   signIn: 'peekle://sign-in',
+  account: 'peekle://account',
   enabled: 'peekle://enabled',
   toast: 'peekle://toast',
   view: 'peekle://view',
@@ -72,6 +75,15 @@ export const commands = {
   submitSignInCode: (code: string) => call<SignInState>('submit_sign_in_code', { code }),
   openSignInPage: () => call<void>('open_sign_in_page'),
   cancelSignIn: () => call<void>('cancel_sign_in'),
+  // What Claude Code on this Mac can do for the account: installed, current,
+  // signed in. tech.md 6.16.
+  getAccount: () => call<AccountState>('get_account'),
+  refreshAccount: () => call<AccountState>('refresh_account'),
+  // No argument: Rust copies the command it put in the account state, so a
+  // page cannot put text of its own on the pasteboard. tech.md 6.16.
+  copyAccountCommand: () => call<string>('copy_account_command'),
+  // A page is named, never supplied: the addresses live in Rust. tech.md 6.16.
+  openAccountLink: (link: AccountLink) => call<void>('open_account_link', { link }),
   // The address lives in Rust and this takes no argument, so a page cannot
   // point it anywhere of its own. tech.md 6.22.
   openBugReport: () => call<void>('open_bug_report'),
@@ -181,6 +193,8 @@ export const events = {
   onTasks: (handler: (tasks: TaskItem[]) => void) => on<TaskItem[]>(EVENTS.tasks, handler),
   onUsage: (handler: (usage: UsageSnapshot) => void) => on<UsageSnapshot>(EVENTS.usage, handler),
   onSignIn: (handler: (state: SignInState) => void) => on<SignInState>(EVENTS.signIn, handler),
+  onAccount: (handler: (account: AccountState) => void) =>
+    on<AccountState>(EVENTS.account, handler),
   onEnabled: (handler: (payload: { enabled: boolean }) => void) =>
     on<{ enabled: boolean }>(EVENTS.enabled, handler),
   onToast: (handler: (toast: ToastRequest) => void) => on<ToastRequest>(EVENTS.toast, handler),
