@@ -17,6 +17,7 @@
       {
         "label": "island",
         "url": "/island/",
+        "acceptFirstMouse": true,
         "width": 720,
         "height": 560,
         "visible": false,
