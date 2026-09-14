@@ -103,9 +103,9 @@
 {/snippet}
 
 {#if multiple}
-  <Checkbox.Group bind:value={values} class="list">
+  <Checkbox.Group bind:value={values} class="option-list">
     {#each options as option, index (option.id)}
-      <Checkbox.Root value={option.id} class="row" data-kind={option.kind}>
+      <Checkbox.Root value={option.id} class="option" data-kind={option.kind}>
         {#snippet children({ checked }: { checked: boolean })}
           <span class="box" class:checked aria-hidden="true">
             {#if checked}
@@ -130,10 +130,10 @@
   <RadioGroup.Root
     bind:value={selected}
     onValueChange={(id: string) => onselect?.(id)}
-    class="list"
+    class="option-list"
   >
     {#each options as option, index (option.id)}
-      <RadioGroup.Item value={option.id} class="row" data-kind={option.kind}>
+      <RadioGroup.Item value={option.id} class="option" data-kind={option.kind}>
         {@render body(option, index)}
       </RadioGroup.Item>
     {/each}
@@ -141,7 +141,7 @@
 {/if}
 
 <style>
-  :global(.list) {
+  :global(.option-list) {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -152,7 +152,7 @@
      it, and the key that picks it stands at its head. The ground is a breath
      of the brand green rather than grey, so the rows belong to the product
      and not to a system dialog. tech.md 9. */
-  :global(.row) {
+  :global(.option) {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -175,20 +175,20 @@
   /* Lighter than the checked state on purpose: hover says "this one is under
      the pointer", checked says "this one is the answer", and they are on
      screen together. */
-  :global(.row:hover) {
+  :global(.option:hover) {
     background: rgba(48, 209, 88, 0.1);
     border-color: rgba(48, 209, 88, 0.24);
   }
 
-  :global(.row:focus-visible),
-  :global(.row[data-state='checked']) {
+  :global(.option:focus-visible),
+  :global(.option[data-state='checked']) {
     background: rgba(48, 209, 88, 0.16);
     border-color: rgba(48, 209, 88, 0.5);
     box-shadow: 0 0 20px rgba(48, 209, 88, 0.14);
     outline: none;
   }
 
-  :global(.row[data-kind='Deny'][data-state='checked']) {
+  :global(.option[data-kind='Deny'][data-state='checked']) {
     background: rgba(232, 101, 74, 0.18);
     border-color: rgba(232, 101, 74, 0.5);
     box-shadow: none;
@@ -218,8 +218,8 @@
     opacity: 0.85;
   }
 
-  :global(.row:hover) .key,
-  :global(.row[data-state='checked']) .key {
+  :global(.option:hover) .key,
+  :global(.option[data-state='checked']) .key {
     background: rgba(48, 209, 88, 0.26);
   }
 

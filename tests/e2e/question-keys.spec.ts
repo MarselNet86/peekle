@@ -53,9 +53,9 @@ const card = {
   updated_at: 0,
 };
 
-async function stub(page: Page) {
+async function stub(page: Page, view: unknown = { Session: 's1' }) {
   await page.addInitScript(
-    ({ question, card }) => {
+    ({ question, card, view }) => {
       const w = window as unknown as Record<string, unknown>;
       const handlers: Record<string, number> = {};
       const calls: { command: string; args: unknown }[] = [];
@@ -90,7 +90,7 @@ async function stub(page: Page) {
           case 'get_state':
             return {
               enabled: true,
-              view: { Session: 's1' },
+              view,
               active_prompt: question,
               sessions: [card],
               tasks: [],
@@ -132,7 +132,7 @@ async function stub(page: Page) {
       w.__choose = (index: number) => push('peekle://choose', { index });
       w.__listening = (event: string) => event in handlers;
     },
-    { question, card },
+    { question, card, view },
   );
 }
 
@@ -143,7 +143,31 @@ test.describe('the question window', () => {
 
     await expect(page.getByText('Claude asks')).toBeVisible();
     await expect(page.getByText('Which deployment target?')).toBeVisible();
-    await expect(page.locator('.row .key')).toHaveText(['⌘1', '⌘2', '⌘3', '⌘4']);
+    await expect(page.locator('.option .key')).toHaveText(['⌘1', '⌘2', '⌘3', '⌘4']);
+  });
+
+  /// v87.5.1: the answer cards are styled by a class of their own. They used
+  /// to be `.row`, globally, and every other row in the product -- the session
+  /// list, the settings, the feed -- took their green edge. tech.md 9.
+  test('lends its card style to no other row in the island', async ({ page }) => {
+    // The session list, where every chat is a `.row` of its own. The card
+    // styles are loaded with the route whether or not a question is showing.
+    await stub(page, 'Sessions');
+    await page.goto(ROUTE);
+    await expect(page.locator('.row').first()).toBeVisible();
+
+    const rows = await page.evaluate(() => {
+      const green = /48,\s*209,\s*88/;
+      const styles = [...document.querySelectorAll('.row')].map((row) => getComputedStyle(row));
+      return {
+        count: styles.length,
+        green: styles.filter(
+          (style) => green.test(style.borderTopColor) || green.test(style.backgroundColor),
+        ).length,
+      };
+    });
+    expect(rows.count).toBeGreaterThan(0);
+    expect(rows.green).toBe(0);
   });
 
   test('⌘ and a digit pressed anywhere answers with that row', async ({ page }) => {
