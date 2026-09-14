@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9    |
 | v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9 |
 | v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9               |
 | v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9    |
@@ -56,6 +57,33 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v83 — Sign in picks up the browser
+
+2026-09-14
+
+![Sign in](shots/auth-signin.png)
+
+![Waiting on the browser](shots/auth-waiting.png)
+
+![Signed in](shots/auth-done.png)
+
+![Access declined](shots/auth-denied.png)
+
+![A code from the page](shots/auth-code.png)
+
+![Install Claude Code](shots/auth-install.png)
+
+![Update Claude Code](shots/auth-update.png)
+
+A signed-out person sees one window and nothing of their past sessions.
+`Sign in with Claude` opens the browser; approving there finishes the sign-in
+with nothing pressed in the island, and declining says `Access declined` with
+a way to try again. When the page shows a code instead, `Have a code?` takes
+it. No Claude Code on the Mac shows the install command with `Copy`; one too
+old to sign in shows the update command for the way it was installed, and both
+screens change by themselves once the terminal is done. The old
+`Signed in, but the API refused` screen is gone.
 
 ## v82 — The island floats where there is no notch
 
