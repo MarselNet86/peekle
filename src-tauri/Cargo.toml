@@ -31,6 +31,7 @@ peekle-core = { version = "0.1.0", path = "../crates/peekle-core" }
 thiserror = "2.0.20"
 peekle-server = { version = "0.1.0", path = "../crates/peekle-server" }
 peekle-usage = { version = "0.1.0", path = "../crates/peekle-usage" }
+peekle-update = { version = "0.1.0", path = "../crates/peekle-update" }
 axum = "0.8.9"
 tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"

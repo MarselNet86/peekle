@@ -345,6 +345,43 @@ pub fn notice_refused(l: Language) -> &'static str {
     )
 }
 
+// The update. tech.md 6.30.
+
+/// The pill that stands after the brew command lands on the pasteboard: the
+/// person has the command and Homebrew does the rest.
+pub fn update_command_copied(l: Language) -> &'static str {
+    say(
+        l,
+        "Command copied. Run it in a terminal.",
+        "Команда скопирована. Запустите её в терминале.",
+    )
+}
+
+pub fn could_not_copy_update_command(l: Language) -> &'static str {
+    say(
+        l,
+        "could not copy the command",
+        "Не удалось скопировать команду",
+    )
+}
+
+/// The file was there when the question was asked and is not there now.
+pub fn update_file_gone(l: Language) -> &'static str {
+    say(
+        l,
+        "the downloaded update is no longer on disk",
+        "Скачанного обновления на диске больше нет",
+    )
+}
+
+pub fn could_not_open_update(l: Language) -> &'static str {
+    say(
+        l,
+        "could not open the downloaded update",
+        "Не удалось открыть скачанное обновление",
+    )
+}
+
 pub fn could_not_open_telegram(l: Language) -> &'static str {
     say(l, "could not open Telegram", "Не удалось открыть Telegram")
 }

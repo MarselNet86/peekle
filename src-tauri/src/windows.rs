@@ -164,10 +164,12 @@ fn update_hover(app: &AppHandle) {
         state.pointer_returned();
         return;
     }
-    // The quit question stands the same way: ⌥⌘Q is pressed with the pointer
-    // anywhere, and a panel that goes away before the hand reaches it asks
-    // nothing. A click beside it is still an answer, and it is no. tech.md 6.29.
-    if quit_stands(&view) {
+    // A question the island asked stands the same way: ⌥⌘Q is pressed with the
+    // pointer anywhere, and an update is offered while nobody is near the
+    // shape at all. A panel that goes away before the hand reaches it asks
+    // nothing. A click beside it is still an answer, and it is no.
+    // tech.md 6.29 and 6.30.
+    if question_stands(&view) {
         state.pointer_returned();
         return;
     }
@@ -219,9 +221,9 @@ pub fn ask_quit(app: &AppHandle) {
     set_view(app, IslandView::Quit);
 }
 
-/// Whether the leave clock leaves this view alone. tech.md 6.29.
-fn quit_stands(view: &IslandView) -> bool {
-    matches!(view, IslandView::Quit)
+/// Whether the leave clock leaves this view alone. tech.md 6.29 and 6.30.
+fn question_stands(view: &IslandView) -> bool {
+    matches!(view, IslandView::Quit | IslandView::Update)
 }
 
 /// A mouse button went down in another application.
@@ -590,10 +592,21 @@ mod tests {
     /// mouse like every open view. tech.md 6.29.
     #[test]
     fn the_quit_question_stands_until_answered() {
-        assert!(super::quit_stands(&IslandView::Quit));
-        assert!(!super::quit_stands(&IslandView::Sessions));
+        assert!(super::question_stands(&IslandView::Quit));
+        assert!(!super::question_stands(&IslandView::Sessions));
         assert!(IslandView::Quit.takes_clicks());
         assert!(click_elsewhere_collapses(&IslandView::Quit, false, false));
+    }
+
+    /// v87: the update question stands the same way. It is raised while nobody
+    /// is near the shape, so a leave clock would take it away before the hand
+    /// arrived; a click beside it is still an answer, and it is "later".
+    /// tech.md 6.30.
+    #[test]
+    fn the_update_question_stands_until_answered() {
+        assert!(super::question_stands(&IslandView::Update));
+        assert!(IslandView::Update.takes_clicks());
+        assert!(click_elsewhere_collapses(&IslandView::Update, false, false));
     }
 
     #[test]

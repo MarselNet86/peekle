@@ -214,6 +214,10 @@ pub struct Update {
     /// The release page, for whoever would rather read before installing.
     pub notes_url: String,
     /// Bytes of the dmg. Zero when the release named no size.
+    ///
+    /// Typed as a number rather than a bigint on the other side: this is a file
+    /// size shown as megabytes, and it arrives over JSON as a number anyway.
+    #[ts(type = "number")]
     pub size: u64,
     pub install: InstallKind,
 }

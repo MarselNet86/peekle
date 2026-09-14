@@ -15,3 +15,6 @@ pub const VIEW: &str = "peekle://view";
 pub const NOTCH: &str = "peekle://notch";
 pub const SHOT: &str = "peekle://shot";
 pub const SHOT_ATTACHED: &str = "peekle://shot-attached";
+/// What the updater is doing, after every check, download and refusal.
+/// tech.md 6.30.
+pub const UPDATE: &str = "peekle://update";

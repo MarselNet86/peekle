@@ -2753,6 +2753,7 @@ dependencies = [
  "peekle-core",
  "peekle-hotkey",
  "peekle-server",
+ "peekle-update",
  "peekle-usage",
  "png 0.17.16",
  "proptest",

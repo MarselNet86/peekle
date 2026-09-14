@@ -7,6 +7,7 @@ mod notify;
 mod platform;
 mod shots;
 mod state;
+mod update;
 mod windows;
 
 use std::sync::Arc;
@@ -107,6 +108,7 @@ pub fn run() {
                 Arc::new(platform::SystemKeys::new()),
             ));
             app.manage(Arc::clone(&state));
+            app.manage(Arc::new(update::Updates::default()));
 
             match app.get_webview_window(platform::ISLAND) {
                 Some(window) => tracing::debug!(
@@ -165,6 +167,11 @@ pub fn run() {
             shots::watch(app.handle(), Arc::clone(&state));
 
             poll_usage(app.handle(), Arc::clone(&state));
+
+            // Peekle has no dock icon and no menu bar, so a new version is
+            // something nobody would otherwise notice. The check runs in the
+            // background and only speaks once the file is on disk. tech.md 6.30.
+            update::watch(app.handle(), Arc::clone(&state));
 
             // Who is signed in is Claude Code's to say, and asking it raises no
             // dialog of Peekle's: the island knows before it is first opened
@@ -280,6 +287,9 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::get_language,
             commands::set_language,
             commands::quit_app,
+            commands::check_update,
+            commands::install_update,
+            commands::dismiss_update,
             commands::set_session_cwd,
             commands::answer_trust,
             commands::dev_emit_prompt,
@@ -336,6 +346,9 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
             commands::get_language,
             commands::set_language,
             commands::quit_app,
+            commands::check_update,
+            commands::install_update,
+            commands::dismiss_update,
             commands::set_session_cwd,
             commands::answer_trust,
         ]

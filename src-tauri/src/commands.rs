@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use peekle_core::types::{
-    AccountLink, AccountState, CliState, IslandView, Language, PeekleState, PromptAnswer,
-    PromptOutcome, SignInStage, SignInState, ToastRequest, ToastTone, UsageSnapshot,
+    AccountLink, AccountState, CliState, InstallKind, IslandView, Language, PeekleState,
+    PromptAnswer, PromptOutcome, SignInStage, SignInState, ToastRequest, ToastTone, UpdateState,
+    UsageSnapshot,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -15,6 +16,7 @@ use crate::events;
 use crate::notify::Notifier;
 use crate::platform;
 use crate::state::{AppState, HeldKind, HeldSettings};
+use crate::update::{self, Updates};
 use crate::windows;
 
 #[tauri::command]
@@ -670,6 +672,98 @@ pub fn quit_app(app: AppHandle, state: State<'_, Arc<AppState>>) {
         tokio::time::sleep(QUIT_AFTER).await;
         handle.exit(0);
     });
+}
+
+/// Asks the repository what it has, by hand. The same check the timer runs.
+/// tech.md 6.30.
+///
+/// Blocking, and deliberately so: the ask talks to the network and the dmg is a
+/// hundred megabytes, so it goes on a thread of its own rather than on the one
+/// that answers hooks.
+#[tauri::command]
+pub async fn check_update(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<UpdateState, String> {
+    let repo = state.lock_config().update.repo.clone();
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || update::check(&handle, &repo))
+        .await
+        .map_err(|err| {
+            tracing::warn!(error = %err, "the update check did not finish");
+            String::new()
+        })
+}
+
+/// "Later" on the update panel. tech.md 6.30.
+#[tauri::command]
+pub fn dismiss_update(app: AppHandle) {
+    update::dismiss(&app);
+}
+
+/// "Install" on the update panel. tech.md 6.30.
+///
+/// Two endings, and which one is taken was decided when the check ran. A plain
+/// bundle gets the dmg handed to Finder and the process ends: replacing a
+/// bundle that is executing right now is not something this app can do, and a
+/// Finder window behind a running Peekle is an install that quietly does not
+/// happen. A Homebrew copy gets the command on the pasteboard and nothing
+/// ends: brew owns the bundle, and brew is what upgrades it.
+///
+/// Either way the hooks still waiting are settled first, as `Dismissed`: a
+/// blocking hook whose server vanished is the leaked pending rule 10 forbids.
+#[tauri::command]
+pub fn install_update(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let Some(update) = app
+        .try_state::<Arc<Updates>>()
+        .and_then(|updates| updates.ready())
+    else {
+        return Ok(());
+    };
+
+    if update.install == InstallKind::Homebrew {
+        platform::write_text(peekle_update::BREW_COMMAND).map_err(|err| {
+            tracing::warn!(error = %err, "could not copy the brew command");
+            copy::could_not_copy_update_command(state.language()).to_string()
+        })?;
+        windows::set_view(&app, IslandView::Collapsed);
+        windows::toast(
+            &app,
+            ToastRequest {
+                session: None,
+                text: copy::update_command_copied(state.language()).to_string(),
+                detail: Some(peekle_update::BREW_COMMAND.to_string()),
+                took_ms: None,
+                tone: ToastTone::Neutral,
+                ttl_ms: 4000,
+                badge: None,
+            },
+        );
+        return Ok(());
+    }
+
+    let Some(dmg) = update::dmg_for(&update) else {
+        tracing::warn!(version = %update.version, "the downloaded update is gone");
+        return Err(copy::update_file_gone(state.language()).to_string());
+    };
+    platform::open_url(&dmg.to_string_lossy()).map_err(|err| {
+        tracing::warn!(error = %err, "could not open the update");
+        copy::could_not_open_update(state.language()).to_string()
+    })?;
+
+    let settled = state.pending.resolve_all(PromptOutcome::Dismissed);
+    if let Some(request) = state.clear_prompts() {
+        windows::close_prompt(&app, &request.id, &PromptOutcome::Dismissed);
+    }
+    tracing::info!(settled, version = %update.version, "installing and standing aside");
+
+    windows::set_view(&app, IslandView::Collapsed);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(QUIT_AFTER).await;
+        handle.exit(0);
+    });
+    Ok(())
 }
 
 /// The intent to open or collapse. Rust, not the webview, switches whether the
