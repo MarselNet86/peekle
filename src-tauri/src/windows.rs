@@ -79,6 +79,9 @@ pub fn track_pointer(app: &AppHandle) {
     if let Err(err) = platform::watch_pointer(app, update_hover) {
         tracing::warn!(error = %err, "no mouse monitor, the mark falls back to the poll");
     }
+    if let Err(err) = platform::watch_clicks(app, clicked_elsewhere) {
+        tracing::warn!(error = %err, "no click monitor, a click elsewhere waits for the leave clock");
+    }
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -200,6 +203,29 @@ fn update_hover(app: &AppHandle) {
         tracing::debug!("the pointer left the island, putting it away");
         set_view(app, IslandView::Collapsed);
     }
+}
+
+/// A mouse button went down in another application.
+fn clicked_elsewhere(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let view = state.view();
+    if click_elsewhere_collapses(&view, state.in_hand(), state.held_open(Instant::now())) {
+        tracing::debug!("a click landed in another application, putting the island away");
+        set_view(app, IslandView::Collapsed);
+    }
+}
+
+/// Whether a press in another application puts the island away at once.
+///
+/// A click beside the shape inside the window already does, and a click past
+/// the window is the same decision. Everything that keeps the leave clock from
+/// running keeps this from firing too: the island in the user's hands -- the
+/// frame of ⌃⇧⌘4 is a press in another process, and it must not fold a chat
+/// being written in -- and an island that opened by itself and that nobody
+/// came to, which a click in the editor says nothing about. A pill and a
+/// resting mark are not open. tech.md 6.7.
+fn click_elsewhere_collapses(view: &IslandView, in_hand: bool, held: bool) -> bool {
+    view.takes_clicks() && !in_hand && !held
 }
 
 /// The one way the island changes shape. Stores the intent, tells the webview
@@ -536,10 +562,38 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 #[cfg(test)]
 mod tests {
     use super::{
-        collapses_after_answer, pill_holds_off, reveal_takes, stands_until_answered, view_for,
-        ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
+        click_elsewhere_collapses, collapses_after_answer, pill_holds_off, reveal_takes,
+        stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{IslandView, PromptKind, PromptRequest, SessionRef};
+
+    #[test]
+    fn a_click_in_another_application_puts_an_open_island_away_at_once() {
+        for view in [
+            IslandView::Sessions,
+            IslandView::Ask,
+            IslandView::Session("s".into()),
+        ] {
+            assert!(click_elsewhere_collapses(&view, false, false), "{view:?}");
+        }
+    }
+
+    #[test]
+    fn a_click_elsewhere_leaves_an_island_in_hand_or_one_nobody_came_to() {
+        let open = IslandView::Session("s".into());
+        assert!(!click_elsewhere_collapses(&open, true, false));
+        assert!(!click_elsewhere_collapses(&open, false, true));
+    }
+
+    #[test]
+    fn a_click_elsewhere_has_nothing_to_put_away_on_a_mark_or_a_pill() {
+        assert!(!click_elsewhere_collapses(
+            &IslandView::Collapsed,
+            false,
+            false
+        ));
+        assert!(!click_elsewhere_collapses(&IslandView::Pill, false, false));
+    }
 
     fn standing(kind: PromptKind) -> PromptRequest {
         PromptRequest {

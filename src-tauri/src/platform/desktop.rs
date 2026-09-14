@@ -64,6 +64,15 @@ where
     Err("no global pointer monitor on this platform, polling instead".to_string())
 }
 
+/// No global click monitor here either. An open island still goes away on the
+/// leave clock of 6.7 once the pointer is off it. tech.md 6.27.
+pub fn watch_clicks<F>(_app: &AppHandle, _pressed: F) -> Result<(), String>
+where
+    F: Fn(&AppHandle) + 'static,
+{
+    Err("no global click monitor on this platform, the leave clock stands".to_string())
+}
+
 /// Places the window and shows it. Re-asserted on every open, as on macOS:
 /// the top-most flag is the one promise the product cannot degrade on.
 pub fn show(app: &AppHandle, label: &str) -> Result<(), PanelError> {

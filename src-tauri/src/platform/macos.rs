@@ -189,6 +189,37 @@ where
     }
 }
 
+/// Calls back whenever a mouse button goes down in another application.
+///
+/// An open island takes the mouse on its own window only, so a press on the
+/// editor or the browser beside it never reaches the webview, and the island
+/// used to learn that the user moved on from the leave clock alone, most of a
+/// second later. A press is a decision and gets the answer at once. Clicks on
+/// the island itself are local events and never come here. tech.md 6.7.
+pub fn watch_clicks<F>(app: &AppHandle, pressed: F) -> Result<(), String>
+where
+    F: Fn(&AppHandle) + 'static,
+{
+    use block2::RcBlock;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+
+    let handle = app.clone();
+    let block = RcBlock::new(move |_event: core::ptr::NonNull<NSEvent>| {
+        pressed(&handle);
+    });
+
+    let mask =
+        NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown;
+    match NSEvent::addGlobalMonitorForEventsMatchingMask_handler(mask, &block) {
+        // Held for the life of the process, as the pointer monitor is.
+        Some(monitor) => {
+            std::mem::forget(monitor);
+            Ok(())
+        }
+        None => Err("the system refused a click monitor".to_string()),
+    }
+}
+
 /// The display the user is on, as logical origin and size.
 ///
 /// The pointer is the signal: a non-activating overlay never owns the key
