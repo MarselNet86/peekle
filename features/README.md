@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.5   | [The question window answers to ⌘ and a digit](#v875--the-question-window-answers-to--and-a-digit)                       | 6.14, 6.6, 9           |
 | v87.4   | [The bug button asks first](#v874--the-bug-button-asks-first)                                                            | 6.22, 6.3, 6.5, 9      |
 | v87.2   | [The version in the settings](#v872--the-version-in-the-settings)                                                        | 6.5, 9                 |
 | v85     | [Quitting asks first](#v85--quitting-asks-first)                                                                         | 6.29, 6.3, 6.5, 6.9, 9 |
@@ -63,6 +64,27 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.5 — The question window answers to ⌘ and a digit
+
+2026-09-14
+
+![The question window](shots/question-keys.png)
+
+![The question window, in Russian](shots/question-keys-ru.png)
+
+A question from Claude now reads as a question from Claude: `Claude asks` with
+its sign in the brand green and the question's own short label beside it, the
+question in larger type, and every answer a card of its own with the key that
+picks it at its head — `⌘1`, `⌘2`, and so on, the row for an answer of your own
+included. The card under the pointer brightens, the one picked takes a green
+edge.
+
+⌘ with the digit picks the row from any application while the question stands
+open on its chat, because the island takes no keyboard until it is clicked and a
+key that works only after a click saves nothing. Those combinations are taken
+from the browser and the editor for exactly as long as the question stands, and
+given back the moment it is answered, closed or put away.
 
 ## v87.4 — The bug button asks first
 
