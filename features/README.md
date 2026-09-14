@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v84     | [The island speaks Russian](#v84--the-island-speaks-russian)                                                             | 6.28, 6.5, 6.8, 9    |
 | v83.4   | [The first press is a press](#v834--the-first-press-is-a-press)                                                          | 6.7, 6.16, 9         |
 | v83.1   | [Sign out from the settings](#v831--sign-out-from-the-settings)                                                          | 6.16, 6.5, 9         |
 | v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9    |
@@ -59,6 +60,33 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v84 — The island speaks Russian
+
+2026-09-14
+
+![The language screen of a first run](shots/language-picker.png)
+
+![Russian picked](shots/language-picked.png)
+
+![Sign-in, in Russian](shots/language-signin-ru.png)
+
+![The language row in the settings](shots/settings-language.png)
+
+![The list of languages](shots/settings-language-open.png)
+
+![The settings in Russian](shots/settings-ru.png)
+
+A fresh install asks for the language before anything else, sign-in
+included: a title in both languages and two cards, Russian and English, each
+with its flag and code. A press picks — no button to confirm — the card takes
+a green edge and a tick, every word switches, and the screen gives way to
+sign-in a moment later. The settings carry the same choice as their third row,
+a list that opens under its value and switches the island at once.
+
+Everything a person reads is translated: the webview, the errors commands
+return, Rust's toasts and the system notifications. Conversations, model
+names, commands and paths stay as they are.
 
 ## v83.4 — The first press is a press
 
