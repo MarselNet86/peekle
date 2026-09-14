@@ -11,55 +11,74 @@ in the code.
 
 Screenshots and clips live in [`shots/`](shots).
 
-| Version | Feature                                                                                                                  | Contract             |
-| ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| v84     | [The island speaks Russian](#v84--the-island-speaks-russian)                                                             | 6.28, 6.5, 6.8, 9    |
-| v83.4   | [The first press is a press](#v834--the-first-press-is-a-press)                                                          | 6.7, 6.16, 9         |
-| v83.1   | [Sign out from the settings](#v831--sign-out-from-the-settings)                                                          | 6.16, 6.5, 9         |
-| v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9    |
-| v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9 |
-| v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9               |
-| v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9    |
-| v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9         |
-| v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9               |
-| v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9              |
-| v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9   |
-| v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13  |
-| v80.15  | [A long message of your own folds](#v8015--a-long-message-of-your-own-folds)                                             | 6.12, 9              |
-| v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                    |
-| v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5       |
-| v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9              |
-| v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)                             | 6.13, 9              |
-| v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                                        | 6.23, 6.5, 9         |
-| v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                                                  | 6.22, 6.5, 9         |
-| v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                                        | 6.5                  |
-| v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows)                       | 6.21, 9              |
-| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                                                | 6.2, 6.7             |
-| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                                      | 6.7, 9               |
-| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                                                    | 6.7, 9               |
-| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                                                | 6.12, 9              |
-| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                                              | 9                    |
-| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                                                    | 6.3, 6.5, 6.11, 6.21 |
-| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)                               | 6.5, 6.15            |
-| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                                                     | 6.1, 6.3, 6.5, 6.21  |
-| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one)                              | 6.2, 6.3, 6.7, 9     |
-| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                                               | 6.7, 6.14, 9         |
-| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)                                   | 6.3, 6.7, 6.14, 9    |
-| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)                                           | 6.7, 6.12, 9         |
-| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                                               | 6.15, 6.20, 9        |
-| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                                                        | 6.5, 6.11            |
-| v67     | [One transcript, one process](#v67--one-transcript-one-process)                                                          | 6.5, 6.11            |
-| v66     | [The field never refuses](#v66--the-field-never-refuses)                                                                 | 6.5, 9               |
-| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                                                      | 6.12, 6.15, 6.20, 9  |
-| v64     | [Live mode switching](#v64--live-mode-switching)                                                                         | 6.19, 9              |
-| v63     | [Permission mode](#v63--permission-mode)                                                                                 | 6.3, 6.5, 6.19, 9    |
-| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)                                            | 6.4                  |
-| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                                                       | 6.3, 6.12, 6.16, 9   |
-| v60     | [Composer layout](#v60--composer-layout)                                                                                 | 6.12, 6.15, 9        |
-| v59     | [Permission panel](#v59--permission-panel)                                                                               | 6.3, 6.7, 9          |
-| v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
-| v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
-| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+| Version | Feature                                                                                                                  | Contract               |
+| ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v85     | [Quitting asks first](#v85--quitting-asks-first)                                                                         | 6.29, 6.3, 6.5, 6.9, 9 |
+| v84     | [The island speaks Russian](#v84--the-island-speaks-russian)                                                             | 6.28, 6.5, 6.8, 9      |
+| v83.4   | [The first press is a press](#v834--the-first-press-is-a-press)                                                          | 6.7, 6.16, 9           |
+| v83.1   | [Sign out from the settings](#v831--sign-out-from-the-settings)                                                          | 6.16, 6.5, 9           |
+| v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9      |
+| v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9   |
+| v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9                 |
+| v80.21  | [The pill is a way in](#v8021--the-pill-is-a-way-in)                                                                     | 6.2, 6.7, 6.13, 9      |
+| v80.20  | [The bin deletes the chat](#v8020--the-bin-deletes-the-chat)                                                             | 6.26, 6.5, 9           |
+| v80.19  | [The notice is the panel's own band](#v8019--the-notice-is-the-panels-own-band)                                          | 6.2, 9                 |
+| v80.18  | [An answer is drawn the way it was written](#v8018--an-answer-is-drawn-the-way-it-was-written)                           | 6.12, 9                |
+| v80.17  | [A file goes with the message](#v8017--a-file-goes-with-the-message)                                                     | 6.25, 6.5, 6.15, 9     |
+| v80.16  | [The island stays in your hands](#v8016--the-island-stays-in-your-hands)                                                 | 6.2, 6.5, 6.7, 6.13    |
+| v80.15  | [A long message of your own folds](#v8015--a-long-message-of-your-own-folds)                                             | 6.12, 9                |
+| v80.13  | [The hint fits its own ground](#v8013--the-hint-fits-its-own-ground)                                                     | 9                      |
+| v80.12  | [A chat in a folder Claude Code has not been trusted in](#v8012--a-chat-in-a-folder-claude-code-has-not-been-trusted-in) | 6.24, 6.3, 6.5         |
+| v80.11  | [Pressing a screenshot opens it](#v8011--pressing-a-screenshot-opens-it)                                                 | 6.13, 9                |
+| v80.10  | [A screenshot in a message is a reference](#v8010--a-screenshot-in-a-message-is-a-reference)                             | 6.13, 9                |
+| v80.9   | [A new chat picks its folder](#v809--a-new-chat-picks-its-folder)                                                        | 6.23, 6.5, 9           |
+| v80.8   | [A way to the developer](#v808--a-way-to-the-developer)                                                                  | 6.22, 6.5, 9           |
+| v80.7   | [Stop says which of the three it was](#v807--stop-says-which-of-the-three-it-was)                                        | 6.5                    |
+| v80.6   | [The hop plays twice, and only where it shows](#v806--the-hop-plays-twice-and-only-where-it-shows)                       | 6.21, 9                |
+| v80.5   | [A question stops closing itself](#v805--a-question-stops-closing-itself)                                                | 6.2, 6.7               |
+| v80.4   | [The question lays itself out](#v804--the-question-lays-itself-out)                                                      | 6.7, 9                 |
+| v80.3   | [A question wears its own mark](#v803--a-question-wears-its-own-mark)                                                    | 6.7, 9                 |
+| v80.2   | [The empty chat carries the sign](#v802--the-empty-chat-carries-the-sign)                                                | 6.12, 9                |
+| v80.1   | [The app icon is the sign](#v801--the-app-icon-is-the-sign)                                                              | 9                      |
+| v80     | [Stop asks, and says so](#v80--stop-asks-and-says-so)                                                                    | 6.3, 6.5, 6.11, 6.21   |
+| v79     | [A slash command answers its own question](#v79--a-slash-command-answers-its-own-question)                               | 6.5, 6.15              |
+| v78     | [A compact you can see](#v78--a-compact-you-can-see)                                                                     | 6.1, 6.3, 6.5, 6.21    |
+| v77     | [The turn notice, as the system writes one](#v77--the-turn-notice-as-the-system-writes-one)                              | 6.2, 6.3, 6.7, 9       |
+| v76     | [A question waits for you](#v76--a-question-waits-for-you)                                                               | 6.7, 6.14, 9           |
+| v75     | [A question gets the room and a way out](#v75--a-question-gets-the-room-and-a-way-out)                                   | 6.3, 6.7, 6.14, 9      |
+| v74     | [The head moves up beside the notch](#v74--the-head-moves-up-beside-the-notch)                                           | 6.7, 6.12, 9           |
+| v68     | [The answer stands where you look](#v68--the-answer-stands-where-you-look)                                               | 6.15, 6.20, 9          |
+| v67.1   | [A peer message is its words](#v671--a-peer-message-is-its-words)                                                        | 6.5, 6.11              |
+| v67     | [One transcript, one process](#v67--one-transcript-one-process)                                                          | 6.5, 6.11              |
+| v66     | [The field never refuses](#v66--the-field-never-refuses)                                                                 | 6.5, 9                 |
+| v65     | [Composer row, as the original](#v65--composer-row-as-the-original)                                                      | 6.12, 6.15, 6.20, 9    |
+| v64     | [Live mode switching](#v64--live-mode-switching)                                                                         | 6.19, 9                |
+| v63     | [Permission mode](#v63--permission-mode)                                                                                 | 6.3, 6.5, 6.19, 9      |
+| v62     | [Usage request, as the CLI sends it](#v62--usage-request-as-the-cli-sends-it)                                            | 6.4                    |
+| v61     | [Sign in says what it decided](#v61--sign-in-says-what-it-decided)                                                       | 6.3, 6.12, 6.16, 9     |
+| v60     | [Composer layout](#v60--composer-layout)                                                                                 | 6.12, 6.15, 9          |
+| v59     | [Permission panel](#v59--permission-panel)                                                                               | 6.3, 6.7, 9            |
+| v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
+| v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
+| v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v85 — Quitting asks first
+
+2026-09-14
+
+![The way out, after the gear](shots/quit-button.png)
+
+![The quit question](shots/quit-panel.png)
+
+![The quit question, in Russian](shots/quit-panel-ru.png)
+
+![On its way out after Yes](shots/quit-leaving.png)
+
+Peekle can be quit without Activity Monitor. ⌥⌘Q from anywhere, or the power
+button after the gear, opens the island just enough to ask: a sign, one line
+and two buttons, Yes dark and No white. No, Escape or a click beside the shape
+put the island back where it was; Yes folds it away, settles every hook still
+waiting, and the app ends a moment later.
 
 ## v84 — The island speaks Russian
 
