@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v83.4   | [The first press is a press](#v834--the-first-press-is-a-press)                                                          | 6.7, 6.16, 9         |
 | v83.1   | [Sign out from the settings](#v831--sign-out-from-the-settings)                                                          | 6.16, 6.5, 9         |
 | v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9    |
 | v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9 |
@@ -58,6 +59,26 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v83.4 — The first press is a press
+
+2026-09-14
+
+![Install, with quiet buttons](shots/auth-install.png)
+
+![Update, with quiet buttons](shots/auth-update.png)
+
+Buttons carry no outline any more. A plain button is a quiet fill that gets
+brighter under the pointer; the white one stays solid instead of growing a
+ring, and `Copied` changes the word and nothing else, at a width that leaves
+the command whole. The island also takes the first click: without
+`acceptFirstMouse` the webview spent it on activating the panel, and a button
+answered only on the second press.
+
+Found by a live check of the sign-in window against a fake Claude Code, which
+a debug build now takes from `PEEKLE_CLAUDE`: missing, outdated, signed out,
+approved in the browser, declined, a pasted code, and signing out from the
+settings.
 
 ## v83.1 — Sign out from the settings
 
