@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| v83.1   | [Sign out from the settings](#v831--sign-out-from-the-settings)                                                          | 6.16, 6.5, 9         |
 | v83     | [Sign in picks up the browser](#v83--sign-in-picks-up-the-browser)                                                       | 6.16, 6.5, 6.6, 9    |
 | v82     | [The island floats where there is no notch](#v82--the-island-floats-where-there-is-no-notch)                             | 6.7, 6.5, 6.27, 3, 9 |
 | v80.23  | [The waiting mark wears the sign again](#v8023--the-waiting-mark-wears-the-sign-again)                                   | 6.7, 9               |
@@ -57,6 +58,19 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9   |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9              |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9         |
+
+## v83.1 — Sign out from the settings
+
+2026-09-14
+
+![The account row](shots/signout-row.png)
+
+![Asking before signing out](shots/signout-confirm.png)
+
+The settings carry a `Claude account` row with `Sign out`. The first press
+asks, in words that say the terminal signs out too; the second runs Claude
+Code's own sign-out, and the island shows the sign-in window straight away.
+The question takes itself back after four seconds or when the pointer leaves.
 
 ## v83 — Sign in picks up the browser
 
