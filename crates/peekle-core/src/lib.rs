@@ -59,6 +59,12 @@ fn home_dir() -> Option<std::path::PathBuf> {
 /// `claude` under nvm, or in a directory of the person's own, read as "not
 /// installed" to someone who has it. tech.md 6.4 and 6.16.
 pub fn claude_path() -> Option<std::path::PathBuf> {
+    // Debug builds only: the account screens driven against a fake CLI
+    // without touching a real install. tech.md 6.16.
+    #[cfg(debug_assertions)]
+    if let Some(forced) = forced_claude(std::env::var_os(FORCED_CLAUDE)) {
+        return forced;
+    }
     let home = home_dir()?;
     CLI_CANDIDATES
         .iter()
@@ -76,6 +82,19 @@ pub fn claude_path() -> Option<std::path::PathBuf> {
         })
 }
 
+/// The variable a debug build takes the CLI's path from. tech.md 6.16.
+pub const FORCED_CLAUDE: &str = "PEEKLE_CLAUDE";
+
+/// What `PEEKLE_CLAUDE` says, when it says anything: `Some(None)` for an empty
+/// value or a path with no file behind it -- no CLI on this Mac -- and
+/// `Some(Some(path))` for a file to use instead of looking. `None` when it is
+/// not set, and the lookup goes on as always. tech.md 6.16.
+pub fn forced_claude(value: Option<std::ffi::OsString>) -> Option<Option<std::path::PathBuf>> {
+    let value = value?;
+    let path = std::path::PathBuf::from(value);
+    Some((!path.as_os_str().is_empty() && path.is_file()).then_some(path))
+}
+
 #[cfg(not(windows))]
 const CLI_NAME: &str = "claude";
 #[cfg(windows)]
@@ -90,4 +109,36 @@ where
         .filter(|dir| !dir.as_os_str().is_empty())
         .map(|dir| dir.join(name))
         .find(|path| path.is_file())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unset_override_leaves_the_lookup_alone() {
+        assert_eq!(forced_claude(None), None);
+    }
+
+    /// Nothing behind the path is a Mac with no CLI, which is what the
+    /// install screen is tested against. tech.md 6.16.
+    #[test]
+    fn an_override_with_no_file_behind_it_is_no_cli() {
+        assert_eq!(forced_claude(Some("".into())), Some(None));
+        assert_eq!(
+            forced_claude(Some("/nonexistent/peekle/claude".into())),
+            Some(None)
+        );
+    }
+
+    #[test]
+    fn an_override_with_a_file_is_that_file() {
+        let file = std::env::temp_dir().join(format!("peekle-forced-{}", ulid::Ulid::generate()));
+        std::fs::write(&file, "#!/bin/sh\n").unwrap();
+        assert_eq!(
+            forced_claude(Some(file.clone().into())),
+            Some(Some(file.clone()))
+        );
+        let _ = std::fs::remove_file(file);
+    }
 }
