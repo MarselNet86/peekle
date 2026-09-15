@@ -831,22 +831,23 @@ mod tests {
         ));
     }
 
+    /// On the captured `TodoWrite` (`fixtures/hooks/tasks.jsonl`), not a list
+    /// written here: rule 6, and this fixture was read by nothing until now.
     #[test]
     fn reads_todos_into_tasks() {
-        let payload = json!({
-            "session_id": "abc",
-            "tool_input": {"todos": [
-                {"content": "Fix the crash", "status": "in_progress"},
-                {"content": "Ship it", "status": "pending"},
-            ]}
-        });
+        let payload = captured("tasks");
+        let session = payload["session_id"].as_str().expect("a session");
 
         let tasks = parse_tasks(&payload);
-        assert_eq!(tasks.len(), 2);
-        assert_eq!(tasks[0].title, "Fix the crash");
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(tasks[0].title, "Fix the crash in the hud");
         assert_eq!(tasks[0].status, TaskStatus::Active);
         assert_eq!(tasks[0].label, peekle_core::types::TaskLabel::Bug);
+        assert_eq!(tasks[0].id, format!("{session}:0"));
+        assert_eq!(tasks[0].session_id, session);
+        assert_eq!(tasks[1].title, "Write release notes for v1");
         assert_eq!(tasks[1].status, TaskStatus::Pending);
+        assert_eq!(tasks[2].status, TaskStatus::Pending);
     }
 
     #[test]

@@ -845,8 +845,9 @@ The colour is the same `--waiting` purple it always was.
 
 The breath stays, and it is all the movement there is: the wave went with the
 strokes it ran through, and a pixel glyph that slides or scales is a pixel glyph
-with soft edges. The bitmap lives in `src/lib/logic/ask-sign.ts`, next to the
-sign's own geometry, because neither of the two is drawn by hand twice.
+with soft edges. The bitmap lived in `src/lib/logic/ask-sign.ts`, next to the
+sign's own geometry, because neither of the two is drawn by hand twice; the
+file went with the glyph in v80.23.
 
 ## v80.2 — The empty chat carries the sign
 
