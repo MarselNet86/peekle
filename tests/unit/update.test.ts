@@ -135,9 +135,7 @@ describe('the panel', () => {
     i18n.set('en');
     render(UpdatePanel, { version: '0.1.2', size: 0, brew: true });
 
-    expect(
-      screen.getByText('Homebrew installed this copy. Copy the command to upgrade.'),
-    ).toBeTruthy();
+    expect(screen.getByText('brew upgrade --cask peekle')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy command' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
   });

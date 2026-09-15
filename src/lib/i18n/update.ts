@@ -11,8 +11,13 @@ const en = {
   ready: (size: string) => `${size} downloaded and ready to install.`,
   /** The same line when the release named no size. */
   readyNoSize: 'Downloaded and ready to install.',
-  /** And for a copy Homebrew owns, which installs it a different way. */
-  brew: 'Homebrew installed this copy. Copy the command to upgrade.',
+  /**
+   * And for a copy Homebrew owns, which installs it a different way. The line
+   * is the command itself: it is the one string that is any use here, it is
+   * shorter than a sentence saying the same, and it stays English in both
+   * halves because a terminal command is not copy. tech.md 6.28.
+   */
+  brew: 'brew upgrade --cask peekle',
   install: 'Install',
   brewInstall: 'Copy command',
   later: 'Later',
@@ -26,7 +31,7 @@ export const UPDATE: Copy<typeof en> = {
     title: (version: string) => `Установить Peekle ${version}?`,
     ready: (size: string) => `${size} скачано, можно ставить.`,
     readyNoSize: 'Скачано, можно ставить.',
-    brew: 'Эту копию поставил Homebrew. Скопируйте команду для обновления.',
+    brew: 'brew upgrade --cask peekle',
     install: 'Установить',
     brewInstall: 'Скопировать',
     later: 'Позже',
