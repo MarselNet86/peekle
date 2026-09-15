@@ -48,7 +48,7 @@ from the Keychain, and only after you press Grant.
 
 ## What it does
 
-<p align="center"><img src="docs/readme/demo.gif" width="920" alt="A turn ends and the notch says so; the chat opens; a permission request is answered with ⌘2; a question with three options is answered with ⌘1; the island collapses"></p>
+<p align="center"><img src="docs/readme/demo.gif" width="920" alt="A turn ends and the notch says so; the chat opens; a permission is answered with ⌘2; a question with three options with ⌘1; the chat compacts; the plus stands the island aside for the file dialog and brings the files back as chips; the island collapses"></p>
 
 **The island.** At rest it is the notch, two strokes of green in the bezel that
 say Peekle is running and a ring that says how much of your five-hour window
