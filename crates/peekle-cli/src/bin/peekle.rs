@@ -15,6 +15,7 @@ peekle, an overlay on top of Claude Code
   peekle uninstall   remove only Peekle's own hook entries
   peekle doctor      check the install and say how to fix what is wrong
   peekle status      print the state as JSON
+  peekle --version   print the version, the same one the app reports
 ";
 
 fn main() -> ExitCode {
@@ -23,6 +24,12 @@ fn main() -> ExitCode {
         Some("uninstall") => run(uninstall),
         Some("doctor") => doctor(),
         Some("status") => run(status),
+        // The workspace version, so it matches the app, the tag and the cask.
+        // tech.md S10.
+        Some("-V") | Some("--version") => {
+            println!("peekle {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         Some("-h") | Some("--help") | None => {
             print!("{USAGE}");
             ExitCode::SUCCESS
