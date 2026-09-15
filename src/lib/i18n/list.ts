@@ -12,7 +12,6 @@ const en = {
   deleteAsk: 'Delete this chat and its transcript?',
   status: {
     Working: 'working',
-    WaitingOnUser: 'waiting on you',
     Idle: 'idle',
     Ended: 'ended',
   } as Record<string, string>,
@@ -45,7 +44,6 @@ export const LIST: Copy<typeof en> = {
     deleteAsk: 'Удалить чат и его транскрипт?',
     status: {
       Working: 'работает',
-      WaitingOnUser: 'ждёт вас',
       Idle: 'простаивает',
       Ended: 'завершена',
     },

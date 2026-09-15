@@ -10,13 +10,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import {
-  canPickFolder,
-  CHOOSE,
-  CHOOSE_LABEL,
-  folderOptions,
-  knownFolders,
-} from '$lib/logic/folders';
+import { canPickFolder, CHOOSE, folderOptions, knownFolders } from '$lib/logic/folders';
 import type { FeedEntry } from '$lib/types/generated/FeedEntry';
 import type { SessionCard } from '$lib/types/generated/SessionCard';
 
@@ -80,7 +74,8 @@ describe('the folders the island knows', () => {
         const rows = options.filter((option) => option.id === CHOOSE);
         expect(rows).toHaveLength(1);
         expect(options.at(-1)?.id).toBe(CHOOSE);
-        expect(options.at(-1)?.label).toBe(CHOOSE_LABEL);
+        // The menu's own words for the row, in the language in force. tech.md 6.28.
+        expect(options.at(-1)?.label).toBe('Open folder…');
       }),
     );
   });

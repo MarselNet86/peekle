@@ -153,7 +153,7 @@ describe('the list in Russian', () => {
   const card = {
     session: { project: 'peekle' },
     title: 'Fix the panel',
-    status: 'WaitingOnUser',
+    status: 'Working',
     compacting: null,
     updated_at: now - 3 * 3600_000,
   } as unknown as SessionCard;
@@ -169,7 +169,7 @@ describe('the list in Russian', () => {
     i18n.set('ru');
     render(SessionRow, { props: { card, now } });
     // The project is a name and stays as it is.
-    expect(screen.getByText('peekle · ждёт вас')).toBeInTheDocument();
+    expect(screen.getByText('peekle · работает')).toBeInTheDocument();
     expect(screen.getByText('3 ч')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Переименовать сессию' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Удалить чат' }));

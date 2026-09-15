@@ -275,15 +275,3 @@ export function askedLabel(alias: string | null, models: ModelChoice[]): string 
   if (!alias) return '';
   return models.find((model) => model.alias === alias)?.label ?? alias;
 }
-
-/**
- * Whether a choice the user just made has been confirmed by the agent.
- *
- * Nothing confirms a write to a pty (tech.md 6.5), so a pick stands dimmed
- * until the transcript names it back. Cleared by the value arriving, never by
- * a clock: a reply that goes missing is a lost message, but a setting that has
- * not applied yet is just a setting that has not applied yet. tech.md 6.15.
- */
-export function stillWaiting<T>(picked: T | null, current: T | null): boolean {
-  return picked !== null && picked !== current;
-}

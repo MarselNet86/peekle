@@ -23,10 +23,6 @@ import type { PickOption } from './agent';
  */
 export const CHOOSE = 'choose-folder';
 
-/** What the last row says in English. The menu says it in the language in
- * force (`CHAT.openFolder`). tech.md 6.28. */
-export const CHOOSE_LABEL = 'Open folder…';
-
 export type Folder = { cwd: string; project: string };
 
 /**

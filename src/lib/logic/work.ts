@@ -147,10 +147,3 @@ export function noticeText(text: string): string {
 
   return text;
 }
-
-/** How long a row has been working by `now`, or `null` with nothing to date it. */
-export function workSpan(row: WorkRow, now: number): number | null {
-  if (row.from === null) return null;
-  const end = row.to === null ? now : row.to;
-  return Math.max(0, end - row.from);
-}

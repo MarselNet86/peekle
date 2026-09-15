@@ -288,11 +288,6 @@
     background: var(--text-dim);
   }
 
-  /* Waiting is the one that wants the user right now, so it is the loud one. */
-  .row[data-status='WaitingOnUser'] .dot {
-    background: var(--warn);
-    box-shadow: 0 0 8px var(--warn);
-  }
   .row[data-status='Working'] .dot {
     background: var(--accent);
   }

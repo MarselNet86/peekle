@@ -1,8 +1,5 @@
 /** Feed scrolling. Pure, so the property tests can hammer it. */
 
-/** tech.md 6.8 caps this at 6 no matter what the config says. */
-export const MAX_VISIBLE_ROWS = 6;
-
 /**
  * How tall a message of one's own may stand before it is folded, in pixels.
  *

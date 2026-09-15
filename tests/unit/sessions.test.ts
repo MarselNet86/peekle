@@ -52,7 +52,6 @@ describe('SessionRow', () => {
   it('tells every status apart', () => {
     for (const [status, words] of [
       ['Working', 'working'],
-      ['WaitingOnUser', 'waiting on you'],
       ['Idle', 'idle'],
       ['Ended', 'ended'],
     ] as [SessionStatus, string][]) {
