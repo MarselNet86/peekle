@@ -2129,7 +2129,15 @@ pub async fn choose_folder(app: AppHandle) -> Result<Option<String>, String> {
     // the leave clock is off for as long as the dialog stands. tech.md 6.7
     // and 6.23.
     let state = app.state::<Arc<AppState>>().inner().clone();
-    state.set_dialog(true);
+    // One dialog at a time. A second press brings the standing one forward
+    // and answers with nothing: the first call is still waiting on the choice,
+    // and a second panel's close would deactivate the app, which hides the
+    // first. tech.md 6.23, v87.11.
+    if !state.begin_dialog() {
+        tracing::debug!("a dialog already stands, bringing it forward");
+        let _ = app.run_on_main_thread(platform::take_front);
+        return Ok(None);
+    }
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(platform::take_front);
     let picked = platform::pick(
@@ -2166,7 +2174,14 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<String>, String> {
     // The pointer goes into the dialog, and that is not leaving the island.
     // tech.md 6.7 and 6.25.
     let state = app.state::<Arc<AppState>>().inner().clone();
-    state.set_dialog(true);
+    // One dialog at a time: the plus pressed while one stands is the way back
+    // to it. Brought forward, answered with nothing, the flag and the focus
+    // left to the call that raised it. tech.md 6.25, v87.11.
+    if !state.begin_dialog() {
+        tracing::debug!("a dialog already stands, bringing it forward");
+        let _ = app.run_on_main_thread(platform::take_front);
+        return Ok(Vec::new());
+    }
     // AppKit only from the main thread, and this command is not on it.
     let _ = app.run_on_main_thread(platform::take_front);
     let picked = platform::pick(

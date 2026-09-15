@@ -636,6 +636,15 @@
 
   async function attachFiles() {
     if (!current) return;
+    // The dialog is still up: the island was opened back over it, and this
+    // press is the way back to it, not a second dialog. Stand aside again and
+    // let Rust bring the standing panel forward; what is picked there still
+    // arrives through the call below that raised it. tech.md 6.25, v87.11.
+    if (picking) {
+      shrunk = true;
+      void commands.chooseFiles().catch(() => {});
+      return;
+    }
     const id = current.session.session_id;
     // Out of the dialog's way before it comes up, not after: the panel is
     // drawn by AppKit the moment the command reaches Rust. tech.md 6.25.

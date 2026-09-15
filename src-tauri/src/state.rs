@@ -886,6 +886,15 @@ impl AppState {
         self.dialog.load(Ordering::Relaxed)
     }
 
+    /// Claims the one system dialog the island may raise. `false` means one
+    /// is already standing and nothing was claimed: the caller brings that
+    /// one forward and leaves the flag and the focus alone, because the call
+    /// that raised it is still waiting on it. Check and set in one step, so two
+    /// presses in a row cannot both win. tech.md 6.23 and 6.25.
+    pub fn begin_dialog(&self) -> bool {
+        !self.dialog.swap(true, Ordering::SeqCst)
+    }
+
     /// The webview ran the island down to the attachment strip, or opened it
     /// back up. tech.md 6.25.
     pub fn set_shrunk(&self, shrunk: bool) {
@@ -1706,6 +1715,18 @@ mod shot_tests {
         state.set_composing(false);
         state.set_dialog(true);
         assert!(state.in_hand(), "a dialog is up");
+        state.set_dialog(false);
+        // One dialog at a time: a second claim loses and changes nothing, so
+        // the call that raised the first is the one that puts it down.
+        // tech.md 6.25, v87.11.
+        assert!(
+            state.begin_dialog(),
+            "nothing stands, so this one is raised"
+        );
+        assert!(!state.begin_dialog(), "one already stands");
+        assert!(state.dialog_open(), "and still does after the second press");
+        state.set_dialog(false);
+        assert!(state.begin_dialog(), "gone, so the next one may be raised");
         state.set_dialog(false);
         state.set_preview(true);
         assert!(state.in_hand(), "a picture is open");

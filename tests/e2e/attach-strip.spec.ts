@@ -34,9 +34,20 @@ const card = {
   updated_at: 0,
 };
 
-async function stub(page: Page, files: string[]) {
+/** `standing`: the dialog stays up until the test calls `__release(paths)`,
+ * and a call while it stands answers with nothing, the way Rust does for a
+ * second press. tech.md 6.25, v87.11. */
+async function stub(page: Page, files: string[], standing = false) {
   await page.addInitScript(
-    ({ card, files }: { card: Record<string, unknown>; files: string[] }) => {
+    ({
+      card,
+      files,
+      standing,
+    }: {
+      card: Record<string, unknown>;
+      files: string[];
+      standing: boolean;
+    }) => {
       const w = window as unknown as Record<string, unknown>;
       const handlers: Record<string, number> = {};
       const calls: { command: string; args: unknown }[] = [];
@@ -64,7 +75,16 @@ async function stub(page: Page, files: string[]) {
         const handler = w[`_${handlers[event]}`] as ((message: unknown) => void) | undefined;
         handler?.({ event, id: 1, payload });
       };
+      let release: ((paths: string[]) => void) | null = null;
+      w.__release = (paths: string[]) => {
+        release?.(paths);
+        release = null;
+      };
       const answer = (command: string): unknown => {
+        if (command === 'choose_files' && standing) {
+          if (release) return [];
+          return new Promise<string[]>((resolve) => (release = resolve));
+        }
         switch (command) {
           case 'get_language':
             return 'en';
@@ -117,7 +137,7 @@ async function stub(page: Page, files: string[]) {
       w.__choose = (index: number) => push('peekle://choose', { index });
       w.__listening = (event: string) => event in handlers;
     },
-    { card, files },
+    { card, files, standing },
   );
 }
 
@@ -200,6 +220,34 @@ test.describe('the island while files are picked', () => {
     await press(page, 1);
 
     await expect(page.locator('.reply textarea')).toBeVisible();
+    await expect(page.getByText('report.pdf')).toBeVisible();
+  });
+
+  /// v87.11, from the owner: nothing picked, Expand, the plus again -- and the
+  /// dialog vanished. The plus over a standing dialog is the way back to it:
+  /// the strip stands again, nothing new is waited on, and what is picked in
+  /// the first dialog still lands. tech.md 6.25.
+  test('the plus over a standing dialog goes back to it', async ({ page }) => {
+    await stub(page, [], true);
+    await page.goto(ROUTE);
+    await attach(page);
+    await expect(page.getByText('Choosing files…')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Expand' }).click();
+    await expect(page.locator('.reply textarea')).toBeVisible();
+
+    await attach(page);
+    // Aside again, and still choosing: the second press answered nothing and
+    // settled nothing.
+    await expect(page.getByText('Choosing files…')).toBeVisible();
+
+    await page.evaluate(() =>
+      (window as unknown as { __release: (paths: string[]) => void }).__release([
+        '/Users/dev/peekle/report.pdf',
+      ]),
+    );
+    await expect(page.getByText('1 file attached')).toBeVisible();
+    await page.getByRole('button', { name: 'Expand' }).click();
     await expect(page.getByText('report.pdf')).toBeVisible();
   });
 
