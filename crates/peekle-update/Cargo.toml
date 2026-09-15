@@ -18,5 +18,4 @@ tracing = "0.1.44"
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
-proptest = "1.11.0"
 ulid = "3.0.0"

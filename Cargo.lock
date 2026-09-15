@@ -2822,7 +2822,6 @@ dependencies = [
  "http-body-util",
  "peekle-core",
  "serde_json",
- "thiserror 2.0.20",
  "tokio",
  "tower",
  "tracing",
@@ -2835,7 +2834,6 @@ version = "0.1.2"
 dependencies = [
  "directories",
  "peekle-core",
- "proptest",
  "serde",
  "serde_json",
  "tracing",
@@ -2847,11 +2845,8 @@ dependencies = [
 name = "peekle-usage"
 version = "0.1.2"
 dependencies = [
- "http",
  "peekle-core",
- "serde",
  "serde_json",
- "thiserror 2.0.20",
  "tracing",
  "ulid",
  "ureq",

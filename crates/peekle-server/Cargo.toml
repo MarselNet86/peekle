@@ -14,7 +14,6 @@ axum = "0.8.9"
 bytes = "1.12.1"
 peekle-core = { version = "0.1.0", path = "../peekle-core" }
 serde_json = "1.0.151"
-thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"
 ulid = "3.0.0"
