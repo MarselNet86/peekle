@@ -798,18 +798,14 @@ test.describe('the island route', () => {
 
     await page.getByRole('button', { name: 'Attach files' }).click();
 
-    // The island stands aside for the dialog and says what it took; the chips
-    // are under the strip until it is opened back up. tech.md 6.25, v87.10.
-    await expect(page.getByText('2 files attached')).toBeVisible();
-    await page.getByRole('button', { name: 'Expand' }).click();
-
     // Named, because a name is the one thing that says which file this is.
+    // The island is back by itself once the dialog closes. tech.md 6.25.
     await expect(page.getByText('report.pdf')).toBeVisible();
     await expect(page.getByText('notes.md')).toBeVisible();
 
     // The same file twice is one attachment.
     await page.getByRole('button', { name: 'Attach files' }).click();
-    await page.getByRole('button', { name: 'Expand' }).click();
+    await expect(page.locator('.reply textarea')).toBeVisible();
     await expect(page.getByText('report.pdf')).toHaveCount(1);
 
     const field = page.locator('.reply textarea');
@@ -846,9 +842,6 @@ test.describe('the island route', () => {
     await page.goto(ROUTE);
 
     await page.getByRole('button', { name: 'Attach files' }).click();
-    // The reason stands in the island, so the island has to be open to say it.
-    // tech.md 6.25, v87.10.
-    await page.getByRole('button', { name: 'Expand' }).click();
 
     await expect(page.getByText(/cannot be attached/)).toBeVisible();
     await expect(page.getByText('lines.txt')).toHaveCount(0);

@@ -175,24 +175,33 @@ async function press(page: Page, index: number) {
 
 const attach = (page: Page) => page.getByRole('button', { name: 'Attach files' }).click();
 
+/** Closes the standing file dialog with what was picked; `[]` is a cancel. */
+async function close(page: Page, paths: string[]) {
+  await page.evaluate(
+    (picked) => (window as unknown as { __release: (paths: string[]) => void }).__release(picked),
+    paths,
+  );
+}
+
 test.describe('the island while files are picked', () => {
-  test('runs down to a strip that counts what it took', async ({ page }) => {
-    await stub(page, ['/Users/dev/peekle/report.pdf', '/Users/dev/peekle/notes.md']);
+  test('runs down to a strip while the dialog stands', async ({ page }) => {
+    await stub(page, [], true);
     await page.goto(ROUTE);
     await attach(page);
 
-    await expect(page.getByText('2 files attached')).toBeVisible();
+    await expect(page.getByText('Choosing files…')).toBeVisible();
     // The chat is under the strip, not beside it: one line is the whole
     // island while the dialog stands. tech.md 6.25.
     await expect(page.locator('.reply textarea')).toHaveCount(0);
     await expect(page.locator('.rows')).toHaveCount(0);
+    await expect.poll(() => shrinks(page)).toContain(true);
   });
 
   /// The strip is smaller than the chat it stands over, and Rust reads the
   /// rectangle off the webview: a strip that reported the whole panel would
   /// keep eating the dialog's clicks. tech.md 6.7 and 6.25.
   test('draws itself no taller than a pill', async ({ page }) => {
-    await stub(page, ['/Users/dev/peekle/report.pdf']);
+    await stub(page, [], true);
     await page.goto(ROUTE);
 
     const shape = page.locator('.shape');
@@ -201,7 +210,7 @@ test.describe('the island while files are picked', () => {
     const open = (await shape.boundingBox())?.height ?? 0;
 
     await attach(page);
-    await expect(page.getByText('1 file attached')).toBeVisible();
+    await expect(page.getByText('Choosing files…')).toBeVisible();
     await page.waitForTimeout(600);
     const strip = (await shape.boundingBox())?.height ?? 0;
 
@@ -209,29 +218,58 @@ test.describe('the island while files are picked', () => {
     expect(strip).toBeLessThan(120);
   });
 
-  test('tells Rust to hand the mouse back, and to take it again', async ({ page }) => {
-    await stub(page, ['/Users/dev/peekle/report.pdf']);
+  /// v87.13, from the owner: the file dialog works the way the folder dialog
+  /// does, and the island comes back by itself the moment it closes, with the
+  /// chips of what was picked. tech.md 6.25.
+  test('comes back by itself with what was picked', async ({ page }) => {
+    await stub(page, [], true);
     await page.goto(ROUTE);
     await attach(page);
-    await expect(page.getByText('1 file attached')).toBeVisible();
+    await expect(page.getByText('Choosing files…')).toBeVisible();
 
-    await expect.poll(() => shrinks(page)).toContain(true);
+    await close(page, ['/Users/dev/peekle/report.pdf', '/Users/dev/peekle/notes.md']);
 
-    await page.getByRole('button', { name: 'Expand' }).click();
     await expect(page.locator('.reply textarea')).toBeVisible();
-    await expect.poll(() => shrinks(page)).toEqual([...(await shrinks(page)).slice(0, -1), false]);
+    await expect(page.getByText('report.pdf')).toBeVisible();
+    await expect(page.getByText('notes.md')).toBeVisible();
+    await expect(page.locator('.strip')).toHaveCount(0);
+    await expect.poll(async () => (await shrinks(page)).at(-1)).toBe(false);
   });
 
-  test('⌘1 pressed anywhere opens it back up', async ({ page }) => {
-    await stub(page, ['/Users/dev/peekle/report.pdf']);
+  test('comes back by itself from a cancel', async ({ page }) => {
+    await stub(page, [], true);
     await page.goto(ROUTE);
     await attach(page);
+    await expect(page.getByText('Choosing files…')).toBeVisible();
+
+    await close(page, []);
+
+    await expect(page.locator('.reply textarea')).toBeVisible();
+    await expect(page.locator('.strip')).toHaveCount(0);
+  });
+
+  /// The next pass stands aside the same way, and the strip says what the
+  /// message already carries from the last one.
+  test('counts what is already attached while the next dialog stands', async ({ page }) => {
+    await stub(page, [], true);
+    await page.goto(ROUTE);
+    await attach(page);
+    await close(page, ['/Users/dev/peekle/report.pdf']);
+    await expect(page.getByText('report.pdf')).toBeVisible();
+
+    await attach(page);
     await expect(page.getByText('1 file attached')).toBeVisible();
+  });
+
+  test('⌘1 pressed anywhere opens it before the dialog closes', async ({ page }) => {
+    await stub(page, [], true);
+    await page.goto(ROUTE);
+    await attach(page);
+    await expect(page.getByText('Choosing files…')).toBeVisible();
 
     await press(page, 1);
 
     await expect(page.locator('.reply textarea')).toBeVisible();
-    await expect(page.getByText('report.pdf')).toBeVisible();
   });
 
   /// v87.11, from the owner: nothing picked, Expand, the plus again -- and the
@@ -252,13 +290,8 @@ test.describe('the island while files are picked', () => {
     // settled nothing.
     await expect(page.getByText('Choosing files…')).toBeVisible();
 
-    await page.evaluate(() =>
-      (window as unknown as { __release: (paths: string[]) => void }).__release([
-        '/Users/dev/peekle/report.pdf',
-      ]),
-    );
-    await expect(page.getByText('1 file attached')).toBeVisible();
-    await page.getByRole('button', { name: 'Expand' }).click();
+    await close(page, ['/Users/dev/peekle/report.pdf']);
+    await expect(page.locator('.reply textarea')).toBeVisible();
     await expect(page.getByText('report.pdf')).toBeVisible();
   });
 
@@ -313,18 +346,5 @@ test.describe('the island while files are picked', () => {
       ),
     );
     expect(aimed).toHaveLength(0);
-  });
-
-  /// A cancel is not an event and says nothing, but the island still has to
-  /// come back: an empty strip over a chat is the island stuck aside.
-  test('says it is choosing while nothing has been picked', async ({ page }) => {
-    await stub(page, []);
-    await page.goto(ROUTE);
-    await attach(page);
-
-    // Nothing came back, so the strip has nothing to count and says so rather
-    // than counting to zero.
-    await page.getByRole('button', { name: 'Expand' }).click();
-    await expect(page.locator('.reply textarea')).toBeVisible();
   });
 });

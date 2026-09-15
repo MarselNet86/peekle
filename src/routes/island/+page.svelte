@@ -684,6 +684,11 @@
       return;
     }
     picking = null;
+    // Back by itself once the dialog closes, picked or cancelled, the way the
+    // folder dialog comes back: the chips and the field are what is needed
+    // next, and another pass is one press of the plus away. tech.md 6.25,
+    // v87.13.
+    shrunk = false;
     // A cancel is not an event and says nothing. Neither is a route rendered
     // with no Tauri under it, which answers null. tech.md 6.25.
     if (!picked || picked.length === 0) return;
