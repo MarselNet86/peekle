@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract                    |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| v87.18  | [A bug goes to GitHub issues](#v8718--a-bug-goes-to-github-issues)                                                       | 6.22, 6.5                   |
 | v87.17  | [A screenshot attaches with ⌘1](#v8717--a-screenshot-attaches-with-1)                                                    | 6.13, 6.9, 6.8              |
 | v87.13  | [The file dialog comes back by itself](#v8713--the-file-dialog-comes-back-by-itself)                                     | 6.25, 6.23                  |
 | v87.12  | [The folder dialog gets the strip too](#v8712--the-folder-dialog-gets-the-strip-too)                                     | 6.23, 9                     |
@@ -73,6 +74,21 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9          |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                     |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9                |
+
+## v87.18 — A bug goes to GitHub issues
+
+2026-09-15
+
+![The bug button's hint on the session list](shots/bug-hint-issue.png)
+
+![The same, in Russian](shots/bug-hint-issue-ru.png)
+
+Write on the bug question used to open the developer's Telegram. It now opens a
+new issue on the repository with the `bug` label already set, in the browser.
+An issue is public and searchable, so the next person who hits the same fault
+finds it rather than writing it again, and the tracker is a tracker instead of
+somebody's private messages. The question still asks first, and the address
+still lives in Rust, so the page cannot point the button anywhere else.
 
 ## v87.17 — A screenshot attaches with ⌘1
 
