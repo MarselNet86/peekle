@@ -45,12 +45,16 @@ something to say.
 ## How it fits together
 
 Claude Code drives Peekle through hooks. Peekle runs an HTTP server on
-loopback, the hooks are `type: "http"` and post to it. The hook request is the
-event, the HTTP response body is the decision Claude Code executes.
+loopback; the hooks are `type: "command"` entries that run
+`~/.claude/peekle/peekle-hook.py`, which posts the payload to that server and,
+for the two hooks that can block, writes the answer back on stdout. The hook
+request is the event, the HTTP response body is the decision Claude Code
+executes. If the server is not there the script exits 0 with no output, which
+Claude Code reads as "no decision".
 
 ```
 Claude Code turn
-  |  POST /v1/h/<token>/<endpoint>
+  |  peekle-hook.py: POST /v1/h/<token>/<endpoint>
   v
 peekle-server (axum, 127.0.0.1)
   |  registers a pending request, emits a Tauri event
@@ -78,6 +82,13 @@ cargo build -p peekle-cli --bin peekle
 
 `init` merges its handlers into `~/.claude/settings.json`, never removes anyone
 else's, takes a timestamped backup first, and changes nothing on a second run.
+
+Users get the same binary inside the app: `pnpm tauri build` runs
+`scripts/build-cli.mjs` before the Rust build, which compiles the CLI for the
+build target (both slices, through lipo, for a universal build) and puts it at
+`target/cli/peekle`; `bundle.macOS.files` copies it to
+`Peekle.app/Contents/MacOS/peekle`, and the Homebrew cask links it into
+`bin`. `peekle --version` prints the workspace version.
 
 ## Config
 
@@ -164,6 +175,13 @@ travels to the agent as a line of the message.
 ## Releasing
 
 Bump the version in `Cargo.toml`, `package.json` and `src-tauri/tauri.conf.json`
-in one commit, then tag it `vX.Y.Z` and push the tag. The release workflow
-builds the universal dmg, signs it ad hoc and attaches it to the GitHub
-release. Installed copies pick it up on their next check.
+in one commit, then tag it `vX.Y.Z` and push the tag. The tag has to match
+the version in `tauri.conf.json`; the workflow checks that first and stops if
+it does not. It then builds the universal dmg with the CLI inside, signs it ad
+hoc, renders the Homebrew cask from `packaging/homebrew/peekle.rb` with the
+version and the dmg's checksum, and attaches both `Peekle-mac-universal.dmg`
+and `peekle.rb` to the GitHub release. The tap,
+[MarselNet86/homebrew-tap](https://github.com/MarselNet86/homebrew-tap),
+copies that `peekle.rb` on its next hourly run, or at once when its `bump`
+workflow is run by hand. Installed copies pick the release up on their next
+check.

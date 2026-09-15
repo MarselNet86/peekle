@@ -24,23 +24,35 @@ you, and gone the moment you have answered.
 macOS 13 or newer, Apple silicon and Intel in one build. Want it on Windows or
 Linux? Vote in [#11](https://github.com/MarselNet86/peekle/issues/11).
 
-**1. The app.** Download
-[Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg),
-drag it to Applications, open it once with right-click → Open. The bundle is
-signed ad hoc rather than with a paid certificate, so macOS asks that one time.
-
-**2. The hooks.** Peekle listens to Claude Code through its hooks, and the
-`peekle` command wires them in:
+**With Homebrew.** The app and the `peekle` command in one go:
 
 ```sh
-cargo install --git https://github.com/MarselNet86/peekle peekle-cli
+brew install --cask MarselNet86/tap/peekle
 peekle init
+open -a Peekle
 ```
 
-`init` merges its entries into `~/.claude/settings.json`, takes a timestamped
-backup first, never touches anyone else's hooks, and changes nothing on a
-second run. `peekle doctor` says what is wrong if something is; `peekle
-uninstall` takes back only its own entries.
+**By hand.** Download
+[Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg)
+and drag it to Applications. The bundle is signed ad hoc rather than
+notarized, so macOS refuses it once; clear the flag and it opens:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Peekle.app
+/Applications/Peekle.app/Contents/MacOS/peekle init
+open -a Peekle
+```
+
+(Or open it, let macOS refuse, then System Settings → Privacy & Security →
+Open Anyway. The `peekle` command rides inside the bundle; with Rust on the
+machine, `cargo install --git https://github.com/MarselNet86/peekle peekle-cli`
+puts it on your PATH instead.)
+
+**What `init` does.** Peekle listens to Claude Code through its hooks, and
+`init` writes them: it merges its entries into `~/.claude/settings.json`,
+takes a timestamped backup first, never touches anyone else's hooks, and
+changes nothing on a second run. `peekle doctor` says what is wrong if
+something is; `peekle uninstall` takes back only its own entries.
 
 No account, no login, no telemetry. Usage bars read your own Claude account
 from the Keychain, and only after you press Grant.
@@ -131,7 +143,7 @@ what most of us actually use: it costs nothing and it is never where you are.
 
 ```
 Claude Code turn
-  |  POST /v1/h/<token>/<endpoint>        hooks, type "http", loopback only
+  |  POST /v1/h/<token>/<endpoint>        the hook script, loopback only
   v
 peekle-server (axum, 127.0.0.1)          registers the request, tells the island
   v
