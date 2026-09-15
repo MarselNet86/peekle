@@ -1145,7 +1145,7 @@ fn spawn_owned(
         prompt: Some(prompt.to_string()),
         model: held.model,
         effort: held.effort,
-        mode: held.mode,
+        mode: mode_for(held.mode),
         thinking: held.thinking,
     };
 
@@ -2249,6 +2249,16 @@ pub fn app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// What `--permission-mode` carries on a session Peekle starts: the mode the
+/// person picked before the first message, and `auto` when they picked none.
+///
+/// A default rather than nothing: without the flag the CLI starts in whatever
+/// it defaults to, while the row said `Manual` from the first frame -- a chip
+/// describing neither the spawn nor the hooks. tech.md 6.19, v87.9.
+fn mode_for(held: Option<String>) -> Option<String> {
+    held.or_else(|| Some(peekle_core::types::PermissionMode::Auto.flag().to_string()))
+}
+
 /// The webview reports it painted its route. tech.md 6.5, added in core v3.
 #[tauri::command]
 pub fn window_ready(state: State<'_, Arc<AppState>>, label: String) {
@@ -2744,6 +2754,27 @@ mod tests {
     /// here, and the command takes no argument that could carry another one.
     /// The state it takes is Tauri's to inject, for the language its refusal
     /// is said in; the page cannot pass it. tech.md 6.28.
+    /// v87.9: a session Peekle starts starts in Auto unless the person picked
+    /// otherwise before the first message. tech.md 6.19.
+    #[test]
+    fn a_session_nobody_aimed_starts_in_auto() {
+        assert_eq!(mode_for(None).as_deref(), Some("auto"));
+        assert_eq!(
+            mode_for(Some("plan".to_string())).as_deref(),
+            Some("plan"),
+            "the person's own pick stands"
+        );
+        assert_eq!(
+            mode_for(Some(
+                peekle_core::types::PermissionMode::Manual
+                    .flag()
+                    .to_string()
+            ))
+            .as_deref(),
+            Some("manual")
+        );
+    }
+
     #[test]
     fn the_bug_button_carries_its_own_address() {
         assert_eq!(BUG_REPORT_URL, "https://t.me/marselnet");

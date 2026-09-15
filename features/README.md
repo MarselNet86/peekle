@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.9   | [A new chat starts in Auto](#v879--a-new-chat-starts-in-auto)                                                            | 6.19                   |
 | v87.8   | [Allow and Deny answer to ⌘2 and ⌘1](#v878--allow-and-deny-answer-to-2-and-1)                                            | 6.7, 6.14, 9           |
 | v87.7   | [No chin under a question](#v877--no-chin-under-a-question)                                                              | 6.14, 9                |
 | v87.6   | [A question stands alone](#v876--a-question-stands-alone)                                                                | 6.14                   |
@@ -67,6 +68,22 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.9 — A new chat starts in Auto
+
+2026-09-15
+
+![The row under the field of a new chat](shots/mode-auto.png)
+
+![The same, in Russian](shots/mode-auto-ru.png)
+
+The row under the field said `Manual` until the first message went out and then
+flipped to `Auto`, which is what the chat had been in all along: the mode was
+only sent on the spawn if somebody picked one, so a chat nobody aimed started in
+whatever the CLI defaults to and the chip described neither. A chat Peekle
+starts is now started in `Auto` outright, and the chip says so from the first
+frame. Picking a mode before the first message still wins, and a chat running
+somewhere else is still only read.
 
 ## v87.8 — Allow and Deny answer to ⌘2 and ⌘1
 

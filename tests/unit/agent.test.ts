@@ -477,7 +477,7 @@ describe('the permission mode', () => {
       props: { agent: null, defaults: opus, models, live: true, canPickMode: true, onmode },
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Manual' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Auto' }));
     for (const label of ['Manual', 'Edit automatically', 'Plan', 'Auto']) {
       expect(screen.getByRole('menuitemradio', { name: new RegExp(label) })).toBeInTheDocument();
     }
@@ -493,7 +493,7 @@ describe('the permission mode', () => {
       props: { agent: null, defaults: opus, models, live: true, canPickMode: true },
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Manual' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Auto' }));
     expect(screen.queryByRole('menuitemradio', { name: /No permissions/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitemradio', { name: /Never asks/ })).not.toBeInTheDocument();
     expect(modeLabel('Bypass')).toBe('No permissions');
@@ -519,11 +519,13 @@ describe('the permission mode', () => {
     expect(onmodenote).toHaveBeenCalledOnce();
   });
 
-  /** A session that has never reported one is in the CLI's own default. */
-  it('shows Manual when nothing has said otherwise', () => {
+  /** v87.9: a session Peekle starts is started in Auto, so that is what the
+   * row says until a hook names the mode -- not Manual, which it never was. */
+  it('shows Auto when nothing has said otherwise', () => {
     render(AgentBar, { props: { agent: opus, models, live: true } });
 
-    expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Auto' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manual' })).not.toBeInTheDocument();
   });
 });
 

@@ -89,7 +89,10 @@
   // defaults until then. tech.md 6.15.
   const shown = $derived(agent ?? defaults);
   const measured = $derived(agent !== null);
-  const modeShown = $derived<PermissionMode>(askedMode ?? mode ?? 'Manual');
+  // Auto until a hook says otherwise: a session Peekle starts is started in
+  // Auto (6.19), so that is what the row says from the first frame rather than
+  // Manual, which it never was. tech.md 6.19, v87.9.
+  const modeShown = $derived<PermissionMode>(askedMode ?? mode ?? 'Auto');
   const t = $derived(copy(CHAT));
 </script>
 
