@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use peekle_core::island::{shape_rect, Rect};
+use peekle_core::time::now_ms;
 use peekle_core::types::{
     IslandView, PromptKind, PromptOutcome, PromptRequest, ToastRequest, ToastTone,
 };
@@ -503,13 +504,6 @@ fn refresh_stale_usage(app: &AppHandle, state: &Arc<AppState>) {
     tauri::async_runtime::spawn(async move {
         crate::commands::fetch_usage(&app, &state).await;
     });
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 /// How long the shape holds after an answer before collapsing. tech.md S3.

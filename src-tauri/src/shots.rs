@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use peekle_core::shots::{self, KEY_POLL_MS};
+use peekle_core::time::now_ms;
 use peekle_core::types::{IslandView, ShotOffer, ToastRequest, ToastTone};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -323,11 +324,4 @@ fn say(app: &AppHandle, text: &str) {
             badge: None,
         },
     );
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }

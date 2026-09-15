@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use peekle_core::time::now_ms;
 use peekle_core::types::{
     AccountLink, AccountState, CliState, InstallKind, IslandView, Language, PeekleState,
     PromptAnswer, PromptOutcome, SignInStage, SignInState, ToastRequest, ToastTone, UpdateState,
@@ -110,13 +111,6 @@ pub fn status_after(outcome: &PromptOutcome) -> peekle_core::types::SessionStatu
         }
         _ => peekle_core::types::SessionStatus::Idle,
     }
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 /// The hotkey path into the bypass switch. Reads the current value and flips

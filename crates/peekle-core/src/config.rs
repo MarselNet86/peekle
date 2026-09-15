@@ -16,9 +16,6 @@ use crate::types::Language;
 
 /// `~/Library/Application Support/peekle/config.toml`
 pub const CONFIG_FILE: &str = "config.toml";
-/// Port is duplicated here so `doctor` and `status` can find the server
-/// without parsing the config.
-pub const PORT_FILE: &str = ".peekle/port";
 
 #[cfg(unix)]
 const OWNER_ONLY: u32 = 0o600;
@@ -79,8 +76,6 @@ pub struct ServerConfig {
 #[serde(default)]
 pub struct HotkeyConfig {
     pub toggle: String,
-    /// Empty means do not register.
-    pub recall: String,
     /// Agreement to attach a screenshot. Held only while an offer stands, and
     /// dropped on every path that settles one, because a modifierless key
     /// taken from the whole system for good would be a fault. Empty switches
@@ -94,10 +89,6 @@ pub struct HotkeyConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
-    pub island_opacity: f32,
-    /// Always false: the island is opaque black, blur would give it away as a
-    /// window on top of the system rather than part of the bezel. tech.md 6.10.
-    pub blur: bool,
     pub feed_visible_rows: u8,
     /// `None` until the person picks one on the first open island, and that
     /// absence is what raises the language screen. tech.md 6.28.
@@ -192,7 +183,6 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             toggle: "Alt+Shift+KeyQ".to_string(),
-            recall: String::new(),
             attach: "ArrowUp".to_string(),
             quit: "Alt+Command+KeyQ".to_string(),
         }
@@ -202,8 +192,6 @@ impl Default for HotkeyConfig {
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
-            island_opacity: 1.0,
-            blur: false,
             feed_visible_rows: MAX_FEED_VISIBLE_ROWS,
             language: None,
         }
@@ -344,12 +332,6 @@ pub fn generate_token() -> String {
 pub fn config_path() -> Result<PathBuf, ConfigError> {
     let dirs = directories::ProjectDirs::from("", "", "peekle").ok_or(ConfigError::NoHome)?;
     Ok(dirs.config_dir().join(CONFIG_FILE))
-}
-
-/// `~/.peekle/port`
-pub fn port_file_path() -> Result<PathBuf, ConfigError> {
-    let home = directories::BaseDirs::new().ok_or(ConfigError::NoHome)?;
-    Ok(home.home_dir().join(PORT_FILE))
 }
 
 #[cfg(test)]

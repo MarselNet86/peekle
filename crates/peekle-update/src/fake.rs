@@ -50,12 +50,6 @@ impl FakeReleases {
         self
     }
 
-    /// Fails every download with `reason`.
-    pub fn download_failing(self, reason: UpdateError) -> Self {
-        *self.download.lock().expect("download lock") = Err(reason);
-        self
-    }
-
     /// How many times the release was asked for, so a test can prove a second
     /// check reused the file it already had.
     pub fn asks(&self) -> u32 {

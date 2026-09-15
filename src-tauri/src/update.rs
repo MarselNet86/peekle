@@ -159,7 +159,13 @@ pub fn watch(app: &AppHandle, state: Arc<AppState>) {
             let repo = repo.clone();
             // Blocking: the ask and the download are synchronous, and a dmg
             // holds the thread for as long as it takes to arrive.
-            let _ = tauri::async_runtime::spawn_blocking(move || check(&once, &repo)).await;
+            // A check that panics must not vanish into a sleeping loop: the
+            // join error is the only trace it leaves.
+            if let Err(err) =
+                tauri::async_runtime::spawn_blocking(move || check(&once, &repo)).await
+            {
+                tracing::warn!(error = %err, "the update check did not finish");
+            }
 
             // Zero means by hand only, so the first check was the only one.
             if hours == 0 {

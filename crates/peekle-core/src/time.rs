@@ -1,6 +1,16 @@
 //! Time parsing shared by the parts of the product that read someone else's
 //! timestamps. Pure, so the property tests can hammer it.
 
+/// Milliseconds since the epoch, now. Zero on a clock set before 1970, which
+/// is not an error worth a path of its own. One copy for the workspace: seven
+/// identical private ones stood in four crates until v87.15.
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
+}
+
 /// Seconds since the epoch for an ISO 8601 timestamp such as
 /// `2026-08-20T16:30:00.366734+00:00`.
 ///

@@ -237,22 +237,6 @@ fn matcher_for(event: &str) -> Option<&'static str> {
     }
 }
 
-/// tech.md 6.1, the endpoint column, literally.
-///
-/// Every feed event goes to `/feed`. It went to `/session` and to a `/tasks`
-/// that the router has never had, so every tool call in the product's life was
-/// posted to a handler that drops it or to a 404: the live feed was dead while
-/// its tests passed against the router directly.
-pub fn endpoint_for(event: &str) -> &'static str {
-    match event {
-        "Stop" => "stop",
-        "PermissionRequest" => "permission",
-        "Notification" => "notification",
-        "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => "feed",
-        _ => "session",
-    }
-}
-
 /// Only the hooks that can wait for a person carry a timeout, and it is an
 /// upper bound rather than a working window: Peekle gives up first, on its own
 /// terms, using the windows in 6.8. A whole day because the one waiting is a
@@ -302,40 +286,52 @@ mod tests {
         }
     }
 
-    /// Every managed event, pinned to the endpoint and matcher of the table in
-    /// tech.md 6.1. The mapping drifted from that table and nothing noticed,
-    /// because every other test posts to the router directly and never reads
-    /// what `init` actually wrote. This one reads it.
+    /// Every managed event, pinned to the matcher of the table in tech.md 6.1.
+    /// The mapping drifted from that table and nothing noticed, because every
+    /// other test posts to the router directly and never reads what `init`
+    /// actually wrote. This one reads it.
     #[test]
-    fn every_event_lands_on_the_endpoint_the_contract_names() {
-        for (event, endpoint, matcher) in [
-            ("Stop", "stop", None),
-            ("PermissionRequest", "permission", Some("*")),
-            ("UserPromptSubmit", "feed", None),
-            ("PreToolUse", "feed", Some("*")),
-            ("PostToolUse", "feed", Some("*")),
+    fn every_event_lands_on_the_matcher_the_contract_names() {
+        for (event, matcher) in [
+            ("Stop", None),
+            ("PermissionRequest", Some("*")),
+            ("UserPromptSubmit", None),
+            ("PreToolUse", Some("*")),
+            ("PostToolUse", Some("*")),
             (
                 "Notification",
-                "notification",
                 Some("permission_prompt|idle_prompt|agent_needs_input|agent_completed"),
             ),
-            ("SessionStart", "session", None),
-            ("SessionEnd", "session", None),
-            ("PreCompact", "session", Some("manual|auto")),
+            ("SessionStart", None),
+            ("SessionEnd", None),
+            ("PreCompact", Some("manual|auto")),
         ] {
-            assert_eq!(endpoint_for(event), endpoint, "{event}");
             assert_eq!(matcher_for(event), matcher, "{event}");
         }
     }
 
-    /// A route that does not exist answers 404, and a hook posting into one is
-    /// invisible in every log the user can reach.
+    /// The endpoint column of tech.md 6.1 lives in the hook script, which is
+    /// what actually posts. A Rust copy of that mapping stood here until
+    /// v87.15, and its tests guarded the copy nobody ran: every tool call in
+    /// the product's life once went to a `/tasks` the router never had, and
+    /// the live feed was dead while the tests passed. A route that does not
+    /// exist answers 404, invisible in every log the user can reach, so the
+    /// script itself is read for the routes it names.
     #[test]
-    fn no_event_is_sent_to_a_route_the_server_does_not_serve() {
+    fn the_script_posts_to_every_route_the_server_serves() {
         const SERVED: &[&str] = &["stop", "permission", "notification", "feed", "session"];
-        for event in peekle_core::MANAGED_HOOK_EVENTS {
-            assert!(SERVED.contains(&endpoint_for(event)), "{event}");
+        let named: Vec<&str> = HOOK_SCRIPT
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("return \""))
+            .filter_map(|rest| rest.strip_suffix('"'))
+            .collect();
+        for route in SERVED {
+            assert!(named.contains(route), "the script never posts to /{route}");
         }
+        assert!(
+            !named.contains(&"tasks"),
+            "the script posts to /tasks, which nobody serves"
+        );
     }
 
     const PORT: u16 = 47821;

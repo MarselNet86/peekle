@@ -8,9 +8,9 @@
 //! Nothing here ever logs the token. Rule 11 allows its length and nothing
 //! else, and an error message counts as a log.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use peekle_core::time::iso_seconds;
+use peekle_core::time::{iso_seconds, now_ms};
 use peekle_core::types::{
     UsageSnapshot, UsageSource, UsageUnavailable, UsageWindow, UsageWindowStat,
 };
@@ -111,13 +111,6 @@ pub fn rate_limited(fetched_at: i64, retry_after_ms: Option<i64>) -> UsageSnapsh
 pub fn retry_after_ms(header: Option<&str>) -> Option<i64> {
     let secs: i64 = header?.trim().parse().ok()?;
     (secs > 0).then(|| secs.saturating_mul(1000))
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 /// The real provider.

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use peekle_core::labels::classify;
+use peekle_core::time::now_ms;
 use peekle_core::types::{
     IslandView, PromptOutcome, PromptRequest, SessionStatus, TaskItem, TaskStatus, ToastRequest,
     ToastTone,
@@ -606,13 +607,6 @@ pub(crate) fn first_line(text: &str) -> String {
         .find(|line| !line.is_empty())
         .unwrap_or_default()
         .to_string()
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 fn status_of(raw: Option<&str>) -> TaskStatus {

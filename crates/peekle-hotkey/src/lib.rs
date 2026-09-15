@@ -70,25 +70,6 @@ impl Combination {
         Ok(combination)
     }
 
-    /// Round trips back into the config spelling.
-    pub fn to_config(&self) -> String {
-        let mut parts = Vec::new();
-        if self.control {
-            parts.push("Control".to_string());
-        }
-        if self.alt {
-            parts.push("Alt".to_string());
-        }
-        if self.shift {
-            parts.push("Shift".to_string());
-        }
-        if self.command {
-            parts.push("Command".to_string());
-        }
-        parts.push(self.key.clone());
-        parts.join("+")
-    }
-
     /// What the user sees in onboarding and in `doctor`, for example ⌥⇧Q.
     pub fn to_display(&self) -> String {
         let mut out = String::new();

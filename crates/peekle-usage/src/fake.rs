@@ -2,8 +2,8 @@
 //! Keychain prompt or a real network round trip. tech.md section 7.
 
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use peekle_core::time::now_ms;
 use peekle_core::types::{
     UsageSnapshot, UsageSource, UsageUnavailable, UsageWindow, UsageWindowStat,
 };
@@ -48,13 +48,6 @@ impl FakeUsage {
     fn lock(&self) -> std::sync::MutexGuard<'_, FakeMode> {
         self.mode.lock().unwrap_or_else(|e| e.into_inner())
     }
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 fn now_secs() -> i64 {

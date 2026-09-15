@@ -487,10 +487,6 @@ impl PtyHost {
         self.lock().contains_key(session_id)
     }
 
-    pub fn owned_ids(&self) -> Vec<String> {
-        self.lock().keys().cloned().collect()
-    }
-
     /// Starts `claude` in a fresh pty.
     ///
     /// `on_exit` runs on the reader thread when the process goes away, which
@@ -597,7 +593,9 @@ impl PtyHost {
                 }
                 if ask.is_some() && started.elapsed() < TRUST_WINDOW {
                     tail.push_str(&squeeze(&String::from_utf8_lossy(&buffer[..read])));
-                    if TRUST_MARKS.iter().all(|mark| tail.contains(mark)) {
+                    // The one rule for the screen, and the one the tests
+                    // pin: an inlined copy here drifted from it unnoticed.
+                    if asks_trust(&tail) {
                         if let Some(ask) = ask.take() {
                             ask(id.clone());
                         }

@@ -1,7 +1,6 @@
 //! Axum router. Paths, statuses and bodies come from tech.md section 6.2.
 
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::{Path, State},
@@ -10,6 +9,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use peekle_core::time::now_ms;
 use peekle_core::types::{PromptOutcome, PromptRequest};
 use serde_json::{json, Value};
 use ulid::Ulid;
@@ -58,13 +58,6 @@ fn check_token(state: &ServerState, token: &str) -> bool {
 /// letting axum's own rejection shape leak out.
 fn parse(body: &[u8]) -> Result<Value, StatusCode> {
     serde_json::from_slice(body).map_err(|_| StatusCode::BAD_REQUEST)
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 async fn health(State(state): State<ServerState>) -> Response {
@@ -241,9 +234,4 @@ async fn session(
     body: bytes::Bytes,
 ) -> Response {
     non_blocking(state, token, body, |sink, payload| sink.on_session(payload)).await
-}
-
-/// Convenience for callers that want a ready-made timeout.
-pub fn default_timeout() -> Duration {
-    Duration::from_secs(600)
 }

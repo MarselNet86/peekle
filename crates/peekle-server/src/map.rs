@@ -37,14 +37,6 @@ fn session_ref(payload: &Value) -> SessionRef {
     }
 }
 
-/// Response body that hands the agent its next prompt. tech.md 6.2.
-///
-/// The text is what the user typed, so it goes back verbatim: reason is the
-/// prompt the agent acts on, and wrapper prose would become an instruction.
-pub fn block_body(text: &str) -> Value {
-    json!({"decision": "block", "reason": text.trim()})
-}
-
 /// `AskUserQuestion`'s `tool_input.questions`, as captured live in
 /// `fixtures/hooks/ask_user_question.jsonl`. `None` for anything malformed or
 /// missing: a tool call that claims to be `AskUserQuestion` but carries no
@@ -341,29 +333,6 @@ mod tests {
                 .project,
             "peekle"
         );
-    }
-
-    /// The queued text is the next prompt the agent acts on, so it goes back
-    /// exactly as typed. Only the surrounding whitespace is ours to remove.
-    #[test]
-    fn queued_text_becomes_the_next_prompt_verbatim() {
-        assert_eq!(
-            block_body("  run the tests  "),
-            json!({"decision": "block", "reason": "run the tests"})
-        );
-    }
-
-    /// Prose around the text would read to the agent as instruction.
-    #[test]
-    fn nothing_is_wrapped_around_the_text() {
-        for text in [
-            "ship it",
-            "rm -rf /tmp/x",
-            "{\"json\": true}",
-            "многострочный\nтекст",
-        ] {
-            assert_eq!(block_body(text)["reason"], json!(text));
-        }
     }
 
     #[test]
