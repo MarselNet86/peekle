@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build && node scripts/build-cli.mjs",
     "frontendDist": "../build"
   },
   "app": {
@@ -47,7 +47,10 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "files": {
+        "MacOS/peekle": "../target/cli/peekle"
+      }
     },
     "linux": {
       "deb": {
