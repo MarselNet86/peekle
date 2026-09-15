@@ -92,8 +92,8 @@ export const commands = {
   // account comes back, and `signed_in: false` raises the window. tech.md 6.16.
   signOut: () => call<AccountState>('sign_out'),
   // The address lives in Rust and this takes no argument, so a page cannot
-  // point it anywhere of its own. Rust puts the island away once Telegram is
-  // open; a refusal comes back as the reason, in words. tech.md 6.22.
+  // point it anywhere of its own. Rust puts the island away once the issue page
+  // is open; a refusal comes back as the reason, in words. tech.md 6.22.
   openBugReport: () => call<void>('open_bug_report'),
   // This build's version, for the last row of the settings. `null` outside the
   // shell, where there is no build to ask. tech.md 6.5.

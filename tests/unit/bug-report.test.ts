@@ -3,7 +3,7 @@
  *
  * Acceptance, from the change: a button beside the gear, a short line raised
  * on hover that says what pressing it does, and a press that opens the
- * developer's Telegram. The line is the primitive's own, so what it says and
+ * new GitHub issue. The line is the primitive's own, so what it says and
  * when it stands are read here; where it stands, and that it moves no row, is
  * layout and is read in the e2e.
  */
@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import IconButton from '$lib/ui/IconButton.svelte';
 
-const HINT = 'Asks first, then opens Telegram.';
+const HINT = 'Asks first, then opens a GitHub issue.';
 
 const bug = (props: Record<string, unknown> = {}) =>
   render(IconButton, { props: { name: 'bug', title: 'Report a bug', hint: HINT, ...props } });

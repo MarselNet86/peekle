@@ -657,7 +657,7 @@ test.describe('the island route', () => {
     await expect(hint).toHaveCount(0);
 
     await bug.hover();
-    await expect(hint).toContainText('Asks first, then opens Telegram.');
+    await expect(hint).toContainText('Asks first, then opens a GitHub issue.');
     expect((await rows.boundingBox())!.y).toBe(before.y);
     // And it stays inside the shape rather than hanging off its side.
     const line = (await hint.boundingBox())!;

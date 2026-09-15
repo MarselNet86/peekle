@@ -11,9 +11,9 @@
     onwrite,
     oncancel,
   }: {
-    /** Write was pressed and Telegram is being opened. */
+    /** Write was pressed and the issue page is being opened. */
     busy?: boolean;
-    /** Why Telegram did not open, in words. Stands in the line under the
+    /** Why the issue page did not open, in words. Stands in the line under the
      * title, so the press that failed says so where the eye already is. */
     error?: string | null;
     onwrite?: () => void;

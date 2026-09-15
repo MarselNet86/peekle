@@ -393,8 +393,12 @@ pub fn could_not_open_update(l: Language) -> &'static str {
     )
 }
 
-pub fn could_not_open_telegram(l: Language) -> &'static str {
-    say(l, "could not open Telegram", "Не удалось открыть Telegram")
+pub fn could_not_open_bug_report(l: Language) -> &'static str {
+    say(
+        l,
+        "could not open the issue page",
+        "Не удалось открыть страницу issue",
+    )
 }
 
 pub fn claude_needs_you(l: Language) -> &'static str {
@@ -533,7 +537,7 @@ mod tests {
         notice_title,
         notices_switched_on,
         notice_refused,
-        could_not_open_telegram,
+        could_not_open_bug_report,
         claude_needs_you,
     ];
 

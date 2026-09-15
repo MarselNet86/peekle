@@ -2240,26 +2240,29 @@ pub fn set_session_cwd(
     Ok(())
 }
 
-/// Where a bug goes. tech.md 6.22.
+/// Where a bug goes: a new issue on the repository, labelled bug. Public and
+/// searchable, so the next person with the same fault finds it instead of
+/// writing it again, and nobody's private messages are the tracker.
+/// tech.md 6.22, v87.18.
 ///
 /// The address is here rather than in the webview for the reason
 /// `open_sign_in_page` gives: a command that takes a URL from the page is a
 /// command the page can point anywhere. A link in the markup is out for a
 /// second reason -- an anchor in an overlay webview navigates the overlay.
-pub const BUG_REPORT_URL: &str = "https://t.me/marselnet";
+pub const BUG_REPORT_URL: &str = "https://github.com/MarselNet86/peekle/issues/new?labels=bug";
 
-/// Opens the developer's Telegram, and puts the island away once it has.
+/// Opens a new GitHub issue labelled bug, and puts the island away once it has.
 ///
 /// The answer "Write" to the bug question. The person is on their way to
-/// another app to type, and an island left open over it is in the way. A
-/// Telegram that would not open leaves the question standing with the reason
+/// the browser to write, and an island left open over it is in the way. A
+/// page that would not open leaves the question standing with the reason
 /// in its line, so the press is not lost. tech.md 6.22.
 #[tauri::command]
 pub fn open_bug_report(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    tracing::debug!("opening the bug report chat");
+    tracing::debug!("opening the bug report page");
     platform::open_url(BUG_REPORT_URL).map_err(|err| {
-        tracing::warn!(error = %err, "could not open the bug report chat");
-        copy::could_not_open_telegram(state.language()).to_string()
+        tracing::warn!(error = %err, "could not open the bug report page");
+        copy::could_not_open_bug_report(state.language()).to_string()
     })?;
     windows::set_view(&app, IslandView::Collapsed);
     Ok(())
@@ -2802,7 +2805,10 @@ mod tests {
 
     #[test]
     fn the_bug_button_carries_its_own_address() {
-        assert_eq!(BUG_REPORT_URL, "https://t.me/marselnet");
+        assert_eq!(
+            BUG_REPORT_URL,
+            "https://github.com/MarselNet86/peekle/issues/new?labels=bug"
+        );
         let _: for<'a> fn(AppHandle, State<'a, Arc<AppState>>) -> Result<(), String> =
             open_bug_report;
     }

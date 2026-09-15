@@ -3,7 +3,7 @@
  *
  * Criteria, from the owner's request: pressing the bug button folds the
  * island into a question, "Found a bug? Tell us.", with two buttons, Write
- * and Cancel. Write opens Telegram and the island closes completely.
+ * and Cancel. Write opens a GitHub issue and the island closes completely.
  */
 
 import { render, screen } from '@testing-library/svelte';
@@ -53,7 +53,7 @@ describe('the bug panel', () => {
     expect(oncancel).toHaveBeenCalledTimes(2);
   });
 
-  it('takes no second answer while Telegram opens', async () => {
+  it('takes no second answer while the issue page opens', async () => {
     const oncancel = vi.fn();
     render(BugPanel, { props: { busy: true, oncancel } });
     expect(screen.getByRole('button', { name: /Write/ })).toBeDisabled();
@@ -62,9 +62,9 @@ describe('the bug panel', () => {
     expect(oncancel).not.toHaveBeenCalled();
   });
 
-  it('says why Telegram did not open, in the line under the title', () => {
-    render(BugPanel, { props: { error: 'Could not open Telegram' } });
-    expect(screen.getByText('Could not open Telegram')).toBeInTheDocument();
+  it('says why the issue page did not open, in the line under the title', () => {
+    render(BugPanel, { props: { error: 'Could not open the issue page' } });
+    expect(screen.getByText('Could not open the issue page')).toBeInTheDocument();
     expect(screen.queryByText('Tell us about it.')).not.toBeInTheDocument();
   });
 

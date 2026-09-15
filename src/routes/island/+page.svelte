@@ -594,7 +594,7 @@
     commands.setView('Quit');
   }
 
-  // The bug question: the list folds into it, Write opens Telegram and Rust
+  // The bug question: the list folds into it, Write opens a GitHub issue and Rust
   // puts the island away, Cancel goes back to where the button was pressed.
   // tech.md 6.22.
   let reporting = $state(false);

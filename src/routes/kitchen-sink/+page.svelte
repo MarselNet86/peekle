@@ -552,7 +552,7 @@
       <IconButton
         name="bug"
         title="Report a bug"
-        hint="Asks first, then opens Telegram."
+        hint="Asks first, then opens a GitHub issue."
         onclick={() => {}}
       />
     </div>

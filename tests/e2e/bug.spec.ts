@@ -3,7 +3,7 @@
  * would be. tech.md 6.22.
  *
  * Rust is played by the stub: `set_view` is answered with `peekle://view`,
- * and `open_bug_report` puts the island away the way Rust does once Telegram
+ * and `open_bug_report` puts the island away the way Rust does once the issue page
  * is open. Every command the route sends is kept on `window.__calls`.
  */
 
@@ -11,7 +11,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ROUTE = '/island/?notch=34&notch_width=185';
 
-async function stub(page: Page, telegramOpens = true) {
+async function stub(page: Page, pageOpens = true) {
   await page.addInitScript((opens: boolean) => {
     const w = window as unknown as Record<string, unknown>;
     const handlers: Record<string, number> = {};
@@ -70,8 +70,8 @@ async function stub(page: Page, telegramOpens = true) {
           setTimeout(() => push('peekle://view', args?.view), 0);
           return null;
         case 'open_bug_report':
-          if (!opens) throw 'Could not open Telegram';
-          // Rust puts the island away once Telegram is open. tech.md 6.22.
+          if (!opens) throw 'Could not open the issue page';
+          // Rust puts the island away once the issue page is open. tech.md 6.22.
           setTimeout(() => push('peekle://view', 'Collapsed'), 0);
           return null;
         default:
@@ -98,7 +98,7 @@ async function stub(page: Page, telegramOpens = true) {
     };
     w.__view = (view: unknown) => push('peekle://view', view);
     w.__listening = (event: string) => event in handlers;
-  }, telegramOpens);
+  }, pageOpens);
 }
 
 async function calls(page: Page, command: string) {
@@ -142,7 +142,7 @@ test.describe('reporting a bug', () => {
       .toBeLessThan(120);
   });
 
-  test('Write opens Telegram once and the island closes completely', async ({ page }) => {
+  test('Write opens the issue page once and the island closes completely', async ({ page }) => {
     await stub(page);
     await page.goto(ROUTE);
     await view(page, 'Sessions');
@@ -174,7 +174,7 @@ test.describe('reporting a bug', () => {
     expect(await calls(page, 'open_bug_report')).toHaveLength(0);
   });
 
-  test('a Telegram that would not open says so and keeps the question up', async ({ page }) => {
+  test('an issue page that would not open says so and keeps the question up', async ({ page }) => {
     await stub(page, false);
     await page.goto(ROUTE);
     await view(page, 'Sessions');
@@ -182,7 +182,7 @@ test.describe('reporting a bug', () => {
     await page.getByRole('button', { name: 'Report a bug' }).click();
     await page.getByRole('button', { name: 'Write' }).click();
 
-    await expect(page.getByText('Could not open Telegram')).toBeVisible();
+    await expect(page.getByText('Could not open the issue page')).toBeVisible();
     await expect(page.getByRole('alertdialog')).toBeVisible();
   });
 });

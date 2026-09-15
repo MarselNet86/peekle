@@ -292,7 +292,7 @@ pub enum IslandView {
     /// and the last step is the person's. tech.md 6.30.
     Update,
     /// The bug question, in the same shape: found a bug, tell us. Raised by the
-    /// bug button beside the gear; Write opens Telegram and puts the island
+    /// bug button beside the gear; Write opens a GitHub issue and puts the island
     /// away, Cancel goes back. tech.md 6.22.
     Bug,
     /// The list of sessions.
