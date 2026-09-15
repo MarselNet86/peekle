@@ -68,6 +68,7 @@ const en = {
 
   /** The strip the island shrinks to while files are being picked. tech.md 6.25. */
   pickingFiles: 'Choosing files…',
+  pickingFolder: 'Choosing a folder…',
   filesAttached: (count: number) => (count === 1 ? '1 file attached' : `${count} files attached`),
   expandIsland: 'Expand',
 
@@ -152,6 +153,7 @@ export const CHAT: Copy<typeof en> = {
     stop: 'Остановить',
 
     pickingFiles: 'Выбираем файлы…',
+    pickingFolder: 'Выбираем папку…',
     filesAttached: (count) => {
       // Файл, файла, файлов: русский счёт по последним двум цифрам.
       const tens = count % 100;

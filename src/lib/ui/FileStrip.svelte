@@ -15,8 +15,13 @@
   let {
     count,
     picking = false,
+    folder = false,
     onexpand,
   }: {
+    /** The dialog under the strip chooses the folder of a new chat, not
+     * files: nothing is counted, and the line says what is being chosen.
+     * tech.md 6.23, v87.12. */
+    folder?: boolean;
     /** How many files are attached to the message underneath. */
     count: number;
     /** The dialog is standing right now. Nothing is attached yet on the first
@@ -26,7 +31,9 @@
   } = $props();
 
   const t = $derived(copy(CHAT));
-  const said = $derived(count > 0 ? t.filesAttached(count) : t.pickingFiles);
+  const said = $derived(
+    folder ? t.pickingFolder : count > 0 ? t.filesAttached(count) : t.pickingFiles,
+  );
 </script>
 
 <div class="strip">
@@ -41,7 +48,7 @@
     />
     <path d="M5.4 0.8v3.2H8.8" fill="none" stroke="currentColor" stroke-width="1" />
   </svg>
-  <span class="said" class:waiting={picking && count === 0}>{said}</span>
+  <span class="said" class:waiting={picking && (folder || count === 0)}>{said}</span>
   <!-- The way back, and it carries its key: the pointer is in the dialog, not
        here, so the combination is the one that will actually be used.
        tech.md 6.25. -->

@@ -80,7 +80,18 @@ async function stub(page: Page, files: string[], standing = false) {
         release?.(paths);
         release = null;
       };
+      // The folder dialog always stands until the test closes it with a path,
+      // or with null for a cancel. tech.md 6.23, v87.12.
+      let closeFolder: ((path: string | null) => void) | null = null;
+      w.__closeFolder = (path: string | null) => {
+        closeFolder?.(path);
+        closeFolder = null;
+      };
       const answer = (command: string): unknown => {
+        if (command === 'choose_folder') {
+          if (closeFolder) return null;
+          return new Promise<string | null>((resolve) => (closeFolder = resolve));
+        }
         if (command === 'choose_files' && standing) {
           if (release) return [];
           return new Promise<string[]>((resolve) => (release = resolve));
@@ -249,6 +260,59 @@ test.describe('the island while files are picked', () => {
     await expect(page.getByText('1 file attached')).toBeVisible();
     await page.getByRole('button', { name: 'Expand' }).click();
     await expect(page.getByText('report.pdf')).toBeVisible();
+  });
+
+  /// v87.12, from a teammate's shot: the folder dialog opened under the island
+  /// too. The strip stands for it, and comes back by itself once the dialog
+  /// closes, because a folder is one choice. tech.md 6.23.
+  test('stands aside for the folder dialog and comes back once it closes', async ({ page }) => {
+    await stub(page, []);
+    await page.goto(ROUTE);
+
+    await page.getByRole('button', { name: 'peekle' }).click();
+    await page.getByRole('menu').getByText('Open folder…').click();
+
+    await expect(page.getByText('Choosing a folder…')).toBeVisible();
+    await expect(page.locator('.reply textarea')).toHaveCount(0);
+    await expect.poll(() => shrinks(page)).toContain(true);
+
+    await page.evaluate(() =>
+      (window as unknown as { __closeFolder: (path: string | null) => void }).__closeFolder(
+        '/Users/dev/site',
+      ),
+    );
+
+    // Back without a press, with the chat aimed where it was told.
+    await expect(page.locator('.reply textarea')).toBeVisible();
+    await expect(page.getByText('Choosing a folder…')).toHaveCount(0);
+    await expect.poll(async () => (await shrinks(page)).at(-1)).toBe(false);
+    const aimed = await page.evaluate(() =>
+      (window as unknown as { __calls: { command: string; args: unknown }[] }).__calls.filter(
+        (call) => call.command === 'set_session_cwd',
+      ),
+    );
+    expect(aimed.map((call) => call.args)).toEqual([{ sessionId: 's1', cwd: '/Users/dev/site' }]);
+  });
+
+  test('comes back from a cancelled folder dialog and aims nowhere', async ({ page }) => {
+    await stub(page, []);
+    await page.goto(ROUTE);
+
+    await page.getByRole('button', { name: 'peekle' }).click();
+    await page.getByRole('menu').getByText('Open folder…').click();
+    await expect(page.getByText('Choosing a folder…')).toBeVisible();
+
+    await page.evaluate(() =>
+      (window as unknown as { __closeFolder: (path: string | null) => void }).__closeFolder(null),
+    );
+
+    await expect(page.locator('.reply textarea')).toBeVisible();
+    const aimed = await page.evaluate(() =>
+      (window as unknown as { __calls: { command: string }[] }).__calls.filter(
+        (call) => call.command === 'set_session_cwd',
+      ),
+    );
+    expect(aimed).toHaveLength(0);
   });
 
   /// A cancel is not an event and says nothing, but the island still has to

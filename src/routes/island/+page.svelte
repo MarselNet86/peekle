@@ -367,7 +367,29 @@
     if (!current) return;
     const sessionId = current.session.session_id;
     // The last row is not a folder: it is the way to the rest of the disk.
-    const cwd = id === CHOOSE ? await commands.chooseFolder() : id;
+    let cwd: string | null = id;
+    if (id === CHOOSE) {
+      // The dialog is an ordinary window and opens under the island, so the
+      // island stands aside for it, and comes back by itself once it closes:
+      // a folder is one choice, and the field of the first message is what is
+      // needed next. A dialog already up is brought back rather than joined
+      // by a second. tech.md 6.23, v87.12.
+      shrunk = true;
+      if (picking) {
+        void commands.chooseFolder().catch(() => {});
+        return;
+      }
+      picking = 'folder';
+      try {
+        cwd = await commands.chooseFolder();
+      } catch (err) {
+        startError = String(err);
+        cwd = null;
+      } finally {
+        picking = null;
+        shrunk = false;
+      }
+    }
     // A cancel changes nothing and says nothing: the person changed their
     // mind, and that is not an event. tech.md 6.23.
     if (!cwd) return;
@@ -623,8 +645,9 @@
    * strip; this decides when the strip stands.
    */
   let shrunk = $state(false);
-  /** The dialog is standing right now, so the strip has nothing to count yet. */
-  let picking = $state(false);
+  /** Which system dialog is standing right now, if any: the strip has nothing
+   * to count while it does, and says what is being chosen. tech.md 6.25. */
+  let picking = $state<'files' | 'folder' | null>(null);
   $effect(() => {
     commands.setShrunk(shrunk);
   });
@@ -649,18 +672,18 @@
     // Out of the dialog's way before it comes up, not after: the panel is
     // drawn by AppKit the moment the command reaches Rust. tech.md 6.25.
     shrunk = true;
-    picking = true;
+    picking = 'files';
     let picked: string[] | null;
     try {
       picked = await commands.chooseFiles();
     } catch (err) {
       startError = String(err);
       // No dialog, so nothing to stand aside for.
-      picking = false;
+      picking = null;
       shrunk = false;
       return;
     }
-    picking = false;
+    picking = null;
     // A cancel is not an event and says nothing. Neither is a route rendered
     // with no Tauri under it, which answers null. tech.md 6.25.
     if (!picked || picked.length === 0) return;
@@ -979,7 +1002,12 @@
            window and cannot come above the island, so the island gets out of
            its way instead and says what is already on the message.
            tech.md 6.25. -->
-      <FileStrip count={attached.length} {picking} onexpand={() => (shrunk = false)} />
+      <FileStrip
+        count={attached.length}
+        picking={picking !== null}
+        folder={picking === 'folder'}
+        onexpand={() => (shrunk = false)}
+      />
     {:else if island.view === 'Update' && update.update}
       <!-- A newer version, already on disk. Raised over a resting island only,
            so it never lands on top of somebody's work. tech.md 6.30. -->
