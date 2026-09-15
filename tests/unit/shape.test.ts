@@ -231,3 +231,29 @@ describe('a pill with a second line', () => {
     }
   });
 });
+
+/// v87.7: a question that stands alone takes the height it needs and no more.
+/// The route measures it; the shape takes that, up to the window. Unmeasured,
+/// it takes the window as it did before. tech.md 6.14.
+describe('a question fitted to its height', () => {
+  const notch = { width: 185, height: 34 };
+
+  it('takes the measured height of the question', () => {
+    expect(shapeBounds({ Session: 's' }, notch, false, true, false, 320).height).toBe(320);
+  });
+
+  it('never grows past the window', () => {
+    expect(shapeBounds({ Session: 's' }, notch, false, true, false, 900).height).toBe(560);
+  });
+
+  it('takes the window while nothing has been measured', () => {
+    expect(shapeBounds({ Session: 's' }, notch, false, true, false, 0).height).toBe(560);
+    expect(shapeBounds({ Session: 's' }, notch, false, true).height).toBe(560);
+  });
+
+  it('means nothing where no question stands', () => {
+    expect(shapeBounds({ Session: 's' }, notch, false, false, false, 320)).toEqual(
+      shapeBounds({ Session: 's' }, notch),
+    );
+  });
+});

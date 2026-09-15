@@ -11,6 +11,7 @@
     badge = false,
     asking = false,
     deep = false,
+    fit = 0,
     rest,
     children,
   }: {
@@ -24,6 +25,9 @@
     /** The pill carries a second line, so it stands as tall as the panel that
      * carries two. tech.md 6.2. */
     deep?: boolean;
+    /** The height the standing question needs, measured by the route; zero
+     * while there is none. tech.md 6.14. */
+    fit?: number;
     rest?: Snippet;
     children?: Snippet;
   } = $props();
@@ -31,7 +35,7 @@
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
 
-  const target = $derived(shapeBounds(view, notch, badge, asking, deep));
+  const target = $derived(shapeBounds(view, notch, badge, asking, deep, fit));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
   // Off the edge without a notch, flush with it under one. tech.md 6.7.

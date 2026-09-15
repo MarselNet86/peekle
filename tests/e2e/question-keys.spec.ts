@@ -204,6 +204,27 @@ test.describe('the question window', () => {
     await expect(page.getByText('Ship the API')).toBeVisible();
   });
 
+  /// v87.7: no chin. The island is as tall as the question and its answers,
+  /// with the feed's bottom kerb under the last card, and not the window.
+  /// tech.md 6.14.
+  test('is as tall as the question and not the window', async ({ page }) => {
+    await stub(page);
+    await page.goto(ROUTE);
+    const last = page.locator('.option').last();
+    await expect(last).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const shape = await page.locator('.shape').boundingBox();
+        const card = await last.boundingBox();
+        if (!shape || !card) return 999;
+        return Math.round(shape.y + shape.height - (card.y + card.height));
+      })
+      .toBeLessThan(40);
+    const shape = (await page.locator('.shape').boundingBox())!;
+    expect(shape.height).toBeLessThan(500);
+  });
+
   test('⌘ and a digit pressed anywhere answers with that row', async ({ page }) => {
     await stub(page);
     await page.goto(ROUTE);

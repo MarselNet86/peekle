@@ -466,6 +466,36 @@
   const permission = $derived(isPermission(island.prompt) ? island.prompt : null);
   const question = $derived(isQuestion(island.prompt) ? island.prompt : null);
 
+  // How tall the island has to be for the question on screen: from the top of
+  // the shape to the bottom of the question, and the feed's own bottom padding
+  // under it. Measured rather than computed, because a question's height is its
+  // words and its answers. Zero while none stands, and the shape keeps its old
+  // rule. The question sits from the top of its block, so the shape growing or
+  // shrinking around it does not move what is measured. tech.md 6.14, v87.7.
+  let questionFit = $state(0);
+  $effect(() => {
+    if (!question || !host) {
+      questionFit = 0;
+      return;
+    }
+    const shape = host.querySelector('.shape');
+    const block = host.querySelector('.reply.asking .question');
+    if (!(shape instanceof HTMLElement) || !(block instanceof HTMLElement)) return;
+
+    const measure = () => {
+      const feedBox = block.closest('.feed');
+      const pad = feedBox ? parseFloat(getComputedStyle(feedBox).paddingBottom) || 0 : 0;
+      const fit = Math.ceil(
+        block.getBoundingClientRect().bottom - shape.getBoundingClientRect().top + pad + 12,
+      );
+      if (Math.abs(fit - untrack(() => questionFit)) > 1) questionFit = fit;
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(block);
+    return () => watch.disconnect();
+  });
+
   function answerPermission(kind: 'allow' | 'deny') {
     const choice = choiceFor(island.prompt, kind);
     if (choice) island.choose(choice);
@@ -860,6 +890,7 @@
     badge={badge.wide}
     {asking}
     deep={island.toast?.detail != null}
+    fit={asking ? questionFit : 0}
   >
     {#snippet rest()}
       <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />

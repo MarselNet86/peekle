@@ -109,6 +109,11 @@ export function shapeBounds(
   badge = false,
   asking = false,
   deep = false,
+  /** How tall the question on screen needs the shape to be, measured by the
+   * route from the top of the shape to the bottom of the question. Zero is
+   * "not measured yet", and the shape takes the window as it always did.
+   * tech.md 6.14, v87.7. */
+  fit = 0,
 ): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
@@ -156,7 +161,11 @@ export function shapeBounds(
             ? { width: 460, height: height + 380, radius: floating ? 28 : 24 }
             : {
                 width: 560,
-                height: asking ? WINDOW.height : height + 420,
+                // A question stands alone since v87.6, so the shape is as
+                // tall as the question and no taller: an island half empty
+                // under three short answers reads as something missing. What
+                // does not fit the window still scrolls. tech.md 6.14.
+                height: asking ? (fit > 0 ? fit : WINDOW.height) : height + 420,
                 radius: floating ? 28 : 24,
               };
 

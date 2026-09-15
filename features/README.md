@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.7   | [No chin under a question](#v877--no-chin-under-a-question)                                                              | 6.14, 9                |
 | v87.6   | [A question stands alone](#v876--a-question-stands-alone)                                                                | 6.14                   |
 | v87.5   | [The question window answers to ⌘ and a digit](#v875--the-question-window-answers-to--and-a-digit)                       | 6.14, 6.6, 9           |
 | v87.4   | [The bug button asks first](#v874--the-bug-button-asks-first)                                                            | 6.22, 6.3, 6.5, 9      |
@@ -65,6 +66,20 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.7 — No chin under a question
+
+2026-09-15
+
+![The island as tall as the question](shots/question-fit.png)
+
+![The same, in Russian](shots/question-fit-ru.png)
+
+With the chat stepped aside, the island kept the height of the whole window and
+three short answers stood over half a window of black. It is now exactly as tall
+as the question and its answers, with the usual kerb under the last card. A
+long question grows to the edge of the window and scrolls from there, and the
+field for an answer of your own grows the island as it opens.
 
 ## v87.6 — A question stands alone
 
