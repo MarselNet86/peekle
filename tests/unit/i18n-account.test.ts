@@ -202,7 +202,7 @@ describe('the screenshot offer in Russian', () => {
     i18n.set('ru');
     render(ShotPrompt, { props: { project: 'peekle', secs: 4, onopen: () => {} } });
     expect(screen.getByText('Снимок для peekle')).toBeInTheDocument();
-    expect(screen.getByText('Нажмите стрелку вверх, чтобы прикрепить')).toBeInTheDocument();
+    expect(screen.getByText('Нажмите ⌘1, чтобы прикрепить')).toBeInTheDocument();
     expect(screen.getByText('4 с')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Открыть peekle' })).toBeInTheDocument();
   });

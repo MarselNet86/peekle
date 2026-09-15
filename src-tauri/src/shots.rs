@@ -258,9 +258,31 @@ pub fn attach(app: &AppHandle) {
     });
 }
 
+/// A blocking request arrived while an offer stood. The request is the
+/// stronger claim -- it is why `open_offer` refuses to rise over one -- and it
+/// needs ⌘1 for its own first answer, so the offer comes down and lets go of
+/// the key before the digits are taken. Answers whether there was an offer, so
+/// the caller can put its pill away when the request takes no view of its own.
+/// tech.md 6.13, v87.17.
+pub fn withdraw(app: &AppHandle) -> bool {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let Some(offer) = state.shot.take() else {
+        return false;
+    };
+    tracing::debug!(id = %offer.id, "a request arrived, withdrawing the screenshot offer");
+    close_offer(app, &state);
+    true
+}
+
+/// The offer's pill, and only the pill, goes away. tech.md 6.13.
+pub fn put_away_pill(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    put_away(app, &state);
+}
+
 /// Drops the key and tells the island the offer is over. Runs on every path
-/// that settles one, because a leaked offer holds the Up arrow away from the
-/// whole system. tech.md 6.13 and R-14.
+/// that settles one, because a leaked offer holds ⌘1 away from the whole
+/// system. tech.md 6.13 and R-14.
 fn close_offer(app: &AppHandle, state: &Arc<AppState>) {
     release_attach_key(app, state);
     emit_offer(app, None);

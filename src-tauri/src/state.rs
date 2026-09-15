@@ -852,6 +852,14 @@ impl AppState {
         self.attach_key.swap(held, Ordering::SeqCst) != held
     }
 
+    /// Whether the screenshot offer holds its key right now. Lock-free, so the
+    /// shortcut handler may read it: ⌘1 is also the first digit of a question
+    /// and the way out of the strip, and a press is agreement only while the
+    /// offer is the one holding it. tech.md 6.13, v87.17.
+    pub fn attach_key_held(&self) -> bool {
+        self.attach_key.load(Ordering::SeqCst)
+    }
+
     /// How many choice keys are held, locked for one round of taking or giving
     /// them back. Never from the main thread. tech.md 6.14.
     pub fn choice_keys(&self) -> std::sync::MutexGuard<'_, u8> {

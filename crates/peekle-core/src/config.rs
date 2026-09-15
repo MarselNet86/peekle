@@ -17,6 +17,12 @@ use crate::types::Language;
 /// `~/Library/Application Support/peekle/config.toml`
 pub const CONFIG_FILE: &str = "config.toml";
 
+/// Agreement to attach a screenshot: ⌘1, the first digit of every answer the
+/// island takes. tech.md 6.13, v87.17.
+pub const ATTACH_KEY: &str = "Command+Digit1";
+/// What the attach key was until v87.17, read as `ATTACH_KEY`. tech.md 6.8.
+const OLD_ATTACH_KEY: &str = "ArrowUp";
+
 #[cfg(unix)]
 const OWNER_ONLY: u32 = 0o600;
 const MAX_FEED_VISIBLE_ROWS: u8 = 6;
@@ -183,7 +189,7 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             toggle: "Alt+Shift+KeyQ".to_string(),
-            attach: "ArrowUp".to_string(),
+            attach: ATTACH_KEY.to_string(),
             quit: "Alt+Command+KeyQ".to_string(),
         }
     }
@@ -300,6 +306,13 @@ impl Config {
     }
 
     fn normalize(&mut self) {
+        // The attach key moved from the Up arrow to ⌘1 in v87.17. `save` wrote
+        // every key, so a file holding the old default cannot be told from
+        // one where somebody chose it, and leaving it would change nothing for
+        // anyone who has run Peekle before. tech.md 6.8 and 6.13.
+        if self.hotkey.attach == OLD_ATTACH_KEY {
+            self.hotkey.attach = ATTACH_KEY.to_string();
+        }
         if self.ui.feed_visible_rows > MAX_FEED_VISIBLE_ROWS {
             self.ui.feed_visible_rows = MAX_FEED_VISIBLE_ROWS;
         }
@@ -494,7 +507,23 @@ mod tests {
         assert_eq!(config.shots.offer_secs, 5);
         assert_eq!(config.shots.poll_ms, 400);
         assert_eq!(config.shots.keep, 20);
-        assert_eq!(config.hotkey.attach, "ArrowUp");
+        assert_eq!(config.hotkey.attach, "Command+Digit1");
+    }
+
+    /// v87.17: the attach key moved from the Up arrow to ⌘1. `save` wrote
+    /// every key, so a file holding `ArrowUp` holds the old default and cannot
+    /// be told from a choice; it reads as the new one. Anything else is a
+    /// choice and stays. tech.md 6.8 and 6.13.
+    #[test]
+    fn the_old_attach_default_reads_as_the_new_one() {
+        let old = Config::from_toml("[hotkey]\nattach = \"ArrowUp\"\n").unwrap();
+        assert_eq!(old.hotkey.attach, "Command+Digit1");
+
+        let chosen = Config::from_toml("[hotkey]\nattach = \"Alt+KeyA\"\n").unwrap();
+        assert_eq!(chosen.hotkey.attach, "Alt+KeyA");
+
+        let off = Config::from_toml("[hotkey]\nattach = \"\"\n").unwrap();
+        assert_eq!(off.hotkey.attach, "", "empty still switches the offer off");
     }
 
     /// An offer with no life could never be answered, and a zero poll would

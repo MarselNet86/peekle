@@ -14,7 +14,7 @@
 
   let {
     project,
-    keys = ['↑'],
+    keys = ['⌘', '1'],
     left = 1,
     secs = 0,
     onopen,

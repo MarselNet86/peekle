@@ -96,7 +96,7 @@ pub fn role_of(app: &AppHandle, fired: &Shortcut) -> Option<Role> {
     if fires(&toggle, fired) {
         return Some(Role::Toggle);
     }
-    if fires(&attach, fired) {
+    if attach_answers(state.attach_key_held(), &attach, fired) {
         return Some(Role::Attach);
     }
     if fires(&quit, fired) {
@@ -145,6 +145,17 @@ fn fires(spelling: &str, fired: &Shortcut) -> bool {
         .ok()
         .and_then(|combination| shortcut_of(&combination))
         .is_some_and(|shortcut| shortcut.matches(fired.mods, fired.key))
+}
+
+/// Whether a press is agreement to attach the screenshot.
+///
+/// Not the spelling alone: the attach key is ⌘1, which is also the first
+/// digit of a question and of a permission and the way out of the strip. A
+/// press that matches it while the offer does not hold the key was taken by
+/// one of those, and reading it as agreement would answer nothing and leave
+/// the Deny unpressed. tech.md 6.13, v87.17.
+fn attach_answers(held: bool, spelling: &str, fired: &Shortcut) -> bool {
+    held && fires(spelling, fired)
 }
 
 /// Takes one combination, by its config spelling.
@@ -202,4 +213,29 @@ pub fn install(app: &AppHandle, spelling: &str) {
     }
 
     tracing::info!(combination = %combination.to_display(), "combination registered");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attach_answers;
+    use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+
+    /// v87.17: ⌘1 is agreement only while the offer holds it. The same press
+    /// with a question or a permission holding the digit is theirs.
+    #[test]
+    fn command_one_attaches_only_while_the_offer_holds_it() {
+        let command_one = Shortcut::new(Some(Modifiers::SUPER), Code::Digit1);
+        assert!(attach_answers(true, "Command+Digit1", &command_one));
+        assert!(
+            !attach_answers(false, "Command+Digit1", &command_one),
+            "a digit held by a question is not agreement"
+        );
+
+        let command_two = Shortcut::new(Some(Modifiers::SUPER), Code::Digit2);
+        assert!(!attach_answers(true, "Command+Digit1", &command_two));
+        assert!(
+            !attach_answers(true, "", &command_one),
+            "no attach key is no agreement"
+        );
+    }
 }

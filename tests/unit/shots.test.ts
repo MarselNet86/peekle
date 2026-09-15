@@ -78,9 +78,11 @@ describe('the screenshot offer on screen', () => {
     render(ShotPrompt, { props: { project: 'peekle', secs: 4 } });
 
     expect(screen.getByText('Screenshot to peekle')).toBeInTheDocument();
-    expect(screen.getByText('Press the up arrow to attach it')).toBeInTheDocument();
-    // Drawn as a key, not mentioned as one: it is the whole point of the pill.
-    expect(screen.getByText('\u2191').tagName).toBe('KBD');
+    expect(screen.getByText('Press \u23181 to attach it')).toBeInTheDocument();
+    // Drawn as keys, not mentioned as them: pressing them is the whole point
+    // of the pill. \u23181 since v87.17, two caps.
+    expect(screen.getByText('\u2318').tagName).toBe('KBD');
+    expect(screen.getByText('1').tagName).toBe('KBD');
     expect(screen.getByText('4s')).toBeInTheDocument();
   });
 
@@ -150,7 +152,10 @@ describe('the offer in the notch', () => {
     render(ShotPrompt, { props: { project: 'peekle', left: 1 } });
 
     expect(screen.getByText(/Screenshot to peekle/)).toBeInTheDocument();
-    expect(screen.getByText('↑')).toBeInTheDocument();
+    // ⌘1 since v87.17, drawn as the two keys it is.
+    expect(screen.getByText('⌘')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.queryByText('↑')).not.toBeInTheDocument();
   });
 
   it('draws the time it has left', () => {

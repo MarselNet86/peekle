@@ -518,6 +518,10 @@ const COLLAPSE_AFTER: Duration = Duration::from_millis(120);
 /// field. tech.md 6.7 and 15.
 pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     let state = app.state::<Arc<AppState>>().inner().clone();
+    // A screenshot offer standing now holds ⌘1, which this request is about to
+    // need for its own first answer. It comes down first and lets go of the
+    // key, before anything below takes the digits. tech.md 6.13, v87.17.
+    let withdrew_offer = crate::shots::withdraw(app);
     let gate = state.ready_gate(platform::ISLAND);
 
     if let Err(err) = app.emit_to(platform::ISLAND, events::PROMPT_OPEN, request) {
@@ -529,6 +533,10 @@ pub async fn open_prompt(app: &AppHandle, request: &PromptRequest) {
     let next = view_for(request.kind, &request.session.session_id, &state.view());
     if let Some(view) = next.clone() {
         set_view(app, view);
+    } else if withdrew_offer {
+        // The request took no view of its own, and the offer's pill has
+        // nothing left to say.
+        crate::shots::put_away_pill(app);
     }
 
     // Shown, and now it waits, because a hook is pending and this form is the
