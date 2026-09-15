@@ -273,8 +273,12 @@ pub fn take_front() {
         return;
     };
     // `activateIgnoringOtherApps:` is deprecated since macOS 14 and does
-    // nothing there; this is the call that still means what it says.
-    NSApplication::sharedApplication(marker).activate();
+    // nothing there; this is the call that still means what it says. Whether
+    // the system agreed is worth a line: it refuses an app that gave the front
+    // back itself, and the dialog then has to be seen without it. tech.md 6.23.
+    let app = NSApplication::sharedApplication(marker);
+    app.activate();
+    tracing::debug!(active = app.isActive(), "asked for the front");
 }
 
 /// Raises the system open panel as a window of its own and answers once it
@@ -330,6 +334,16 @@ pub fn pick(
             let _ = tx.send(chosen);
         });
         panel.beginWithCompletionHandler(&handler);
+        // Seen whether or not the app was allowed to activate. macOS 14 grants
+        // `activate` cooperatively and refuses an app that deactivated itself
+        // a moment ago -- which this app does after every dialog -- so the
+        // second panel came up behind the active app's windows. One level
+        // above the island, ordered front regardless, it stands over the
+        // island and over everything else; a click into it activates the app
+        // the ordinary way and brings the keyboard with it. tech.md 6.23,
+        // v87.14.
+        panel.setLevel(PanelLevel::ScreenSaver.value() as isize + 1);
+        panel.orderFrontRegardless();
     });
     rx
 }
