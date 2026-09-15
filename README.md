@@ -69,7 +69,7 @@ is typed into a terminal on your behalf.
 **Chats, started here.** New session picks a folder, a model, an effort and a
 permission mode, then runs `claude` in a pty of its own. Type a message, attach
 a file with the plus, or press ⌃⇧⌘4: the screenshot goes on the clipboard, the
-notch offers to attach it for five seconds, ↑ takes it. Compact from the ring
+notch offers to attach it for five seconds, ⌘1 takes it. Compact from the ring
 in the corner. Sessions you started in your own terminal show up too, read
 only, with their whole transcript.
 
@@ -90,7 +90,7 @@ Every feature above has a shot in the [feature log](features/README.md).
 | ⌘1 … ⌘9 | Answer the request or question on screen, from anywhere |
 | ⌥⇧Q     | Quiet: Peekle stops asking, every hook passes through   |
 | ⌥⌘Q     | Ask to quit                                             |
-| ⌃⇧⌘4    | Screenshot to the clipboard, then ↑ to attach it        |
+| ⌃⇧⌘4    | Screenshot to the clipboard, then ⌘1 to attach it       |
 | Esc     | Put the island away                                     |
 
 ---

@@ -152,7 +152,7 @@ and restores whatever you had copied.
 ## Screenshots into a session
 
 Take one with ⌃⇧⌘4, which puts it on the clipboard. The notch offers to attach
-it for five seconds; press the up arrow and it lands in the field of the
+it for five seconds; press ⌘1 and it lands in the field of the
 session you were last working in.
 
 Only a session Peekle started can take one: there is no way to type into a

@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract                    |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| v87.17  | [A screenshot attaches with ⌘1](#v8717--a-screenshot-attaches-with-1)                                                    | 6.13, 6.9, 6.8              |
 | v87.13  | [The file dialog comes back by itself](#v8713--the-file-dialog-comes-back-by-itself)                                     | 6.25, 6.23                  |
 | v87.12  | [The folder dialog gets the strip too](#v8712--the-folder-dialog-gets-the-strip-too)                                     | 6.23, 9                     |
 | v87.10  | [The island stands aside for the file dialog](#v8710--the-island-stands-aside-for-the-file-dialog)                       | 6.25, 6.5, 6.7, 6.14, 9     |
@@ -72,6 +73,23 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9          |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                     |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9                |
+
+## v87.17 — A screenshot attaches with ⌘1
+
+2026-09-15
+
+![The screenshot offer with ⌘1](shots/shot-offer-cmd1.png)
+
+![The same, in Russian](shots/shot-offer-cmd1-ru.png)
+
+After ⌃⇧⌘4 the pill offers the shot to the chat, and ⌘1 now takes it instead of
+the Up arrow. ⌘1 is the first answer everywhere else on the island — the first
+row of a question, Deny, the way out of the strip — so there is one key to
+remember, and five seconds after a screenshot no longer cost the arrow in
+whatever app you were in. Only one of them holds ⌘1 at a time: a request that
+arrives while the offer stands takes the pill down first, and a press is read
+as agreement only while the offer holds the key. A config that still says
+`ArrowUp`, the old default, reads as ⌘1.
 
 ## v87.13 — The file dialog comes back by itself
 
