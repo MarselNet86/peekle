@@ -21,7 +21,8 @@ you, and gone the moment you have answered.
 
 ## Install
 
-macOS 13 or newer, Apple silicon and Intel in one build.
+macOS 13 or newer, Apple silicon and Intel in one build. Want it on Windows or
+Linux? Vote in [#11](https://github.com/MarselNet86/peekle/issues/11).
 
 **1. The app.** Download
 [Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg),
