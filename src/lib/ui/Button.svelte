@@ -5,6 +5,7 @@
     disabled = false,
     wide = false,
     busy = false,
+    shortcut,
     onclick,
   }: {
     label: string;
@@ -16,6 +17,9 @@
      * as a button that did nothing, so the wait gets a moving part of its
      * own, and the button stops taking presses while it turns. tech.md 9. */
     busy?: boolean;
+    /** The keys that press it from anywhere, drawn after the label, for
+     * example `⌘1`. tech.md 9, v87.8. */
+    shortcut?: string;
     onclick?: () => void;
   } = $props();
 </script>
@@ -36,9 +40,23 @@
     <span class="spinner" aria-hidden="true"></span>
   {/if}
   {label}
+  {#if shortcut}
+    <span class="shortcut" aria-hidden="true">{shortcut}</span>
+  {/if}
 </button>
 
 <style>
+  /* The key that presses the button, quieter than the label: read when looked
+     for, not in the way of the word. It takes the colour of the variant, so it
+     stays legible on the white button and the dark one alike. tech.md 9. */
+  .shortcut {
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    opacity: 0.55;
+  }
+
   button {
     display: inline-flex;
     align-items: center;

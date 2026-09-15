@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.8   | [Allow and Deny answer to ⌘2 and ⌘1](#v878--allow-and-deny-answer-to-2-and-1)                                            | 6.7, 6.14, 9           |
 | v87.7   | [No chin under a question](#v877--no-chin-under-a-question)                                                              | 6.14, 9                |
 | v87.6   | [A question stands alone](#v876--a-question-stands-alone)                                                                | 6.14                   |
 | v87.5   | [The question window answers to ⌘ and a digit](#v875--the-question-window-answers-to--and-a-digit)                       | 6.14, 6.6, 9           |
@@ -66,6 +67,22 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.8 — Allow and Deny answer to ⌘2 and ⌘1
+
+2026-09-15
+
+![The permission panel with its keys](shots/ask-keys.png)
+
+![The same, in Russian](shots/ask-keys-ru.png)
+
+A permission answers to the keyboard the way a question does, from any
+application while the request stands open on the island: ⌘1 is Deny, the button
+on the left, and ⌘2 is Allow, the one on the right. The buttons wear the keys.
+The numbers follow the buttons in the order they stand, as the bare digits in
+these panels always have, so an accidental ⌘1 refuses rather than lets a command
+through. Both keys are given back the moment the request is answered, times out
+or the island is put away.
 
 ## v87.7 — No chin under a question
 

@@ -39,7 +39,11 @@
    */
   function keydown(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return;
+    if (event.ctrlKey || event.altKey) return;
+    // ⌘ with the digit is never text, so it answers from inside a field as
+    // well; a bare digit there stays a digit. tech.md 6.7, v87.8.
+    if (!event.metaKey && target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT'))
+      return;
 
     switch (event.key) {
       case '1':
@@ -81,8 +85,8 @@
 
   <!-- Stops the press from also opening the session underneath. -->
   <div class="answers" role="none" onclick={(event) => event.stopPropagation()}>
-    <Button label={t.deny} variant="muted" onclick={() => ondeny?.()} />
-    <Button label={t.allow} variant="prominent" onclick={() => onallow?.()} />
+    <Button label={t.deny} variant="muted" shortcut="⌘1" onclick={() => ondeny?.()} />
+    <Button label={t.allow} variant="prominent" shortcut="⌘2" onclick={() => onallow?.()} />
   </div>
 
   <span class="leak" style:--secs="{ASK_SECS}s"></span>

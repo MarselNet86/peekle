@@ -20,7 +20,11 @@
   function keydown(event: KeyboardEvent) {
     // Never swallow a keystroke meant for a field the user is typing in.
     const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return;
+    if (event.ctrlKey || event.altKey) return;
+    // ⌘ with the digit is never text, so it answers from inside a field as
+    // well; a bare digit there stays a digit. tech.md 6.7, v87.8.
+    if (!event.metaKey && target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT'))
+      return;
 
     switch (event.key) {
       case '1':
@@ -50,8 +54,8 @@
   <div class="actions">
     <!-- The same two buttons the panel carries, because it is the same
          question in a second place. tech.md 9 and 6.7. -->
-    <Button label={t.deny} variant="muted" onclick={() => ondeny?.()} />
-    <Button label={t.allow} variant="prominent" onclick={() => onallow?.()} />
+    <Button label={t.deny} variant="muted" shortcut="⌘1" onclick={() => ondeny?.()} />
+    <Button label={t.allow} variant="prominent" shortcut="⌘2" onclick={() => onallow?.()} />
   </div>
 </div>
 

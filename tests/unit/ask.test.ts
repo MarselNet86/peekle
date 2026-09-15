@@ -120,3 +120,26 @@ describe('AskPanel', () => {
     expect(screen.getByText('15s')).toBeInTheDocument();
   });
 });
+
+/// v87.8: ⌘1 and ⌘2 answer the panel, Deny and Allow in the order the buttons
+/// stand, and the buttons say so. tech.md 6.7.
+describe('the panel and its keys', () => {
+  it('wears ⌘1 on Deny and ⌘2 on Allow', () => {
+    render(AskPanel, { props: { request } });
+    expect(screen.getByRole('button', { name: /Deny/ })).toHaveTextContent('⌘1');
+    expect(screen.getByRole('button', { name: /Allow/ })).toHaveTextContent('⌘2');
+  });
+
+  it('answers ⌘1 with Deny and ⌘2 with Allow', async () => {
+    const allow = vi.fn();
+    const deny = vi.fn();
+    render(AskPanel, { props: { request, onallow: allow, ondeny: deny } });
+
+    await userEvent.keyboard('{Meta>}1{/Meta}');
+    expect(deny).toHaveBeenCalledOnce();
+    expect(allow).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Meta>}2{/Meta}');
+    expect(allow).toHaveBeenCalledOnce();
+  });
+});

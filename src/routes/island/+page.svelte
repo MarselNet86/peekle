@@ -509,6 +509,19 @@
     if (choice) island.choose(choice);
   }
 
+  // ⌘1 and ⌘2 pressed anywhere while a permission stands: the two buttons in
+  // the order they stand, Deny on the left and Allow on the right. A press that
+  // came before this request did answers nothing. tech.md 6.7, v87.8.
+  let seenPermissionChoice = untrack(() => island.choice?.seq ?? 0);
+  $effect(() => {
+    const next = island.choice;
+    if (!next || next.seq === seenPermissionChoice) return;
+    seenPermissionChoice = next.seq;
+    if (!untrack(() => permission)) return;
+    if (next.index === 1) untrack(() => answerPermission('deny'));
+    if (next.index === 2) untrack(() => answerPermission('allow'));
+  });
+
   // The draft of each chat, by id. One field for all chats was the rule until
   // v80.16, and a reply begun in one chat stood in the field of the next one
   // opened -- by hand or by another chat's turn ending. tech.md 6.7.

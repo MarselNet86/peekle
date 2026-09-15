@@ -125,3 +125,30 @@ describe('PermissionRow', () => {
     expect(ondeny).not.toHaveBeenCalled();
   });
 });
+
+/// v87.8: ⌘ with the digit answers the row too, and it answers from inside a
+/// field, where a bare digit is still text. tech.md 6.7.
+describe('the row and its keys', () => {
+  it('wears ⌘1 on Deny and ⌘2 on Allow', () => {
+    render(PermissionRow, { props: { request } });
+    expect(screen.getByRole('button', { name: /Deny/ })).toHaveTextContent('⌘1');
+    expect(screen.getByRole('button', { name: /Allow/ })).toHaveTextContent('⌘2');
+  });
+
+  it('answers ⌘1 and ⌘2 even from a field the user is typing in', async () => {
+    const onallow = vi.fn();
+    const ondeny = vi.fn();
+    const { container } = render(PermissionRow, { props: { request, onallow, ondeny } });
+
+    const field = document.createElement('textarea');
+    container.appendChild(field);
+    field.focus();
+    await userEvent.keyboard('1');
+    expect(ondeny).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Meta>}1{/Meta}');
+    expect(ondeny).toHaveBeenCalledOnce();
+    await userEvent.keyboard('{Meta>}2{/Meta}');
+    expect(onallow).toHaveBeenCalledOnce();
+  });
+});

@@ -351,11 +351,23 @@ pub fn choice_keys_for(view: &IslandView, active: Option<&PromptRequest>) -> u8 
     let Some(prompt) = active else {
         return 0;
     };
-    if prompt.kind != PromptKind::Question {
-        return 0;
+    let on_its_chat = matches!(view, IslandView::Session(id) if *id == prompt.session.session_id);
+    match prompt.kind {
+        // Deny and Allow, the two buttons in the order they stand: ⌘1 the
+        // left, ⌘2 the right. On the compact panel and on the chat alike --
+        // the owner chose these over rarer combinations, knowing ⌘2 in a
+        // browser while a request stands allows it. tech.md 6.7, v87.8.
+        PromptKind::Permission => {
+            return if matches!(view, IslandView::Ask) || on_its_chat {
+                2
+            } else {
+                0
+            };
+        }
+        PromptKind::Question => {}
+        _ => return 0,
     }
-    let open_on_it = matches!(view, IslandView::Session(id) if *id == prompt.session.session_id);
-    if !open_on_it {
+    if !on_its_chat {
         return 0;
     }
     let widest = prompt
@@ -748,9 +760,9 @@ mod tests {
 
         assert_eq!(choice_keys_for(&on_it, None), 0, "no question");
         assert_eq!(
-            choice_keys_for(&on_it, Some(&standing(PromptKind::Permission))),
+            choice_keys_for(&on_it, Some(&standing(PromptKind::Idle))),
             0,
-            "a permission answers to its own panel"
+            "a notice answers nothing"
         );
         for view in [
             IslandView::Collapsed,
@@ -769,6 +781,31 @@ mod tests {
             9,
             "there are nine digits"
         );
+    }
+
+    /// v87.8: a permission holds ⌘1 and ⌘2, Deny and Allow, while it stands on
+    /// the compact panel or on its own chat, and nowhere else. tech.md 6.7.
+    #[test]
+    fn a_permission_holds_two_keys_while_it_stands_open() {
+        let permission = standing(PromptKind::Permission);
+        assert_eq!(choice_keys_for(&IslandView::Ask, Some(&permission)), 2);
+        assert_eq!(
+            choice_keys_for(&IslandView::Session("s".into()), Some(&permission)),
+            2
+        );
+        for view in [
+            IslandView::Collapsed,
+            IslandView::Pill,
+            IslandView::Sessions,
+            IslandView::Session("another".into()),
+            IslandView::Quit,
+        ] {
+            assert_eq!(
+                choice_keys_for(&view, Some(&permission)),
+                0,
+                "nobody can see the request on {view:?}"
+            );
+        }
     }
 
     /// Every spelling a choice key is registered under names a real key, or the
