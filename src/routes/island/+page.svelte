@@ -473,13 +473,21 @@
   // rule. The question sits from the top of its block, so the shape growing or
   // shrinking around it does not move what is measured. tech.md 6.14, v87.7.
   let questionFit = $state(0);
+  // The block the question stands in, once it is in the DOM. Bound rather than
+  // looked up: a question arrives while the island rests, the shape opens, and
+  // its content mounts a beat later -- an effect that looked for the block
+  // before then found nothing and never looked again, which left the island
+  // the height of the window on a real Mac while every test passed. The
+  // binding is what runs the effect again when the block appears. v87.7.1.
+  let askingBox = $state<HTMLElement | null>(null);
   $effect(() => {
-    if (!question || !host) {
+    if (!question) {
       questionFit = 0;
       return;
     }
+    if (!host || !askingBox) return;
     const shape = host.querySelector('.shape');
-    const block = host.querySelector('.reply.asking .question');
+    const block = askingBox.querySelector('.question');
     if (!(shape instanceof HTMLElement) || !(block instanceof HTMLElement)) return;
 
     const measure = () => {
@@ -1234,7 +1242,7 @@
                band. What a very long question still cannot fit scrolls here,
                because an option cut off by the bottom edge is an option that is
                not there. -->
-          <div class="reply asking">
+          <div class="reply asking" bind:this={askingBox}>
             <QuestionPrompt
               questions={question.questions}
               choice={island.choice}

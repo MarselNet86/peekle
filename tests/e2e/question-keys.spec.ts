@@ -63,9 +63,9 @@ const card = {
   updated_at: 0,
 };
 
-async function stub(page: Page, view: unknown = { Session: 's1' }) {
+async function stub(page: Page, view: unknown = { Session: 's1' }, standing = true) {
   await page.addInitScript(
-    ({ question, card, view }) => {
+    ({ question, card, view, standing }) => {
       const w = window as unknown as Record<string, unknown>;
       const handlers: Record<string, number> = {};
       const calls: { command: string; args: unknown }[] = [];
@@ -101,7 +101,7 @@ async function stub(page: Page, view: unknown = { Session: 's1' }) {
             return {
               enabled: true,
               view,
-              active_prompt: question,
+              active_prompt: standing ? question : null,
               sessions: [card],
               tasks: [],
               usage: snapshot,
@@ -140,11 +140,12 @@ async function stub(page: Page, view: unknown = { Session: 's1' }) {
         },
       };
       w.__choose = (index: number) => push('peekle://choose', { index });
+      w.__push = push;
       w.__close = () =>
         push('peekle://prompt-close', { prompt_id: 'q1', outcome: 'AnsweredElsewhere' });
       w.__listening = (event: string) => event in handlers;
     },
-    { question, card, view },
+    { question, card, view, standing },
   );
 }
 
@@ -223,6 +224,38 @@ test.describe('the question window', () => {
       .toBeLessThan(40);
     const shape = (await page.locator('.shape').boundingBox())!;
     expect(shape.height).toBeLessThan(500);
+  });
+
+  /// v87.7.1: the order a real Mac uses. The island rests, the question
+  /// arrives, and only then does Rust open the island on its chat, so the
+  /// question's block mounts after the shape has opened. The height has to be
+  /// measured then, not once at the start. tech.md 6.14.
+  test('fits a question that arrives while the island rests', async ({ page }) => {
+    await stub(page, 'Collapsed', false);
+    await page.goto(ROUTE);
+    await page.waitForFunction(() => {
+      const listening = (window as unknown as { __listening: (event: string) => boolean })
+        .__listening;
+      return listening('peekle://prompt-open') && listening('peekle://view');
+    });
+
+    await page.evaluate((request) => {
+      const push = (window as unknown as { __push: (event: string, payload: unknown) => void })
+        .__push;
+      push('peekle://prompt-open', request);
+      setTimeout(() => push('peekle://view', { Session: 's1' }), 50);
+    }, question);
+
+    const last = page.locator('.option').last();
+    await expect(last).toBeVisible();
+    await expect
+      .poll(async () => {
+        const shape = await page.locator('.shape').boundingBox();
+        const card = await last.boundingBox();
+        if (!shape || !card) return 999;
+        return Math.round(shape.y + shape.height - (card.y + card.height));
+      })
+      .toBeLessThan(40);
   });
 
   test('⌘ and a digit pressed anywhere answers with that row', async ({ page }) => {

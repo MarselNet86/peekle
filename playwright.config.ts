@@ -16,7 +16,18 @@ export default defineConfig({
     baseURL: 'http://localhost:1420',
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // The island runs in WKWebView, and effects settle in a different order
+    // there: the question height fit in Chromium on code that left the island
+    // the height of the window on a real Mac. What depends on that order runs
+    // in WebKit as well. tech.md 6.14, v87.7.1.
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      testMatch: /question-keys\.spec\.ts/,
+    },
+  ],
   webServer: {
     command: 'pnpm dev',
     // Matches the devUrl in tauri.conf.json. Polling 127.0.0.1 while vite
