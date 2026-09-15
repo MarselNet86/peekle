@@ -2741,7 +2741,7 @@ checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 
 [[package]]
 name = "peekle"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "arboard",
  "axum",
@@ -2776,7 +2776,7 @@ dependencies = [
 
 [[package]]
 name = "peekle-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "directories",
  "peekle-core",
@@ -2788,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "peekle-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "directories",
  "libc",
@@ -2808,14 +2808,14 @@ dependencies = [
 
 [[package]]
 name = "peekle-hotkey"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "thiserror 2.0.20",
 ]
 
 [[package]]
 name = "peekle-server"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "axum",
  "bytes",
@@ -2830,7 +2830,7 @@ dependencies = [
 
 [[package]]
 name = "peekle-update"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "directories",
  "peekle-core",
@@ -2843,7 +2843,7 @@ dependencies = [
 
 [[package]]
 name = "peekle-usage"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "peekle-core",
  "serde_json",
