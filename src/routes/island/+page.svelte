@@ -1147,41 +1147,47 @@
         <!-- The answer to a press stands here, above the feed, where the eye
              lands when something does not happen. Under the input it sat
              below what the reader was looking at. tech.md 6.15 and 9. -->
-        {#if rowNote}
-          <div class="note">
-            <NoteBlock fact={rowNote.fact} how={rowNote.how} onclose={() => (rowNote = null)} />
-          </div>
-        {/if}
-        <div class="rows" bind:this={scroller} onscroll={readScroll}>
-          <!-- A chat that has nothing in it yet carries the sign instead of
+        <!-- While a question stands the chat steps aside: the question and its
+             answers, and nothing else under the band. It comes back the moment
+             the question is answered, closed or answered elsewhere.
+             tech.md 6.14, v87.6. -->
+        {#if !question}
+          {#if rowNote}
+            <div class="note">
+              <NoteBlock fact={rowNote.fact} how={rowNote.how} onclose={() => (rowNote = null)} />
+            </div>
+          {/if}
+          <div class="rows" bind:this={scroller} onscroll={readScroll}>
+            <!-- A chat that has nothing in it yet carries the sign instead of
                half a window of black. Nothing has been said and nothing is
                going: `feedRows` puts a work line in from the first second of
                a turn (6.12), so an empty list of rows means exactly that.
                tech.md 6.12 and 9. -->
-          {#if rows.length === 0 && compacting === null}
-            <div class="blank"><Sign caption="Let's begin" /></div>
-          {/if}
-          {#each rows as row (row.id)}
-            {#if row.kind === 'said'}
-              <FeedRow
-                entry={row.entry}
-                shotSrc={fileSrc}
-                onopenshot={(path) => openShot(path, false)}
-              />
-            {:else}
-              <!-- A whole run of calls, as the one thing asked of it: whether
-                   the agent is out, and for how long. tech.md 6.12. -->
-              <WorkLine running={row.to === null} from={row.from} to={row.to} {words} />
+            {#if rows.length === 0 && compacting === null}
+              <div class="blank"><Sign caption="Let's begin" /></div>
             {/if}
-          {/each}
-          <!-- The one line about the one pause the CLI takes on its own: it
+            {#each rows as row (row.id)}
+              {#if row.kind === 'said'}
+                <FeedRow
+                  entry={row.entry}
+                  shotSrc={fileSrc}
+                  onopenshot={(path) => openShot(path, false)}
+                />
+              {:else}
+                <!-- A whole run of calls, as the one thing asked of it: whether
+                   the agent is out, and for how long. tech.md 6.12. -->
+                <WorkLine running={row.to === null} from={row.from} to={row.to} {words} />
+              {/if}
+            {/each}
+            <!-- The one line about the one pause the CLI takes on its own: it
                runs for minutes, the agent answers nothing through it, and a
                feed that says nothing reads as a feed that died. tech.md 6.21. -->
-          {#if compacting}
-            <WorkLine running tone="compact" words={[t.compacting]} from={compacting.since} />
-          {/if}
-        </div>
-        {@render connect()}
+            {#if compacting}
+              <WorkLine running tone="compact" words={[t.compacting]} from={compacting.since} />
+            {/if}
+          </div>
+          {@render connect()}
+        {/if}
 
         {#if permission}
           <div class="reply">
@@ -1192,10 +1198,11 @@
             />
           </div>
         {:else if question}
-          <!-- The shape has already grown to the window for this (6.14). What
-               a very long question still cannot fit scrolls here, because an
-               option cut off by the bottom edge is an option that is not
-               there. -->
+          <!-- The shape has already grown to the window for this (6.14), and the
+               chat has stepped aside, so the question stands right under the
+               band. What a very long question still cannot fit scrolls here,
+               because an option cut off by the bottom edge is an option that is
+               not there. -->
           <div class="reply asking">
             <QuestionPrompt
               questions={question.questions}
@@ -1543,11 +1550,11 @@
     padding-top: 10px;
   }
 
-  /* Shrinks before it overflows, and scrolls what is left over. The feed
-     above gives up its room first: it has `min-height: 0` and nothing in it
-     is being asked a question. tech.md 6.14. */
+  /* The whole room under the band: the chat is not drawn while a question
+     stands. Scrolls what a very long question still cannot fit. tech.md
+     6.14. */
   .reply.asking {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;

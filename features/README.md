@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract               |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| v87.6   | [A question stands alone](#v876--a-question-stands-alone)                                                                | 6.14                   |
 | v87.5   | [The question window answers to ⌘ and a digit](#v875--the-question-window-answers-to--and-a-digit)                       | 6.14, 6.6, 9           |
 | v87.4   | [The bug button asks first](#v874--the-bug-button-asks-first)                                                            | 6.22, 6.3, 6.5, 9      |
 | v87.2   | [The version in the settings](#v872--the-version-in-the-settings)                                                        | 6.5, 9                 |
@@ -64,6 +65,21 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9     |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9           |
+
+## v87.6 — A question stands alone
+
+2026-09-15
+
+![A question with the chat stepped aside](shots/question-alone.png)
+
+![The same, in Russian](shots/question-alone-ru.png)
+
+While Claude asks, the island shows the question and its answers and nothing of
+the chat: under the band with the project and the usage stands the question
+alone. The conversation above it took room from the answers and drew the eye
+away from the one thing to do; it comes back the moment the question is
+answered, closed or answered in Claude Code. A permission still stands under
+the feed.
 
 ## v87.5 — The question window answers to ⌘ and a digit
 

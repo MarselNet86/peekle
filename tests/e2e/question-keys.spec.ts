@@ -43,7 +43,17 @@ const card = {
   title: 'Deploy the API',
   status: 'Working',
   origin: 'Observed',
-  entries: [],
+  entries: [
+    {
+      id: 'u1',
+      kind: 'User',
+      text: 'Ship the API',
+      tool: null,
+      detail: null,
+      state: 'Ok',
+      at: 1_789_000_000_000,
+    },
+  ],
   agent: null,
   mode: null,
   thinking: null,
@@ -130,6 +140,8 @@ async function stub(page: Page, view: unknown = { Session: 's1' }) {
         },
       };
       w.__choose = (index: number) => push('peekle://choose', { index });
+      w.__close = () =>
+        push('peekle://prompt-close', { prompt_id: 'q1', outcome: 'AnsweredElsewhere' });
       w.__listening = (event: string) => event in handlers;
     },
     { question, card, view },
@@ -168,6 +180,28 @@ test.describe('the question window', () => {
     });
     expect(rows.count).toBeGreaterThan(0);
     expect(rows.green).toBe(0);
+  });
+
+  /// v87.6: the question and its answers, and nothing of the chat. The feed
+  /// comes back the moment the question goes. tech.md 6.14.
+  test('shows the question alone and gives the chat back once it goes', async ({ page }) => {
+    await stub(page);
+    await page.goto(ROUTE);
+
+    await expect(page.getByText('Which deployment target?')).toBeVisible();
+    await expect(page.getByText('Ship the API')).toHaveCount(0);
+    // The band with the project and the usage stays.
+    await expect(page.locator('.head .project')).toHaveText('api');
+
+    await page.waitForFunction(() =>
+      (window as unknown as { __listening: (event: string) => boolean }).__listening(
+        'peekle://prompt-close',
+      ),
+    );
+    await page.evaluate(() => (window as unknown as { __close: () => void }).__close());
+
+    await expect(page.getByText('Which deployment target?')).toHaveCount(0);
+    await expect(page.getByText('Ship the API')).toBeVisible();
   });
 
   test('⌘ and a digit pressed anywhere answers with that row', async ({ page }) => {
