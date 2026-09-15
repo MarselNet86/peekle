@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract                |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| v87.13  | [The file dialog comes back by itself](#v8713--the-file-dialog-comes-back-by-itself)                                     | 6.25, 6.23              |
 | v87.12  | [The folder dialog gets the strip too](#v8712--the-folder-dialog-gets-the-strip-too)                                     | 6.23, 9                 |
 | v87.10  | [The island stands aside for the file dialog](#v8710--the-island-stands-aside-for-the-file-dialog)                       | 6.25, 6.5, 6.7, 6.14, 9 |
 | v87.9   | [A new chat starts in Auto](#v879--a-new-chat-starts-in-auto)                                                            | 6.19                    |
@@ -70,6 +71,19 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9      |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                 |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9            |
+
+## v87.13 — The file dialog comes back by itself
+
+2026-09-15
+
+![The island while files are picked](shots/attach-strip.png)
+
+The file dialog now works the way the folder dialog does. The strip stands
+exactly as long as the dialog, and the island opens back up the moment it
+closes, with the chips of what was picked above the field, or as it was after a
+cancel. Until now the strip waited for the button or ⌘1, which hid the very
+chips the files were picked for. Another pass is one press of the plus; while
+it stands, the strip says how many files the message already carries.
 
 ## v87.12 — The folder dialog gets the strip too
 
