@@ -285,6 +285,24 @@ impl Config {
         }
     }
 
+    /// Reads the config, or writes defaults with a fresh token when the file
+    /// is missing, so the next reader finds that same token. The app on its
+    /// first launch and `peekle init` both come through here: whichever runs
+    /// first mints the token and the other one reads it, and hooks written
+    /// after the app started still reach it. A file that is present but
+    /// broken is an error and is never overwritten. tech.md 6.8.
+    pub fn load_or_create(path: &Path) -> Result<Self, ConfigError> {
+        match fs::read_to_string(path) {
+            Ok(text) => Self::from_toml(&text),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                let config = Self::default();
+                config.save(path)?;
+                Ok(config)
+            }
+            Err(err) => Err(ConfigError::Io(err)),
+        }
+    }
+
     /// Writes the config with owner-only permissions. The token lives here, so
     /// the mode is part of the contract, not hygiene. On Windows there is no
     /// mode to set: the file lives under the user's profile, whose ACL already
@@ -361,6 +379,44 @@ mod tests {
         assert_eq!(config.behavior.permission_wait_secs, 300);
         assert_eq!(config.behavior.pty_cols, 120);
         assert_eq!(config.behavior.pty_rows, 40);
+    }
+
+    /// Whoever reads first writes the token, and the second reader finds the
+    /// same one, owner-only on disk. tech.md 6.8.
+    #[test]
+    fn the_first_reader_mints_the_token_and_the_second_finds_it() {
+        let dir = std::env::temp_dir().join(format!("peekle-cfg-{}", Ulid::generate()));
+        let path = dir.join("config.toml");
+
+        let first = Config::load_or_create(&path).unwrap();
+        assert_eq!(first.server.token.len(), 32);
+        assert!(path.exists(), "the first reader wrote the file");
+
+        let second = Config::load_or_create(&path).unwrap();
+        assert_eq!(second.server.token, first.server.token);
+        assert_eq!(
+            Config::load(&path).unwrap().server.token,
+            first.server.token
+        );
+
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            OWNER_ONLY
+        );
+    }
+
+    /// A file that is there but broken is reported, not replaced: the token in
+    /// it may still be the one the hooks carry.
+    #[test]
+    fn a_broken_file_is_an_error_and_stays_as_it_is() {
+        let dir = std::env::temp_dir().join(format!("peekle-cfg-{}", Ulid::generate()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(&path, "[server\n").unwrap();
+
+        assert!(Config::load_or_create(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[server\n");
     }
 
     #[test]

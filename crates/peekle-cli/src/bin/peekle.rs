@@ -53,16 +53,11 @@ fn run(action: fn() -> Result<(), String>) -> ExitCode {
 
 /// Loads the config, or writes a fresh one with a new token. Running twice
 /// keeps the same token: rewriting it would orphan the hooks already installed.
+/// The app does the same on its first launch, so whichever runs first mints
+/// the token and the other one reads it. tech.md 6.8.
 fn load_or_create() -> Result<(Config, std::path::PathBuf), String> {
     let path = config::config_path().map_err(|e| e.to_string())?;
-
-    if path.exists() {
-        let config = Config::load(&path).map_err(|e| e.to_string())?;
-        return Ok((config, path));
-    }
-
-    let config = Config::default();
-    config.save(&path).map_err(|e| e.to_string())?;
+    let config = Config::load_or_create(&path).map_err(|e| e.to_string())?;
     Ok((config, path))
 }
 
@@ -172,7 +167,7 @@ fn collect_checks() -> Result<Vec<Check>, String> {
         Check::fail(
             "token",
             format!("{} characters", config.server.token.len()),
-            "delete the config and run peekle init to mint a fresh one",
+            "delete the config, run peekle init to mint a fresh one, then restart Peekle",
         )
     });
 

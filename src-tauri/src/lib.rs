@@ -367,8 +367,13 @@ fn build_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
 
 /// A broken config file must not stop the overlay from starting. Defaults keep
 /// the app usable and `doctor` is where the user finds out what happened.
+///
+/// A missing file is written, token included: whoever comes first, this or
+/// `peekle init`, mints the token and the other one reads it. Otherwise an app
+/// opened before `init` would hold a token nobody wrote down, and every hook
+/// would miss it until a restart. tech.md 6.8.
 fn load_config() -> Config {
-    match config::config_path().and_then(|path| Config::load(&path)) {
+    match config::config_path().and_then(|path| Config::load_or_create(&path)) {
         Ok(config) => config,
         Err(err) => {
             tracing::warn!(error = %err, "falling back to default config");
