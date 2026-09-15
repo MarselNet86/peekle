@@ -13,6 +13,7 @@ Screenshots and clips live in [`shots/`](shots).
 
 | Version | Feature                                                                                                                  | Contract                |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| v87.12  | [The folder dialog gets the strip too](#v8712--the-folder-dialog-gets-the-strip-too)                                     | 6.23, 9                 |
 | v87.10  | [The island stands aside for the file dialog](#v8710--the-island-stands-aside-for-the-file-dialog)                       | 6.25, 6.5, 6.7, 6.14, 9 |
 | v87.9   | [A new chat starts in Auto](#v879--a-new-chat-starts-in-auto)                                                            | 6.19                    |
 | v87.8   | [Allow and Deny answer to ⌘2 and ⌘1](#v878--allow-and-deny-answer-to-2-and-1)                                            | 6.7, 6.14, 9            |
@@ -69,6 +70,21 @@ Screenshots and clips live in [`shots/`](shots).
 | v58     | [Usage badge](#v58--usage-badge)                                                                                         | 6.8, 6.10, 6.18, 9      |
 | v57     | [Work line](#v57--work-line)                                                                                             | 6.12, 9                 |
 | v56     | [Stop in the field button](#v56--stop-in-the-field-button)                                                               | 6.5, 6.15, 9            |
+
+## v87.12 — The folder dialog gets the strip too
+
+2026-09-15
+
+![The island while a folder is chosen](shots/folder-strip.png)
+
+![The same, in Russian](shots/folder-strip-ru.png)
+
+`Open folder…` in a new chat raised the macOS panel under the island, as the
+plus did before v87.10. The island now stands aside as the same strip, saying a
+folder is being chosen, and opens back up by itself the moment the dialog
+closes, whether a folder was picked or not: a folder is one choice, and the
+field for the first message is what comes next. The button and ⌘1 open it
+sooner.
 
 ## v87.10 — The island stands aside for the file dialog
 
