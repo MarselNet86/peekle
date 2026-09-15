@@ -28,6 +28,7 @@
   import { QUIT } from '$lib/i18n/quit';
   import QuitPanel from '$lib/ui/QuitPanel.svelte';
   import BugPanel from '$lib/ui/BugPanel.svelte';
+  import FileStrip from '$lib/ui/FileStrip.svelte';
   import UpdatePanel from '$lib/ui/UpdatePanel.svelte';
   import type { IslandView } from '$lib/types/generated/IslandView';
   import {
@@ -517,6 +518,13 @@
     const next = island.choice;
     if (!next || next.seq === seenPermissionChoice) return;
     seenPermissionChoice = next.seq;
+    // ⌘1 over the strip opens the island back up. Rust never holds the digit
+    // for the strip and for a question at once, so this takes no answer off
+    // anything. tech.md 6.25.
+    if (untrack(() => shrunk)) {
+      if (next.index === 1) untrack(() => (shrunk = false));
+      return;
+    }
     if (!untrack(() => permission)) return;
     if (next.index === 1) untrack(() => answerPermission('deny'));
     if (next.index === 2) untrack(() => answerPermission('allow'));
@@ -604,16 +612,46 @@
     commands.quitApp();
   }
 
+  /**
+   * The island runs down to the strip while files are picked, and stays down
+   * after the dialog closes. tech.md 6.25.
+   *
+   * The system panel is an ordinary window of this app and the island is a
+   * panel above every one of them: it opens behind the island, and an island
+   * that keeps every click in its 720 by 560 window is a dialog whose sidebar
+   * and search field cannot be pressed. Rust hands the mouse back for the
+   * strip; this decides when the strip stands.
+   */
+  let shrunk = $state(false);
+  /** The dialog is standing right now, so the strip has nothing to count yet. */
+  let picking = $state(false);
+  $effect(() => {
+    commands.setShrunk(shrunk);
+  });
+  // Nothing left under the strip: the chat went, or the island did.
+  $effect(() => {
+    const view = island.view;
+    if (view === 'Collapsed' || !current) untrack(() => (shrunk = false));
+  });
+
   async function attachFiles() {
     if (!current) return;
     const id = current.session.session_id;
+    // Out of the dialog's way before it comes up, not after: the panel is
+    // drawn by AppKit the moment the command reaches Rust. tech.md 6.25.
+    shrunk = true;
+    picking = true;
     let picked: string[] | null;
     try {
       picked = await commands.chooseFiles();
     } catch (err) {
       startError = String(err);
+      // No dialog, so nothing to stand aside for.
+      picking = false;
+      shrunk = false;
       return;
     }
+    picking = false;
     // A cancel is not an event and says nothing. Neither is a route rendered
     // with no Tauri under it, which answers null. tech.md 6.25.
     if (!picked || picked.length === 0) return;
@@ -706,6 +744,10 @@
   async function send(text: string) {
     if (!current) return;
     const answering = island.prompt !== null;
+    // The message is going, so the strip has nothing left to count, and what
+    // the send says next -- a note, an error, the reply in the feed -- needs
+    // the island it was written in. tech.md 6.25.
+    shrunk = false;
 
     // A chat we hold the process of takes the words down its own pty. Every
     // other chat -- finished, started elsewhere, held by another app -- goes
@@ -912,6 +954,7 @@
     {asking}
     deep={island.toast?.detail != null}
     fit={asking ? questionFit : 0}
+    {shrunk}
   >
     {#snippet rest()}
       <RestMark status={resting} pct={hourWindow} badge={badge.value} onopen={() => reopen()} />
@@ -922,7 +965,13 @@
     <!-- A permission asks for yes or no, and neither answer needs the feed.
          The panel carries the question; pressing it anywhere but the buttons
          lands in the session it came from. tech.md 6.7. -->
-    {#if island.view === 'Update' && update.update}
+    {#if shrunk && current}
+      <!-- One line while the file dialog stands. The panel is an ordinary
+           window and cannot come above the island, so the island gets out of
+           its way instead and says what is already on the message.
+           tech.md 6.25. -->
+      <FileStrip count={attached.length} {picking} onexpand={() => (shrunk = false)} />
+    {:else if island.view === 'Update' && update.update}
       <!-- A newer version, already on disk. Raised over a resting island only,
            so it never lands on top of somebody's work. tech.md 6.30. -->
       <UpdatePanel

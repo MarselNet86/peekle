@@ -173,6 +173,55 @@ describe('a display with no notch', () => {
 });
 
 /**
+ * v87.10: the island runs down to one line while files are picked, because the
+ * system dialog is an ordinary window and opens behind it. tech.md 6.25.
+ */
+describe('the island shrunk to the attachment strip', () => {
+  const notch = { width: 185, height: 34 };
+
+  it('is one line, whatever view is underneath', () => {
+    const pill = shapeBounds('Pill', notch);
+    for (const view of ['Sessions', { Session: 'a' }, 'Ask'] as IslandView[]) {
+      const strip = shapeBounds(view, notch, false, false, false, 0, true);
+      expect(strip.height).toBe(pill.height);
+      expect(strip.width).toBe(pill.width);
+    }
+  });
+
+  it('gives the view its own size back the moment it opens up', () => {
+    for (const view of ['Sessions', { Session: 'a' }] as IslandView[]) {
+      expect(shapeBounds(view, notch, false, false, false, 0, false)).toEqual(
+        shapeBounds(view, notch),
+      );
+    }
+  });
+
+  /// A resting island has no field under it and no file to attach, so there is
+  /// nothing there to shrink: the mark stays the mark. tech.md 6.25.
+  it('leaves the resting mark alone', () => {
+    expect(shapeBounds('Collapsed', notch, false, false, false, 0, true)).toEqual(
+      shapeBounds('Collapsed', notch),
+    );
+  });
+
+  it('outranks the height a standing question asked for', () => {
+    const strip = shapeBounds({ Session: 's' }, notch, false, true, false, 420, true);
+    expect(strip.height).toBe(shapeBounds('Pill', notch).height);
+  });
+
+  it('stays inside the window on any screen', () => {
+    fc.assert(
+      fc.property(views, notches, (view, notch) => {
+        const strip = shapeBounds(view, notch, false, false, false, 0, true);
+        expect(strip.width).toBeLessThanOrEqual(WINDOW.width);
+        expect(strip.height).toBeLessThanOrEqual(WINDOW.height);
+        expect(strip.radius).toBeLessThanOrEqual(Math.min(strip.width, strip.height) / 2);
+      }),
+    );
+  });
+});
+
+/**
  * A question is taller than the dialogue it arrives in: four options with
  * their descriptions run past the bottom edge, and the last of them was cut
  * off by it. tech.md 6.14.

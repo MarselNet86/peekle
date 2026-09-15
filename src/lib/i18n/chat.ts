@@ -66,6 +66,11 @@ const en = {
   send: 'Send',
   stop: 'Stop',
 
+  /** The strip the island shrinks to while files are being picked. tech.md 6.25. */
+  pickingFiles: 'Choosing files…',
+  filesAttached: (count: number) => (count === 1 ? '1 file attached' : `${count} files attached`),
+  expandIsland: 'Expand',
+
   claudeAsks: 'Claude asks',
   recommended: 'Recommended',
   other: 'Other',
@@ -145,6 +150,23 @@ export const CHAT: Copy<typeof en> = {
     attachFiles: 'Прикрепить файлы',
     send: 'Отправить',
     stop: 'Остановить',
+
+    pickingFiles: 'Выбираем файлы…',
+    filesAttached: (count) => {
+      // Файл, файла, файлов: русский счёт по последним двум цифрам.
+      const tens = count % 100;
+      const ones = count % 10;
+      const word =
+        tens >= 11 && tens <= 14
+          ? 'файлов'
+          : ones === 1
+            ? 'файл'
+            : ones >= 2 && ones <= 4
+              ? 'файла'
+              : 'файлов';
+      return `${count} ${word} прикреплено`;
+    },
+    expandIsland: 'Раскрыть',
 
     claudeAsks: 'Claude спрашивает',
     recommended: 'Рекомендуется',

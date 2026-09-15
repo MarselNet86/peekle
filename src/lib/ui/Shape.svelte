@@ -12,6 +12,7 @@
     asking = false,
     deep = false,
     fit = 0,
+    shrunk = false,
     rest,
     children,
   }: {
@@ -28,6 +29,10 @@
     /** The height the standing question needs, measured by the route; zero
      * while there is none. tech.md 6.14. */
     fit?: number;
+    /** Run down to the attachment strip while files are being picked: one
+     * line, whatever view is underneath, and the system dialog under that.
+     * tech.md 6.25. */
+    shrunk?: boolean;
     rest?: Snippet;
     children?: Snippet;
   } = $props();
@@ -35,7 +40,7 @@
   /** Content follows the shape rather than arriving with it. tech.md 6.10. */
   const CONTENT_DELAY_MS = 60;
 
-  const target = $derived(shapeBounds(view, notch, badge, asking, deep, fit));
+  const target = $derived(shapeBounds(view, notch, badge, asking, deep, fit, shrunk));
   const collapsed = $derived(view === 'Collapsed');
   const hasNotch = $derived(notch.height > 0);
   // Off the edge without a notch, flush with it under one. tech.md 6.7.

@@ -123,6 +123,10 @@ export const commands = {
   // is in the person's hands and nothing puts it away or writes over it
   // but them. tech.md 6.7.
   setComposing: (active: boolean) => call<void>('set_composing', { active }),
+  // The island is drawn as the attachment strip while files are being picked:
+  // the system dialog stands under it and has to be pressable, so the window
+  // gives its clicks back everywhere but the strip. tech.md 6.25.
+  setShrunk: (shrunk: boolean) => call<void>('set_shrunk', { shrunk }),
   startSession: (cwd: string) => call<SessionRef>('start_session', { cwd }),
   // Forks an observed chat into an owned one, the way Desktop opens an
   // existing chat: claude --resume=<id> in a pty of our own. tech.md 6.5.

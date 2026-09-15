@@ -1695,6 +1695,22 @@ pub fn set_composing(state: State<'_, Arc<AppState>>, active: bool) {
     state.set_composing(active);
 }
 
+/// The webview ran the island down to the attachment strip, or opened it back
+/// up. tech.md 6.25.
+///
+/// No view change: the same chat with the same draft is underneath, and the
+/// person comes back to it. What changes is the size of the shape, which the
+/// webview draws itself, and the two things only Rust can do about it: the
+/// window stops taking clicks anywhere but the strip -- the file dialog stands
+/// right under it and could not be pressed otherwise -- and `Command+Digit1`
+/// opens the island back up, unless a question is holding the digits.
+#[tauri::command]
+pub fn set_shrunk(app: AppHandle, state: State<'_, Arc<AppState>>, shrunk: bool) {
+    tracing::debug!(shrunk, "the island stands as the strip, or at its own size");
+    state.set_shrunk(shrunk);
+    windows::apply_shrunk(&app);
+}
+
 /// Ends a session the island owns.
 #[tauri::command]
 pub fn end_session(app: AppHandle, state: State<'_, Arc<AppState>>, session_id: String) {

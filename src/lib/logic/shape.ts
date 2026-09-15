@@ -114,6 +114,10 @@ export function shapeBounds(
    * "not measured yet", and the shape takes the window as it always did.
    * tech.md 6.14, v87.7. */
   fit = 0,
+  /** The island is standing as the attachment strip: files are being picked,
+   * and the system dialog is underneath. One line, whatever view is under it.
+   * tech.md 6.25, v87.10. */
+  shrunk = false,
 ): ShapeBounds {
   const width = sane(notch.width, FALLBACK_NOTCH.width);
   const height = sane(notch.height, FALLBACK_NOTCH.height);
@@ -131,6 +135,15 @@ export function shapeBounds(
   // a wide radius. A shape that grows out of nothing needs no straight top.
   // tech.md 6.7.
   const floating = height === 0;
+
+  // Shrunk to the strip: one row of black over the top of the screen, which is
+  // exactly what a pill is, so it is the size of one. A resting island has
+  // nothing to shrink -- there is no field under it and no file to attach.
+  // tech.md 6.25.
+  if (shrunk && view !== 'Collapsed') {
+    return clamp({ width: 420, height: height + 44, radius: floating ? 22 : 20 });
+  }
+
   const bounds =
     view === 'Collapsed'
       ? floating

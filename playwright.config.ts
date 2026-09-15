@@ -25,7 +25,7 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-      testMatch: /(question|permission)-keys\.spec\.ts/,
+      testMatch: /((question|permission)-keys|attach-strip)\.spec\.ts/,
     },
   ],
   webServer: {

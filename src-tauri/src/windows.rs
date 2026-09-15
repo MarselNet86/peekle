@@ -136,7 +136,7 @@ fn update_hover(app: &AppHandle) {
     // joined the mark in v80.21, when it got something to press: it opens the
     // chat it is about. tech.md 6.7 and 6.2.
     let view = state.view();
-    if view == IslandView::Collapsed || view == IslandView::Pill {
+    if tracks_pointer(&view, state.shrunk()) {
         // A pill runs on its own clock either way. A request in flight does
         // not stop this: hiding the shape resolves nothing, the hook stays
         // pending, and the mark pulses until it is answered. tech.md 6.7.
@@ -210,6 +210,33 @@ fn update_hover(app: &AppHandle) {
         tracing::debug!("the pointer left the island, putting it away");
         set_view(app, IslandView::Collapsed);
     }
+}
+
+/// Whether the window gives its clicks back everywhere but the shape it drew,
+/// rather than taking the whole 720 by 560 of itself.
+///
+/// The two small views do, and so does any view run down to the attachment
+/// strip: the system file dialog stands directly under the island, and a
+/// window that keeps every click is a dialog whose sidebar, search field and
+/// path bar cannot be pressed. tech.md 6.7 and 6.25.
+fn tracks_pointer(view: &IslandView, shrunk: bool) -> bool {
+    matches!(view, IslandView::Collapsed | IslandView::Pill) || shrunk
+}
+
+/// The island shrank to the strip, or grew back out of it.
+///
+/// No view changed, so nothing else does either of the two things only Rust
+/// can: hand the mouse back to whatever is underneath, and let go of the digit
+/// that opens the island up again. tech.md 6.25.
+pub fn apply_shrunk(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>().inner().clone();
+    let takes_clicks = state.view().takes_clicks() && !state.shrunk();
+    on_main(app, "shrunk", move |handle| {
+        if let Err(err) = platform::set_takes_clicks(handle, takes_clicks) {
+            tracing::error!(error = %err, "failed to switch cursor events for the strip");
+        }
+    });
+    sync_choice_keys(app);
 }
 
 /// Where the pointer stands, if it stands on the shape as the state knows it
@@ -304,7 +331,9 @@ pub fn set_view(app: &AppHandle, view: IslandView) {
         tracing::warn!(error = %err, "failed to emit view");
     }
 
-    let takes_clicks = view.takes_clicks();
+    // A view that stands as the strip keeps the strip's mouse: the dialog it
+    // shrank for is still underneath. tech.md 6.25.
+    let takes_clicks = view.takes_clicks() && !state.shrunk();
     let opening = !matches!(view, IslandView::Collapsed);
 
     // An island that opens on a stale snapshot draws it and refreshes behind
@@ -379,6 +408,20 @@ pub fn choice_keys_for(view: &IslandView, active: Option<&PromptRequest>) -> u8 
     widest.min(9) as u8
 }
 
+/// How many of ⌘1…⌘9 Rust holds right now, for whatever reason it holds them.
+///
+/// A standing question asks first and is never overruled: the agent is parked
+/// on it, and an island shrunk to the strip is waiting for nobody. Only when
+/// the question asks for none does the strip get ⌘1, and only to open the
+/// island back up. One digit can mean one thing at a time. tech.md 6.14, 6.25.
+pub fn digit_keys_for(view: &IslandView, active: Option<&PromptRequest>, shrunk: bool) -> u8 {
+    let asked = choice_keys_for(view, active);
+    if asked > 0 {
+        return asked;
+    }
+    u8::from(shrunk)
+}
+
 /// The config spelling of ⌘ and one digit.
 pub fn choice_spelling(index: u8) -> String {
     format!("Command+Digit{index}")
@@ -396,7 +439,11 @@ pub fn sync_choice_keys(app: &AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<Arc<AppState>>().inner().clone();
         let mut held = state.choice_keys();
-        let want = choice_keys_for(&state.view(), state.active_prompt().as_ref());
+        let want = digit_keys_for(
+            &state.view(),
+            state.active_prompt().as_ref(),
+            state.shrunk(),
+        );
         if *held == want {
             return;
         }
@@ -719,8 +766,8 @@ pub fn toast(app: &AppHandle, request: ToastRequest) {
 mod tests {
     use super::{
         choice_keys_for, choice_spelling, click_elsewhere_collapses, collapses_after_answer,
-        pill_holds_off, reveal_takes, stands_until_answered, view_for, ASK_HOLD, DISMISS_AFTER,
-        NOTICE_HOLD, PROMPT_HOLD,
+        digit_keys_for, pill_holds_off, reveal_takes, stands_until_answered, tracks_pointer,
+        view_for, ASK_HOLD, DISMISS_AFTER, NOTICE_HOLD, PROMPT_HOLD,
     };
     use peekle_core::types::{
         IslandView, PromptKind, PromptRequest, Question, QuestionOption, SessionRef,
@@ -781,6 +828,55 @@ mod tests {
             9,
             "there are nine digits"
         );
+    }
+
+    /// v87.10: the strip takes ⌘1 to open the island back up, and only while
+    /// no question is asking for the digits. One digit means one thing at a
+    /// time, and the thing with an agent parked on it wins. tech.md 6.25.
+    #[test]
+    fn the_strip_takes_one_digit_and_never_the_question_s() {
+        let on_it = IslandView::Session("s".into());
+
+        assert_eq!(digit_keys_for(&on_it, None, true), 1, "the way back");
+        assert_eq!(digit_keys_for(&on_it, None, false), 0, "nothing to open up");
+
+        assert_eq!(
+            digit_keys_for(&on_it, Some(&asking(&[3])), true),
+            4,
+            "the question keeps every digit it asked for"
+        );
+        assert_eq!(
+            digit_keys_for(
+                &IslandView::Ask,
+                Some(&standing(PromptKind::Permission)),
+                true
+            ),
+            2,
+            "so does a permission"
+        );
+        // A question nobody can see holds nothing, and then the strip is free
+        // to take its one digit.
+        assert_eq!(
+            digit_keys_for(&IslandView::Sessions, Some(&asking(&[3])), true),
+            1
+        );
+    }
+
+    /// v87.10: the strip hands the mouse back the way the mark and the pill do.
+    /// The file dialog stands under the island, and a window that keeps every
+    /// click is a dialog that cannot be pressed. tech.md 6.7 and 6.25.
+    #[test]
+    fn a_shrunk_island_gives_its_clicks_back_like_the_mark() {
+        for view in [
+            IslandView::Sessions,
+            IslandView::Session("s".into()),
+            IslandView::Ask,
+        ] {
+            assert!(!tracks_pointer(&view, false), "{view:?} takes the window");
+            assert!(tracks_pointer(&view, true), "{view:?} shrunk to the strip");
+        }
+        assert!(tracks_pointer(&IslandView::Collapsed, false));
+        assert!(tracks_pointer(&IslandView::Pill, false));
     }
 
     /// v87.8: a permission holds ⌘1 and ⌘2, Deny and Allow, while it stands on

@@ -132,6 +132,11 @@ pub struct AppState {
     /// Whether a system dialog the island raised is standing. The pointer went
     /// into the dialog, and that is not leaving. tech.md 6.23.
     dialog: AtomicBool,
+    /// Whether the island is drawn as the attachment strip rather than at the
+    /// size of its view. The view does not change with it: what changes is the
+    /// size of the shape, which rectangle takes the mouse, and who holds
+    /// `Command+Digit1`. tech.md 6.25.
+    shrunk: AtomicBool,
     /// The pasteboard change count as of the last tick. Only a change is worth
     /// reading the types for, and nothing reads the contents.
     seen_change: AtomicI64,
@@ -233,6 +238,7 @@ impl AppState {
             preview: AtomicBool::new(false),
             composing: AtomicBool::new(false),
             dialog: AtomicBool::new(false),
+            shrunk: AtomicBool::new(false),
             seen_change: AtomicI64::new(0),
             live_sessions: AtomicU32::new(0),
             active_prompt: Mutex::new(None),
@@ -880,6 +886,17 @@ impl AppState {
         self.dialog.load(Ordering::Relaxed)
     }
 
+    /// The webview ran the island down to the attachment strip, or opened it
+    /// back up. tech.md 6.25.
+    pub fn set_shrunk(&self, shrunk: bool) {
+        self.shrunk.store(shrunk, Ordering::Relaxed);
+    }
+
+    /// Whether the island stands as the strip. tech.md 6.25.
+    pub fn shrunk(&self) -> bool {
+        self.shrunk.load(Ordering::Relaxed)
+    }
+
     /// Whether the chat on screen is asking about its folder. tech.md 6.24.
     pub fn open_session_asks_trust(&self) -> bool {
         match self.view() {
@@ -896,6 +913,9 @@ impl AppState {
         self.preview_open()
             || self.composing()
             || self.dialog_open()
+            // The strip is the middle of an action: files are being picked, or
+            // picked and waiting to be sent. tech.md 6.25.
+            || self.shrunk()
             || self.open_session_asks_trust()
     }
 
