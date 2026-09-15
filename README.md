@@ -1,208 +1,187 @@
-# Peekle
+<h1 align="center">Peekle</h1>
 
-An overlay on top of Claude Code, for macOS.
+<p align="center"><b>Claude Code, answered from the notch.</b><br />
+The turn ends, the notch grows, you answer, it collapses. You never focus the terminal.</p>
 
-Start an agent and walk away. When it finishes a turn or asks for permission,
-the notch of the MacBook grows, shows what the agent said, takes your answer,
-and collapses again. The answer goes straight back into the turn, so you never
-focus the terminal.
+<p align="center">
+  <a href="https://github.com/MarselNet86/peekle/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/MarselNet86/peekle?label=release&color=1f6feb"></a>
+  <a href="https://github.com/MarselNet86/peekle/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/MarselNet86/peekle/total?color=2ea043"></a>
+  <a href="https://github.com/MarselNet86/peekle/actions/workflows/release.yml"><img alt="Release build" src="https://img.shields.io/github/actions/workflow/status/MarselNet86/peekle/release.yml?label=build"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MarselNet86/peekle?color=8b949e"></a>
+  <a href="https://github.com/MarselNet86/peekle/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/MarselNet86/peekle?style=flat&color=e3b341"></a>
+</p>
 
-There is one surface and it is the island. No second window, no HUD, no
-separate prompt panel.
+<p align="center"><img src="docs/readme/hero.png" width="920" alt="The island grown out of the MacBook notch over a terminal: the agent's reply, then a permission request with Deny ⌘1 and Allow ⌘2"></p>
 
-Contracts, types and the roadmap live in `tech.md`. It is the source of truth;
-this file only explains how to run what exists today.
+There is one surface and it is the island. No dock icon, no menu bar item, no
+second window, no notification centre. Peekle is invisible until an agent needs
+you, and gone the moment you have answered.
 
-## Installation
+---
 
+## Install
+
+macOS 13 or newer, Apple silicon and Intel in one build.
+
+**1. The app.** Download
 [Peekle-mac-universal.dmg](https://github.com/MarselNet86/peekle/releases/latest/download/Peekle-mac-universal.dmg),
-one universal build for Apple silicon and Intel, macOS 13 or newer.
+drag it to Applications, open it once with right-click → Open. The bundle is
+signed ad hoc rather than with a paid certificate, so macOS asks that one time.
 
-The link points at the newest release, and the name carries no version, so a
-link written down once keeps working.
-
-The bundle carries an ad-hoc signature rather than a paid certificate, so macOS
-asks once: open it the first time with right-click → Open.
-
-## Status
-
-Stage 1 is in and most of stage 2 with it.
-
-| Surface             | State                                                          |
-| ------------------- | -------------------------------------------------------------- |
-| Island              | Working, and it reaches another app's full screen space        |
-| Feed and sessions   | Working, fed by the hooks                                      |
-| Stop and permission | Working, answers reach the agent without touching the terminal |
-| Hook server         | Every endpoint of tech.md 6.2 answers                          |
-| Hotkey              | Working, ⌥⇧Q toggles the bypass                                |
-| CLI                 | init, uninstall, doctor, status. `off` is not built            |
-| Usage bars          | Working from the account, dashes with a reason when it cannot  |
-| Screenshots         | ⌃⇧⌘4 offers to attach the shot to a session Peekle started     |
-| Packaging           | A universal dmg, built by CI on a tag                          |
-| First run           | Not started, S11                                               |
-
-## Requirements
-
-To build it: macOS 13+, Node 22.13+, pnpm and Rust from `rust-toolchain.toml`.
+**2. The hooks.** Peekle listens to Claude Code through its hooks, and the
+`peekle` command wires them in:
 
 ```sh
-pnpm install
+cargo install --git https://github.com/MarselNet86/peekle peekle-cli
+peekle init
 ```
 
-## Run it
+`init` merges its entries into `~/.claude/settings.json`, takes a timestamped
+backup first, never touches anyone else's hooks, and changes nothing on a
+second run. `peekle doctor` says what is wrong if something is; `peekle
+uninstall` takes back only its own entries.
 
-```sh
-pnpm tauri dev
-```
+No account, no login, no telemetry. Usage bars read your own Claude account
+from the Keychain, and only after you press Grant.
 
-Build with the Tauri CLI, not with `cargo build`. A plain cargo build produces
-a dev binary that points its windows at the vite dev server, so with no server
-running the windows load nothing and stay invisible.
+---
 
-Nothing appears at startup on purpose. Peekle has no dock icon, no tray, no
-menu bar item and no close button. The island exists only while it has
-something to say.
+## What it does
 
-## Drive the island
+<p align="center"><img src="docs/readme/demo.gif" width="920" alt="A turn ends and the notch says so; the chat opens; a permission request is answered with ⌘2; a question with three options is answered with ⌘1; the island collapses"></p>
 
-`peekle init` (S9) is what wires a real Claude Code session. Until then,
-`scripts/demo.sh` plays the part of the agent:
+**The island.** At rest it is the notch, two strokes of green in the bezel that
+say Peekle is running and a ring that says how much of your five-hour window
+is gone. When a turn ends the notch grows into a pill with who finished and
+what they said. Click it and the pill grows into the chat.
 
-```sh
-./scripts/demo.sh island    # a toast: the notch grows, then collapses
-./scripts/demo.sh tasks     # three tasks into the registry
-./scripts/demo.sh clear     # empty the task list
-./scripts/demo.sh stop      # blocks like a real Stop hook
-./scripts/demo.sh health    # is the server up
-```
+**Permissions, from anywhere.** `Bash wants to run git push origin main` opens
+as two lines and two buttons. ⌘1 denies, ⌘2 allows, from whatever app you are
+in. The answer goes back into the hook response, so the turn continues without
+you touching the terminal. Twenty seconds later the island folds, the request
+stays pending, and the mark pulses until you come back to it.
 
-`stop` blocks the way a real hook does. Nothing answers it before S3, so it
-waits out `behavior.prompt_timeout_secs` and the turn then ends normally.
+**Questions, with digits.** When the agent asks which of three things you
+want, the options come up as cards with ⌘1, ⌘2, ⌘3, and an Other that lets you
+write your own. Every answer lands in the tool's own response format; nothing
+is typed into a terminal on your behalf.
 
-## How it fits together
+**Chats, started here.** New session picks a folder, a model, an effort and a
+permission mode, then runs `claude` in a pty of its own. Type a message, attach
+a file with the plus, or press ⌃⇧⌘4: the screenshot goes on the clipboard, the
+notch offers to attach it for five seconds, ↑ takes it. Compact from the ring
+in the corner. Sessions you started in your own terminal show up too, read
+only, with their whole transcript.
 
-Claude Code drives Peekle through hooks. Peekle runs an HTTP server on
-loopback, the hooks are `type: "http"` and post to it. The hook request is the
-event, the HTTP response body is the decision Claude Code executes.
+**Usage, from your account.** The five-hour and seven-day windows, read the way
+Claude Code reads them, on the mark, in the header and as a badge that steps
+out when a ten is crossed.
+
+**Updates.** Every six hours Peekle checks its own releases. A newer dmg is
+pulled quietly; only once it is on disk does the island ask, and only over a
+resting island, never on top of a chat you are reading. Later means a day.
+
+Every feature above has a shot in the [feature log](features/README.md).
+
+### Keys
+
+| Keys    | What                                                    |
+| ------- | ------------------------------------------------------- |
+| ⌘1 … ⌘9 | Answer the request or question on screen, from anywhere |
+| ⌥⇧Q     | Quiet: Peekle stops asking, every hook passes through   |
+| ⌥⌘Q     | Ask to quit                                             |
+| ⌃⇧⌘4    | Screenshot to the clipboard, then ↑ to attach it        |
+| Esc     | Put the island away                                     |
+
+---
+
+## Why
+
+The agent runs for a minute, asks one question, and waits. You are in the
+browser, or in another repo, or reading. Every tool that exists for this moment
+either notifies you and sends you back to the terminal, or lives in the notch
+but needs tmux to talk back. Peekle answers from where you are, and the answer
+is the hook's own response, not keystrokes typed into someone's screen.
+
+| &nbsp;                        | Peekle              | [ClaudeIsland](https://github.com/farouqaldori/vibe-notch) | [claudecodenotify](https://github.com/narlei/claudecodenotify) | the terminal  |
+| ----------------------------- | ------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- | ------------- |
+| RAM at idle                   | ~180 MB, 4 procs    | ~115 MB, 1 proc                                            | ~30 MB, 1 proc                                                 | 0             |
+| Answer goes back to the agent | ✅ hook response    | ✅ typed into tmux                                         | ❌ jumps you to the terminal                                   | you are there |
+| Permission from any app       | ✅ ⌘1 / ⌘2          | ✅ from the notch                                          | ❌                                                             | ❌            |
+| Questions with options        | ✅ ⌘1 … ⌘9          | –                                                          | ❌                                                             | ✅            |
+| Start a chat from the overlay | ✅                  | ❌                                                         | ❌                                                             | ✅            |
+| Reply to the agent in words   | ✅ sessions it runs | tmux only                                                  | ❌                                                             | ✅            |
+| Screenshot into the chat      | ✅ ⌃⇧⌘4             | –                                                          | ❌                                                             | ❌            |
+| Usage bars from your account  | ✅                  | –                                                          | ✅                                                             | ❌            |
+| Lives in                      | the notch           | the notch + menu bar                                       | menu bar                                                       | –             |
+| Telemetry                     | none                | Mixpanel, anonymous                                        | none                                                           | none          |
+| Account required              | ❌                  | ❌                                                         | ❌                                                             | ❌            |
+| Open source                   | ✅ MIT              | ✅                                                         | ✅ MIT                                                         | –             |
+
+Memory measured on an M4 MacBook, macOS 26, each app launched alone and left
+idle for 45 seconds, summing the app and the processes it spawned. Peekle is a
+WebView app and pays for it in memory; the other two are native Swift. A dash
+means not found in their README. The terminal stays in the table because it is
+what most of us actually use: it costs nothing and it is never where you are.
+
+---
+
+## How it works
 
 ```
 Claude Code turn
-  |  POST /v1/h/<token>/<endpoint>
+  |  POST /v1/h/<token>/<endpoint>        hooks, type "http", loopback only
   v
-peekle-server (axum, 127.0.0.1)
-  |  registers a pending request, emits a Tauri event
+peekle-server (axum, 127.0.0.1)          registers the request, tells the island
   v
-state in Rust  ->  island
-  |                    |
-  |  <- answer_prompt() <-
+the island                               you answer, or walk away
   v
-HTTP response body  ->  the turn continues
+HTTP response body                       the decision Claude Code executes
 ```
 
 If Peekle is not running the connection fails, Claude Code treats that as a
-non-blocking error and works normally. The degradation is free: an agent never
-hangs on a dead overlay.
+non-blocking error and works normally. An agent never hangs on a dead overlay.
+A request the island could not ask returns to the terminal, where Claude Code
+shows its own prompt.
 
-## Install it into Claude Code
+Rust holds every window, hook and decision; the island itself is Svelte in a
+WKWebView, drawn from a fixed set of primitives. Tauri 2 underneath.
 
-```sh
-cargo build -p peekle-cli --bin peekle
-./target/debug/peekle init
-```
+---
 
-`init` merges its handlers into `~/.claude/settings.json`, never removes anyone
-else's, takes a timestamped backup first, and changes nothing on a second run.
-`uninstall` takes back only its own entries.
+## Dev notes
 
-```sh
-./target/debug/peekle doctor    # what is wrong and what to do about it
-./target/debug/peekle status    # the same as JSON
-```
+I write about what I am building on Telegram: release notes, screenshots of
+things half done, benchmarks, and what broke on the way. Usually before it
+shows up here.
 
-`peekle off` is not built. Toggling from a shell means writing the config and
-having the running app notice, and the config watcher that tech.md 6.8 promises
-has not been built by any slice yet. Until then the toggle is the hotkey.
+👉 **[t.me/daimonLabs](https://t.me/daimonLabs)**
 
-## Config
+---
 
-Written by `peekle init`, read at startup. Every key and default is in
-tech.md 6.8.
+## Contributing
+
+Pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the
+conventions and the gate. Open an issue first if you plan something big, so we
+do not both build it.
 
 ```
-macOS    ~/Library/Application Support/peekle/config.toml   mode 0600
-Linux    ~/.config/peekle/config.toml                       mode 0600
-Windows  %APPDATA%\peekle\config\config.toml
-```
-
-The file holds the hook token, so on macOS and Linux it is written 0600.
-Windows has no such mode; the file sits in the user's profile, whose ACL
-already admits nobody else. tech.md 6.27.
-
-## Layout
-
-```
-src/lib/ui/          primitives, nothing else draws
-src/lib/logic/       pure TypeScript, property tested
-src/lib/bridge/      the only module that touches @tauri-apps/api
-src-tauri/src/       windows, panels, commands, state
-src-tauri/src/platform/  every line that knows which OS this is
-crates/peekle-core   types, config, pending registry, label classifier
+src/lib/ui           primitives, nothing else draws
+src/lib/logic        pure TypeScript, property tested
+src-tauri            windows, panels, commands, state
+crates/peekle-core   types, config, pending registry
 crates/peekle-server axum router for the hook endpoints
-fixtures/hooks/      captured payloads, never hand written
-fixtures/pasteboard/ captured pasteboard shapes, never hand written
+crates/peekle-cli    peekle init, doctor, status, uninstall
 ```
 
-## Screenshots
+## License
 
-Take one with ⌃⇧⌘4, which puts it on the clipboard. The notch offers to attach
-it for five seconds; press the up arrow and it lands in the field of the
-session you were last working in, where you say what you want done with it.
+MIT. See [LICENSE](LICENSE).
 
-Only a session Peekle started can take one. There is no way to type into a
-process Peekle did not start (tech.md 6.5), so a screenshot has nowhere to go
-in a session you began in your own terminal. Start one with New session in the
-island.
+<p align="center"><b>⭐ Star the repo if Peekle saved you a trip to the terminal</b></p>
 
-Detection reads the type names on the clipboard and never the contents, so
-nothing asks for permission until you press the key. The image is written to
-`~/Library/Caches/peekle/shots/` and the path travels to the agent as a line of
-the message.
-
-## Tests
-
-```sh
-cargo test --workspace   # unit, contract, golden payload, property
-pnpm test                # component and property tests
-pnpm test:e2e            # the routes under vite dev
-```
-
-Native panel behaviour is not covered by any of these. It lives in the manual
-checklist of tech.md section 15 and has to be walked by hand before a release.
-
-## Capturing fixtures
-
-Hook payloads are captured off a live session, never written by hand. A payload
-invented from documentation that drifts from what Claude Code sends is worse
-than no test at all.
-
-```sh
-./scripts/capture-hooks.sh 180
-./scripts/capture-hooks.sh --restore   # after a hard kill
-```
-
-The same rule holds for the clipboard shapes behind the screenshot offer. The
-script makes macOS write each case and records the type names only; it saves
-and restores whatever you had copied.
-
-```sh
-./scripts/capture-pasteboard.sh              # every scripted case
-./scripts/capture-pasteboard.sh live <name>  # whatever is on the clipboard now
-```
-
-The script backs up `~/.claude/settings.json`, installs capture handlers, and
-restores the file on exit including on Ctrl-C. Drive a Claude Code session in
-another terminal while it runs.
-
-The trap cannot cover SIGKILL, and settings left pointing at a dead capture
-server is a bad way to find that out, so the backup path is written to a marker
-file that `--restore` reads.
+<p align="center">
+  <a href="https://github.com/MarselNet86/peekle/issues/new?labels=bug">Report a bug</a> ·
+  <a href="https://github.com/MarselNet86/peekle/issues/new?labels=enhancement">Request a feature</a> ·
+  <a href="https://t.me/daimonLabs">Dev notes</a>
+</p>
