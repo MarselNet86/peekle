@@ -77,6 +77,21 @@ jobs:
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           shasum -a 256 "$DMG"
 
+      # The install script, on the dmg that is about to ship: it mounts,
+      # copies, clears quarantine, and the command inside answers with the
+      # version the tag names. tech.md 6.27, S10.
+      - name: Install with the script
+        run: |
+          APPS="$RUNNER_TEMP/apps"
+          PEEKLE_DMG="${{ steps.artifact.outputs.dmg }}" PEEKLE_APPDIR="$APPS" PEEKLE_INSTALL_ONLY=1 sh install.sh
+          CLI="$APPS/Peekle.app/Contents/MacOS/peekle"
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          test "$("$CLI" --version)" = "peekle $VERSION"
+          if xattr -p com.apple.quarantine "$APPS/Peekle.app" >/dev/null 2>&1; then
+            echo "quarantine flag still set" >&2
+            exit 1
+          fi
+
       # Rendered here and only here: the tap copies this file as it is
       # (tech.md 11). The template is .github/homebrew/peekle.rb.
       - name: Render the cask

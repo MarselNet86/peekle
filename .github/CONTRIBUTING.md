@@ -135,6 +135,7 @@ cargo test --workspace     # unit, contract, golden payload, property
 pnpm lint && pnpm check
 pnpm test                  # component and property tests
 pnpm test:e2e              # the routes under vite dev, Chromium and WebKit
+shellcheck install.sh
 pnpm tauri build --debug
 ```
 
@@ -184,5 +185,14 @@ version and the dmg's checksum, and attaches both `Peekle-mac-universal.dmg`
 and `peekle.rb` to the GitHub release. The tap,
 [MarselNet86/homebrew-tap](https://github.com/MarselNet86/homebrew-tap),
 copies that `peekle.rb` on its next hourly run, or at once when its `bump`
-workflow is run by hand. Installed copies pick the release up on their next
-check.
+workflow is run by hand. Before attaching anything the job installs the dmg
+it just built through `install.sh` and checks that the command inside
+answers with the tag's version. Installed copies pick the release up on
+their next check.
+
+`install.sh` is the path for people without Homebrew: it downloads the
+latest dmg, checks it against the sha256 in that release's `peekle.rb`,
+copies the app, clears quarantine, links the command and runs `init`.
+`PEEKLE_DMG` installs a local dmg instead, `PEEKLE_APPDIR` changes where
+the app goes, and `PEEKLE_INSTALL_ONLY=1` stops after the copy, which is
+how CI runs it.
