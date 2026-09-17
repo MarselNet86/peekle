@@ -1,7 +1,9 @@
 <h1 align="center">Peekle</h1>
 
-<p align="center"><b>Claude Code, answered from the notch.</b><br />
-The turn ends, the notch grows, you answer, it collapses. You never focus the terminal.</p>
+<p align="center"><b>Claude Code, answered from the MacBook notch.</b><br />
+The agent asks, the notch grows, you press ⌘1 or ⌘2 from whatever app you are in.</p>
+
+<p align="center"><img src="docs/readme/hero.png" width="920" alt="The MacBook notch grown into a black island: Bash wants to run git push origin main, with a Deny ⌘1 and an Allow ⌘2 button"></p>
 
 <p align="center">
   <a href="https://github.com/MarselNet86/peekle/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/MarselNet86/peekle?label=release&color=1f6feb"></a>
@@ -11,20 +13,31 @@ The turn ends, the notch grows, you answer, it collapses. You never focus the te
   <a href="https://github.com/MarselNet86/peekle/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/MarselNet86/peekle?style=flat&color=e3b341"></a>
 </p>
 
-<p align="center"><img src="docs/readme/hero.png" width="920" alt="The island grown out of the MacBook notch over a terminal: the agent's reply, then a permission request with Deny ⌘1 and Allow ⌘2"></p>
-
-There is one surface and it is the island. No dock icon, no menu bar item, no
-second window, no notification centre. Peekle is invisible until an agent needs
-you, and gone the moment you have answered.
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#keys">Keys</a> ·
+  <a href="#why">Why</a> ·
+  <a href="docs/features/README.md">Feature log</a> ·
+  <a href="https://t.me/daimonLabs">Telegram</a>
+</p>
 
 ---
 
 ## Install
 
-macOS 13 or newer, Apple silicon and Intel in one build. Want it on Windows or
-Linux? Vote in [#11](https://github.com/MarselNet86/peekle/issues/11).
+One command. macOS 13 or newer, Apple silicon and Intel in one build:
 
-**With Homebrew.** The app and the `peekle` command in one go:
+```sh
+curl -fsSL https://raw.githubusercontent.com/MarselNet86/peekle/main/install.sh | sh
+```
+
+It downloads the latest release, checks it against the checksum in that
+release's own cask, puts Peekle in Applications, clears the Gatekeeper flag,
+links the `peekle` command, writes the Claude Code hooks and opens the app.
+Read [install.sh](install.sh) first if you like.
+
+**With Homebrew.** The same app and command, kept up to date by `brew`:
 
 ```sh
 brew install --cask MarselNet86/tap/peekle
@@ -44,9 +57,12 @@ open -a Peekle
 ```
 
 (Or open it, let macOS refuse, then System Settings → Privacy & Security →
-Open Anyway. The `peekle` command rides inside the bundle; with Rust on the
-machine, `cargo install --git https://github.com/MarselNet86/peekle peekle-cli`
-puts it on your PATH instead.)
+Open Anyway. With Rust on the machine,
+`cargo install --git https://github.com/MarselNet86/peekle peekle-cli` puts
+the command on your PATH instead.)
+
+Want it on Windows or Linux? Vote in
+[#11](https://github.com/MarselNet86/peekle/issues/11).
 
 **What `init` does.** Peekle listens to Claude Code through its hooks, and
 `init` writes them: it merges its entries into `~/.claude/settings.json`,
@@ -94,7 +110,7 @@ out when a ten is crossed.
 pulled quietly; only once it is on disk does the island ask, and only over a
 resting island, never on top of a chat you are reading. Later means a day.
 
-Every feature above has a shot in the [feature log](features/README.md).
+Every feature above has a shot in the [feature log](docs/features/README.md).
 
 ### Keys
 
@@ -174,7 +190,7 @@ shows up here.
 
 ## Contributing
 
-Pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the
+Pull requests welcome. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the setup, the
 conventions and the gate. Open an issue first if you plan something big, so we
 do not both build it.
 
