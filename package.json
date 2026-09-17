@@ -13,12 +13,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint . && prettier --check .",
-    "format": "prettier --write .",
+    "lint": "eslint . && prettier --check . '!pnpm-lock.yaml' '!src/lib/types/generated' '!tests/fixtures'",
+    "format": "prettier --write . '!pnpm-lock.yaml' '!src/lib/types/generated' '!tests/fixtures'",
     "tauri": "tauri",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test:watch": "vitest --config tests/vitest.config.ts",
+    "test:e2e": "playwright test --config tests/playwright.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -31,6 +31,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/svelte": "^5.4.2",
     "@testing-library/user-event": "^14.6.4",
+    "@types/node": "^22.20.3",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.23.0",
@@ -51,5 +52,23 @@
     "@lucide/svelte": "^1.42.0",
     "@tauri-apps/api": "^2.11.1",
     "bits-ui": "^2.18.1"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "useTabs": false,
+    "tabWidth": 2,
+    "plugins": [
+      "prettier-plugin-svelte"
+    ],
+    "overrides": [
+      {
+        "files": "*.svelte",
+        "options": {
+          "parser": "svelte"
+        }
+      }
+    ]
   }
 }

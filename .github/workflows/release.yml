@@ -78,14 +78,14 @@ jobs:
           shasum -a 256 "$DMG"
 
       # Rendered here and only here: the tap copies this file as it is
-      # (tech.md 11). The template is packaging/homebrew/peekle.rb.
+      # (tech.md 11). The template is .github/homebrew/peekle.rb.
       - name: Render the cask
         id: cask
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           SHA=$(shasum -a 256 "${{ steps.artifact.outputs.dmg }}" | cut -d' ' -f1)
           sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA/" \
-            packaging/homebrew/peekle.rb > dist/peekle.rb
+            .github/homebrew/peekle.rb > dist/peekle.rb
           ruby -c dist/peekle.rb
           grep -q "$SHA" dist/peekle.rb && grep -q "\"$VERSION\"" dist/peekle.rb
           echo "cask=dist/peekle.rb" >> "$GITHUB_OUTPUT"

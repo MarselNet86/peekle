@@ -2,3 +2,7 @@
 # `cargo test -p peekle-core export_bindings` the only producer of that tree.
 [env]
 TS_RS_EXPORT_DIR = { value = "src/lib/types/generated", relative = true }
+
+# clippy.toml lives here too, so the root stays short. Cargo hands the
+# variable to every rustc it runs, and clippy-driver is one of them.
+CLIPPY_CONF_DIR = { value = ".cargo", relative = true }

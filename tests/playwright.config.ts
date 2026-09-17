@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Runs the three routes against `vite dev` with no Tauri behind them. The
@@ -7,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  * checklist of tech.md section 15.
  */
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -30,6 +31,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev',
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
     // Matches the devUrl in tauri.conf.json. Polling 127.0.0.1 while vite
     // binds localhost misses it whenever localhost resolves to ::1 first.
     url: 'http://localhost:1420/island/',

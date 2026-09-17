@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [svelte(), svelteTesting()],
   resolve: {
     alias: {
-      $lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
+      $lib: fileURLToPath(new URL('../src/lib', import.meta.url)),
     },
     // Component tests run the browser build, not the SSR one.
     conditions: ['browser'],

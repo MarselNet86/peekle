@@ -77,8 +77,8 @@ ${[256, 128, 64, 32]
   .join('')}`;
 await page.setViewportSize({ width: 720, height: 400 });
 await page.setContent(board);
-const shot = join(root, 'features', 'shots', 'app-icon.png');
+const shot = join(root, 'docs', 'features', 'shots', 'app-icon.png');
 await page.locator('body').screenshot({ path: shot });
 
 await browser.close();
-console.log('icons written to src-tauri/icons, shot written to features/shots/app-icon.png');
+console.log('icons written to src-tauri/icons, shot written to docs/features/shots/app-icon.png');

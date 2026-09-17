@@ -5,7 +5,7 @@ we do not both build it.
 
 Contracts, types and the roadmap live in `tech.md`, which is kept out of the
 repository by the owner's decision; the code carries the section numbers it
-implements, and the feature log in [`features/README.md`](features/README.md)
+implements, and the feature log in [`docs/features/README.md`](../docs/features/README.md)
 records what shipped, with a shot of each.
 
 ## Requirements
@@ -108,15 +108,16 @@ crates/peekle-core       types, config, pending registry, label classifier
 crates/peekle-server     axum router for the hook endpoints
 crates/peekle-update     the GitHub release check
 crates/peekle-cli        peekle init, doctor, status, uninstall
-fixtures/hooks/          captured payloads, never hand written
-fixtures/pasteboard/     captured pasteboard shapes, never hand written
+tests/fixtures/          captured payloads and shapes, never hand written
+docs/features/           the feature log and a shot of every visible change
+.github/homebrew/        the cask template release.yml renders
 ```
 
 ## Conventions
 
 - Every visual element comes from `src/lib/ui`; nothing else draws.
-- Every visible change ships with a shot in `features/shots/` and an entry in
-  `features/README.md`.
+- Every visible change ships with a shot in `docs/features/shots/` and an
+  entry in `docs/features/README.md`.
 - Every blocking hook request resolves exactly once on every path: answer,
   cancel, timeout, bypass, error. A leaked pending request hangs a live agent.
 - No `unwrap` outside tests. Never in a hook handler.
@@ -178,7 +179,7 @@ Bump the version in `Cargo.toml`, `package.json` and `src-tauri/tauri.conf.json`
 in one commit, then tag it `vX.Y.Z` and push the tag. The tag has to match
 the version in `tauri.conf.json`; the workflow checks that first and stops if
 it does not. It then builds the universal dmg with the CLI inside, signs it ad
-hoc, renders the Homebrew cask from `packaging/homebrew/peekle.rb` with the
+hoc, renders the Homebrew cask from `.github/homebrew/peekle.rb` with the
 version and the dmg's checksum, and attaches both `Peekle-mac-universal.dmg`
 and `peekle.rb` to the GitHub release. The tap,
 [MarselNet86/homebrew-tap](https://github.com/MarselNet86/homebrew-tap),

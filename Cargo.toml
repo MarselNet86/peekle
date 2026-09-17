@@ -10,7 +10,7 @@ license = "MIT"
 repository = "https://github.com/MarselNet86/peekle"
 
 [workspace.lints.clippy]
-# CLAUDE.md forbids unwrap outside tests. clippy.toml exempts test code.
+# CLAUDE.md forbids unwrap outside tests. .cargo/clippy.toml exempts test code.
 unwrap_used = "deny"
 
 [profile.dev]
