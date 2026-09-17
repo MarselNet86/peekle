@@ -16,7 +16,7 @@ set -euo pipefail
 BINARY="${1:-$(command -v claude)}"
 [ -x "$BINARY" ] || { echo "no claude binary at ${BINARY}" >&2; exit 1; }
 BINARY="$(readlink -f "$BINARY" 2>/dev/null || python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$BINARY")"
-OUT="$(cd "$(dirname "$0")/.." && pwd)/fixtures/models/catalog.json"
+OUT="$(cd "$(dirname "$0")/.." && pwd)/tests/fixtures/models/catalog.json"
 mkdir -p "$(dirname "$OUT")"
 
 python3 - "$BINARY" "$OUT" <<'PY'

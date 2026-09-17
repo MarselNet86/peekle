@@ -2,7 +2,7 @@
 //!
 //! Payloads here are minimal on purpose: they exercise routing, status codes
 //! and our own response shapes. Golden payloads captured from a live Claude
-//! Code session live in `fixtures/hooks/` and are asserted separately.
+//! Code session live in `tests/fixtures/hooks/` and are asserted separately.
 
 // A panic in a test is a failed test, which is the point. The production ban
 // on unwrap is enforced by the workspace lint everywhere else.
@@ -374,7 +374,7 @@ async fn unknown_payload_fields_are_ignored_rather_than_rejected() {
 /// by the time it arrives. tech.md 6.21.
 #[tokio::test]
 async fn the_captured_compact_hook_reaches_the_sink_and_decides_nothing() {
-    const CAPTURED: &str = include_str!("../../../fixtures/hooks/pre_compact.jsonl");
+    const CAPTURED: &str = include_str!("../../../tests/fixtures/hooks/pre_compact.jsonl");
 
     let line = CAPTURED
         .lines()

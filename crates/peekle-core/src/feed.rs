@@ -1,7 +1,7 @@
 //! Task feed. tech.md section 7.
 //!
 //! The real feed is the hook endpoints. The fake replays captured payloads
-//! from `fixtures/hooks/*.jsonl` in order, so the HUD can be driven without a
+//! from `tests/fixtures/hooks/*.jsonl` in order, so the HUD can be driven without a
 //! live Claude Code session and without hand-written payloads.
 
 use std::path::Path;

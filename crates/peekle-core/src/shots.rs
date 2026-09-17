@@ -18,7 +18,7 @@ pub const SCREENSHOT_TYPE: &str = "public.png";
 
 /// Whether these pasteboard item types are a screenshot.
 ///
-/// Captured, not assumed: `fixtures/pasteboard/screenshot.json` shows one item
+/// Captured, not assumed: `tests/fixtures/pasteboard/screenshot.json` shows one item
 /// carrying exactly `public.png`, while an image written by an app carries
 /// `public.tiff` and copied text carries its own flavors alongside. The
 /// declared types of the pasteboard itself are wider, because NSPasteboard
@@ -231,7 +231,7 @@ impl FakePasteboard {
         state.png = png;
     }
 
-    /// A screenshot, as `fixtures/pasteboard/screenshot.json` describes one.
+    /// A screenshot, as `tests/fixtures/pasteboard/screenshot.json` describes one.
     pub fn write_screenshot(&self, png: &[u8]) {
         self.write(vec![vec![SCREENSHOT_TYPE.to_string()]], Some(png.to_vec()));
     }

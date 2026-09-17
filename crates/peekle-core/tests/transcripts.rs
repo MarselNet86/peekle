@@ -7,7 +7,7 @@ use peekle_core::sessions::{SessionRegistry, ENTRY_CAP, SESSION_CAP};
 use peekle_core::transcripts::{card_from_lines, scan};
 use peekle_core::types::{EntryKind, EntryState, SessionStatus};
 
-const FIXTURE: &str = include_str!("../../../fixtures/transcripts/session.jsonl");
+const FIXTURE: &str = include_str!("../../../tests/fixtures/transcripts/session.jsonl");
 
 fn card() -> peekle_core::types::SessionCard {
     card_from_lines(FIXTURE.lines(), "fallback", 0).expect("the fixture carries a dialogue")
@@ -688,7 +688,7 @@ mod compact {
     };
     use peekle_core::types::EntryKind;
 
-    const FIXTURE: &str = include_str!("../../../fixtures/transcripts/compacted.jsonl");
+    const FIXTURE: &str = include_str!("../../../tests/fixtures/transcripts/compacted.jsonl");
 
     /// Milliseconds of the records the fixture turns on, from their own
     /// timestamps: the refused `/compact`, the compact that ran, and its

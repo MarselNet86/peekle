@@ -661,7 +661,7 @@ mod tests {
     /// payload that decides this is not written by hand.
     fn captured(name: &str) -> Value {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../fixtures/hooks")
+            .join("../tests/fixtures/hooks")
             .join(format!("{name}.jsonl"));
         let raw = std::fs::read_to_string(&path).expect("fixture");
         let line = raw
@@ -674,7 +674,7 @@ mod tests {
     /// Every line of a capture, for a fixture that carries more than one run.
     fn captured_all(name: &str) -> Vec<Value> {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../fixtures/hooks")
+            .join("../tests/fixtures/hooks")
             .join(format!("{name}.jsonl"));
         let raw = std::fs::read_to_string(&path).expect("fixture");
         raw.lines()
@@ -825,7 +825,7 @@ mod tests {
         ));
     }
 
-    /// On the captured `TodoWrite` (`fixtures/hooks/tasks.jsonl`), not a list
+    /// On the captured `TodoWrite` (`tests/fixtures/hooks/tasks.jsonl`), not a list
     /// written here: rule 6, and this fixture was read by nothing until now.
     #[test]
     fn reads_todos_into_tasks() {

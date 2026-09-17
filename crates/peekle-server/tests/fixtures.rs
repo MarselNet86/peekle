@@ -26,7 +26,7 @@ use tower::ServiceExt;
 const TOKEN: &str = "0123456789abcdef0123456789abcdef";
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/hooks")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/hooks")
 }
 
 /// Reads one captured payload. A missing file fails loudly: fixtures are

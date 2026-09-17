@@ -408,7 +408,7 @@ pub fn claude_needs_you(l: Language) -> &'static str {
 /// A `Notification` hook's message, in the person's language.
 ///
 /// The CLI writes it in English and in words of its own, so only the exact
-/// texts captured in `fixtures/hooks/` are known and translated. Anything else
+/// texts captured in `tests/fixtures/hooks/` are known and translated. Anything else
 /// passes through as the CLI said it: a guessed translation of a message
 /// nobody has seen would be worse than the original. tech.md 6.2 and 6.28.
 pub fn hook_notice(l: Language, message: &str) -> String {

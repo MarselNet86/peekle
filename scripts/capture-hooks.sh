@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Captures real Claude Code hook payloads into fixtures/hooks/.
+# Captures real Claude Code hook payloads into tests/fixtures/hooks/.
 #
 # tech.md rule 6: fixtures are captured, never written by hand. A payload
 # invented from documentation and drifting from reality is worse than no test.
@@ -36,7 +36,7 @@ fi
 PORT="${PEEKLE_CAPTURE_PORT:-47822}"
 DURATION="${1:-180}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="$ROOT/fixtures/hooks"
+OUT="$ROOT/tests/fixtures/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 BACKUP="$SETTINGS.peekle-bak.$(date +%s)"
 

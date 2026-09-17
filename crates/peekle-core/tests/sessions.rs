@@ -11,7 +11,7 @@ use peekle_core::{FixtureFeed, TaskFeed};
 
 fn fixture(name: &str) -> FixtureFeed {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/hooks")
+        .join("../../tests/fixtures/hooks")
         .join(name);
     FixtureFeed::from_file(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
 }
@@ -1631,7 +1631,7 @@ mod the_permission_mode {
 
     fn first(name: &str) -> serde_json::Value {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/hooks")
+            .join("../../tests/fixtures/hooks")
             .join(name);
         let text = std::fs::read_to_string(path).expect("the captured payload");
         serde_json::from_str(text.lines().next().expect("a line")).expect("json")

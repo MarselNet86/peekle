@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Captures what macOS writes on the general pasteboard into fixtures/pasteboard/.
+# Captures what macOS writes on the general pasteboard into tests/fixtures/pasteboard/.
 #
 # tech.md rule 6: fixtures are captured, never written by hand. The screenshot
 # discriminator of 6.13 is a claim about someone else's format, and the only
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="$ROOT/fixtures/pasteboard"
+OUT="$ROOT/tests/fixtures/pasteboard"
 mkdir -p "$OUT"
 
 exec /usr/bin/swift - "$OUT" "${1:-all}" "${2:-live}" <<'SWIFT'

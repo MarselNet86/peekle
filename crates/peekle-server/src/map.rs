@@ -38,7 +38,7 @@ fn session_ref(payload: &Value) -> SessionRef {
 }
 
 /// `AskUserQuestion`'s `tool_input.questions`, as captured live in
-/// `fixtures/hooks/ask_user_question.jsonl`. `None` for anything malformed or
+/// `tests/fixtures/hooks/ask_user_question.jsonl`. `None` for anything malformed or
 /// missing: a tool call that claims to be `AskUserQuestion` but carries no
 /// question array degrades to the generic permission treatment rather than
 /// producing a request with nothing to answer. tech.md 6.14.

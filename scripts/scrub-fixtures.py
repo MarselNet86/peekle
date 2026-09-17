@@ -12,8 +12,8 @@ name becomes `dev`, and an address becomes `dev@example.com`. Keys, order,
 lengths of the JSON itself and every escape sequence inside a dump survive.
 Run it again on the same file and nothing changes.
 
-    scripts/scrub-fixtures.py fixtures/hooks/*.jsonl
-    scripts/scrub-fixtures.py --check fixtures/hooks/*.jsonl
+    scripts/scrub-fixtures.py tests/fixtures/hooks/*.jsonl
+    scripts/scrub-fixtures.py --check tests/fixtures/hooks/*.jsonl
 
 `--check` says whether anything is left to scrub and touches nothing, which is
 what the capture script and a reviewer both want to ask.

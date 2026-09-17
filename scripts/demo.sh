@@ -23,7 +23,7 @@ case "${1:-island}" in
   feed)
     # Real captured payloads, in the order they arrived. tech.md rule 6.
     for file in user_prompt_submit pre_tool_use post_tool_use; do
-      path="$(dirname "${BASH_SOURCE[0]}")/../fixtures/hooks/$file.jsonl"
+      path="$(dirname "${BASH_SOURCE[0]}")/../tests/fixtures/hooks/$file.jsonl"
       [ -f "$path" ] || { echo "capture $file.jsonl first" >&2; continue; }
       while read -r line; do
         [ -n "$line" ] && post feed "$line" >/dev/null

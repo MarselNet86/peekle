@@ -9,10 +9,10 @@ use peekle_core::types::Effort;
 use proptest::prelude::*;
 
 /// A short session, captured whole.
-const DIALOGUE: &str = include_str!("../../../fixtures/transcripts/agent.jsonl");
+const DIALOGUE: &str = include_str!("../../../tests/fixtures/transcripts/agent.jsonl");
 /// The `system` records of a session far too large to be a fixture, captured
 /// for the one record type that carries a compact.
-const COMPACTS: &str = include_str!("../../../fixtures/transcripts/compact.jsonl");
+const COMPACTS: &str = include_str!("../../../tests/fixtures/transcripts/compact.jsonl");
 
 #[test]
 fn a_captured_transcript_names_what_it_answers_with() {

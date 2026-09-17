@@ -146,7 +146,7 @@ pub fn session_ref_of(payload: &Value) -> SessionRef {
 /// Which permission mode the payload says the session is in.
 ///
 /// Every hook of a live session carries `permission_mode`; the ones captured
-/// in `fixtures/hooks/` show `default` and `auto` on `UserPromptSubmit`,
+/// in `tests/fixtures/hooks/` show `default` and `auto` on `UserPromptSubmit`,
 /// `PreToolUse`, `PostToolUse`, `Stop` and `PermissionRequest`. A name this
 /// version does not know reads as nothing at all. tech.md 6.19.
 pub fn mode_of(payload: &Value) -> Option<PermissionMode> {

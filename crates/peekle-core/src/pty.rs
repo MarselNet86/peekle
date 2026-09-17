@@ -234,7 +234,7 @@ pub const CONFIRM_GAP: std::time::Duration = SETTING_GAP;
 
 /// What the CLI puts on screen when it asks whether this folder is trusted.
 ///
-/// Captured live 2026-09-11 on 2.1.263 (`fixtures/pty/trust-question.txt`) by
+/// Captured live 2026-09-11 on 2.1.263 (`tests/fixtures/pty/trust-question.txt`) by
 /// starting a chat in a folder whose `hasTrustDialogAccepted` is false: a
 /// full-screen question headed `Quick safety check`, with `No, exit` under the
 /// cursor and `Yes, I trust this folder` below it. Until it is answered the
@@ -794,7 +794,7 @@ mod tests {
 
     fn screen(name: &str) -> String {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/pty")
+            .join("../../tests/fixtures/pty")
             .join(name);
         std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
     }

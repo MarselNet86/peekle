@@ -12,11 +12,13 @@ use peekle_core::types::ShotOffer;
 
 fn items(case: &str) -> Vec<Vec<String>> {
     let raw = match case {
-        "screenshot" => include_str!("../../../fixtures/pasteboard/screenshot.json"),
-        "image" => include_str!("../../../fixtures/pasteboard/image.json"),
-        "text" => include_str!("../../../fixtures/pasteboard/text.json"),
-        "text-from-browser" => include_str!("../../../fixtures/pasteboard/text-from-browser.json"),
-        "file" => include_str!("../../../fixtures/pasteboard/file.json"),
+        "screenshot" => include_str!("../../../tests/fixtures/pasteboard/screenshot.json"),
+        "image" => include_str!("../../../tests/fixtures/pasteboard/image.json"),
+        "text" => include_str!("../../../tests/fixtures/pasteboard/text.json"),
+        "text-from-browser" => {
+            include_str!("../../../tests/fixtures/pasteboard/text-from-browser.json")
+        }
+        "file" => include_str!("../../../tests/fixtures/pasteboard/file.json"),
         other => panic!("no fixture captured for {other}"),
     };
     let value: serde_json::Value = serde_json::from_str(raw).unwrap();
@@ -42,7 +44,7 @@ fn nothing_else_that_was_captured_is_recognised() {
 /// would make every image copy look like a screenshot.
 #[test]
 fn the_declared_types_are_wider_than_the_item() {
-    let raw = include_str!("../../../fixtures/pasteboard/screenshot.json");
+    let raw = include_str!("../../../tests/fixtures/pasteboard/screenshot.json");
     let value: serde_json::Value = serde_json::from_str(raw).unwrap();
     let declared: Vec<String> = serde_json::from_value(value["types"].clone()).unwrap();
 

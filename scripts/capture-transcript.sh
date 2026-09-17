@@ -19,7 +19,7 @@ set -euo pipefail
 SOURCE="${1:?usage: capture-transcript.sh <session_id|path> [name]}"
 NAME="${2:-session}"
 TYPES="${3:-}"
-OUT="$(cd "$(dirname "$0")/.." && pwd)/fixtures/transcripts/${NAME}.jsonl"
+OUT="$(cd "$(dirname "$0")/.." && pwd)/tests/fixtures/transcripts/${NAME}.jsonl"
 
 if [ ! -f "$SOURCE" ]; then
   SOURCE="$(find "$HOME/.claude/projects" -name "${SOURCE}*.jsonl" | head -1)"

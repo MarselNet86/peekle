@@ -18,7 +18,7 @@ use crate::types::{AgentSetup, Effort, ModelChoice};
 /// `scripts/capture-models.sh`. The window a ring measures against is written
 /// down in exactly one place, and this is a copy of it rather than a guess.
 /// tech.md 6.15.
-const CATALOG: &str = include_str!("../../../fixtures/models/catalog.json");
+const CATALOG: &str = include_str!("../../../tests/fixtures/models/catalog.json");
 
 /// What Claude Code measures a model it does not know against, and so do we.
 pub const DEFAULT_WINDOW: u32 = 200_000;
