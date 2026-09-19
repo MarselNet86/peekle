@@ -1,3 +1,5 @@
+<p align="center"><img src="src-tauri/icons/icon.png" width="128" height="128" alt="Peekle app icon: two green strokes on a black squircle"></p>
+
 <h1 align="center">Peekle</h1>
 
 <p align="center"><b>Claude Code, answered from the MacBook notch.</b><br />
@@ -35,7 +37,11 @@ curl -fsSL https://raw.githubusercontent.com/MarselNet86/peekle/main/install.sh 
 It downloads the latest release, checks it against the checksum in that
 release's own cask, puts Peekle in Applications, clears the Gatekeeper flag,
 links the `peekle` command, writes the Claude Code hooks and opens the app.
-Read [install.sh](install.sh) first if you like.
+
+> [!TIP]
+> Piping a script into `sh` is a trust decision. [install.sh](install.sh) is
+> short, and it refuses a download whose checksum does not match the one
+> published in the release's own cask.
 
 **With Homebrew.** The same app and command, kept up to date by `brew`:
 
@@ -69,6 +75,11 @@ Want it on Windows or Linux? Vote in
 takes a timestamped backup first, never touches anyone else's hooks, and
 changes nothing on a second run. `peekle doctor` says what is wrong if
 something is; `peekle uninstall` takes back only its own entries.
+
+> [!NOTE]
+> Peekle never holds up an agent. If the app is not running, the hook fails
+> fast, Claude Code treats that as a non-blocking error, and the turn goes on
+> as if Peekle were not installed.
 
 No account, no login, no telemetry. Usage bars read your own Claude account
 from the Keychain, and only after you press Grant.
